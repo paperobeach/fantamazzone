@@ -1,0 +1,37 @@
+# ============================================================
+# api/.htaccess
+# Da mettere nella cartella api/ su Altervista
+# ============================================================
+
+# Abilita il motore di riscrittura
+Options -Indexes
+RewriteEngine On
+
+# Blocca accesso diretto a connect.php dall'esterno
+<Files "connect.php">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Blocca accesso diretto alla cartella admin dall'esterno
+# (gli endpoint admin devono essere chiamati solo da IP fidati
+#  oppure con un token - vedi autenticazione admin sotto)
+<IfModule mod_authz_core.c>
+    <FilesMatch "^(aggiorna_|chiudi_|voti\.php|risultati\.php)">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# Gestione CORS preflight OPTIONS (risponde senza passare per PHP)
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]
+
+# Header CORS globali (backup, già impostati in connect.php)
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>
+
+# Forza UTF-8
+AddDefaultCharset UTF-8

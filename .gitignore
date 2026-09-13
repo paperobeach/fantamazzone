@@ -1,0 +1,14 @@
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
+
+# PHP
+backend/vendor/
+backend/.env
+backend/connect.php
+
+# Varie
+.DS_Store
+*.log

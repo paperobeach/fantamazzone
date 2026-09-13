@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --pitch-950: #050a0e;
+    --pitch-900: #091219;
+    --pitch-800: #0f1f2e;
+    --pitch-700: #162840;
+    --grass-500: #22c55e;
+    --grass-400: #4ade80;
+    --gold-500:  #f59e0b;
+    --gold-400:  #fbbf24;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --border:    rgba(255,255,255,0.07);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background-color: var(--pitch-950);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1e2a38; border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2d3f52; }
+}
+
+@layer components {
+
+  /* ── Card base ── */
+  .card {
+    @apply bg-pitch-900 border border-white/5 rounded-xl;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-white/10 hover:bg-pitch-800;
+  }
+
+  /* ── Stat pill ── */
+  .stat-pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-mono font-medium;
+  }
+
+  /* ── Table shared ── */
+  .fanta-table {
+    @apply w-full text-sm;
+  }
+  .fanta-table thead tr {
+    @apply border-b border-white/5;
+  }
+  .fanta-table thead th {
+    @apply px-4 py-3 text-left text-xs font-mono tracking-widest uppercase text-slate-500 font-normal;
+  }
+  .fanta-table tbody tr {
+    @apply border-b border-white/[0.03] transition-colors duration-150 hover:bg-white/[0.02];
+  }
+  .fanta-table tbody td {
+    @apply px-4 py-3;
+  }
+
+  /* ── Badge method ── */
+  .badge-win  { @apply stat-pill bg-green-500/10 text-green-400; }
+  .badge-draw { @apply stat-pill bg-yellow-500/10 text-yellow-400; }
+  .badge-loss { @apply stat-pill bg-red-500/10 text-red-400; }
+  .badge-role-p { @apply stat-pill bg-yellow-500/10 text-yellow-400; }
+  .badge-role-d { @apply stat-pill bg-blue-500/10 text-blue-400; }
+  .badge-role-c { @apply stat-pill bg-green-500/10 text-green-400; }
+  .badge-role-a { @apply stat-pill bg-red-500/10 text-red-400; }
+
+  /* ── Input ── */
+  .fanta-input {
+    @apply w-full bg-pitch-800 border border-white/10 rounded-lg px-4 py-2.5
+           text-sm text-slate-200 placeholder-slate-600
+           focus:outline-none focus:border-grass-500/50 focus:ring-1 focus:ring-grass-500/20
+           transition-all duration-150;
+  }
+
+  /* ── Button ── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 rounded-lg
+           bg-grass-500 hover:bg-grass-400 text-pitch-950 font-semibold text-sm
+           transition-all duration-150 active:scale-95 cursor-pointer;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg
+           text-slate-400 hover:text-slate-200 hover:bg-white/5 text-sm
+           transition-all duration-150 cursor-pointer;
+  }
+
+  /* ── Section title ── */
+  .section-label {
+    @apply text-xs font-mono tracking-[0.2em] uppercase text-slate-600 mb-4;
+  }
+
+  /* ── Noise overlay ── */
+  .noise::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── Loading skeleton ── */
+  .skeleton {
+    @apply bg-pitch-800 rounded animate-pulse;
+  }
+}
+
+@layer utilities {
+  .text-display { font-family: 'Barlow Condensed', sans-serif; }
+  .text-mono    { font-family: 'JetBrains Mono', monospace; }
+
+  /* Stagger animation delays */
+  .delay-75  { animation-delay: 75ms; }
+  .delay-150 { animation-delay: 150ms; }
+  .delay-225 { animation-delay: 225ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-375 { animation-delay: 375ms; }
+}

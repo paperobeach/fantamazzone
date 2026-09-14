@@ -1,0 +1,46 @@
+name: Build & Deploy Frontend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies (frontend)
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build React app
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Prepare deploy folder
+        run: |
+          mkdir -p deploy
+          cp -r frontend/dist/* deploy/
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./deploy/
+          server-dir: ./nuovo/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**

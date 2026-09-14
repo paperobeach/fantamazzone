@@ -6,6 +6,7 @@
 // Risposta: array di squadre con classifica generale
 // ============================================================
 // Commento per testare il deploy
+// ULTERIORE COMMENTO 
 require_once __DIR__ . "/connect.php";
 
 $stagione = param_int("stagione");

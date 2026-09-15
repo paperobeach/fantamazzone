@@ -40,6 +40,7 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./deploy/
           server-dir: ./nuovo/
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.git*/**

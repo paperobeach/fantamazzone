@@ -59,6 +59,7 @@ export default function SquadraDetail() {
               <h3 className="text-sm font-semibold text-slate-300">{RUOLO_LABEL[r]}</h3>
               <span className="text-xs text-slate-600 font-mono">{grouped[r].length} giocatori</span>
             </div>
+            <div className="overflow-x-auto">
             <table className="fanta-table">
               <thead>
                 <tr>
@@ -83,6 +84,7 @@ export default function SquadraDetail() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ))}
       </div>

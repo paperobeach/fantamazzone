@@ -32,7 +32,7 @@ function ChiudiGiornataWizard({ stagione }) {
         <span>Operazione irreversibile. Assicurati di aver inserito tutti i voti e i risultati prima di procedere.</span>
       </div>
 
-      <div className="flex gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <input
           type="number"
           min="1"
@@ -40,9 +40,9 @@ function ChiudiGiornataWizard({ stagione }) {
           value={giornata}
           onChange={e => setGiornata(e.target.value)}
           placeholder="N° giornata"
-          className="fanta-input w-36"
+          className="fanta-input w-full sm:w-36"
         />
-        <button onClick={run} disabled={running || !giornata} className="btn-primary disabled:opacity-40">
+        <button onClick={run} disabled={running || !giornata} className="btn-primary disabled:opacity-40 justify-center">
           {running ? <><Spinner size="sm" /> Elaborazione...</> : 'Chiudi e aggiorna'}
         </button>
       </div>
@@ -107,12 +107,12 @@ function InserisciRisultato({ stagione, squadre }) {
     <div className="card p-6">
       <h3 className="font-semibold text-slate-200 mb-5">Inserisci risultato partita</h3>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="text-xs text-slate-600 mb-1 block">Giornata</label>
           <input type="number" value={form.giornata} onChange={e => set('giornata', e.target.value)} className="fanta-input" placeholder="15" />
         </div>
-        <div />
+        <div className="hidden sm:block" />
 
         <div>
           <label className="text-xs text-slate-600 mb-1 block">Squadra casa</label>

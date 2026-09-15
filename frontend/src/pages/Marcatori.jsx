@@ -28,13 +28,14 @@ export default function Marcatori() {
     <div className="animate-fade-up">
       <PageHeader label="Classifiche individuali" title="Marcatori" />
 
-      <div className="mb-6">
+      <div className="mb-6 overflow-x-auto">
         <TabBar tabs={TABS} active={tipo} onChange={setTipo} />
       </div>
 
       {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={refetch} /> : !data?.length ? <EmptyState /> : (
         <div className="card overflow-hidden">
-          <table className="fanta-table">
+          <div className="overflow-x-auto">
+          <table className="fanta-table min-w-[560px]">
             <thead>
               <tr>
                 <th className="w-10">#</th>
@@ -64,6 +65,7 @@ export default function Marcatori() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

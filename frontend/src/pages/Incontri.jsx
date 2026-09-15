@@ -20,7 +20,8 @@ function VotoBox({ voto, totale, giocata }) {
 
 function GiocatoriTable({ giocatori }) {
   return (
-    <table className="w-full text-xs">
+    <div className="overflow-x-auto">
+    <table className="w-full text-xs min-w-[420px]">
       <thead>
         <tr className="border-b border-white/5">
           <th className="px-3 py-2 text-left font-mono tracking-widest uppercase text-slate-700 font-normal">R</th>
@@ -50,6 +51,7 @@ function GiocatoriTable({ giocatori }) {
         ))}
       </tbody>
     </table>
+    </div>
   )
 }
 
@@ -62,32 +64,32 @@ function MatchCard({ match }) {
       {/* Header partita */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+        className="w-full flex items-center gap-2 sm:gap-4 px-3 sm:px-5 py-3 sm:py-4 hover:bg-white/[0.02] transition-colors"
       >
         {/* Casa */}
-        <div className="flex-1 flex items-center justify-end gap-3">
-          <span className="font-semibold text-slate-200 text-sm">{casa.nome}</span>
-          <div className="w-8 h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500">
+        <div className="flex-1 min-w-0 flex items-center justify-end gap-2 sm:gap-3">
+          <span className="font-semibold text-slate-200 text-xs sm:text-sm truncate text-right">{casa.nome}</span>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
             {casa.nome?.[0]}
           </div>
         </div>
 
         {/* Score */}
         <div className="flex-shrink-0 flex flex-col items-center gap-1">
-          <div className="flex items-center gap-2">
-            <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold text-display ${
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm sm:text-lg font-bold text-display ${
               segno === 'W' ? 'bg-green-500/15 text-green-400' :
               segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                               'bg-pitch-800 text-slate-400'
             }`}>{golf}</span>
             <span className="text-slate-600 font-mono text-sm">:</span>
-            <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold text-display ${
+            <span className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm sm:text-lg font-bold text-display ${
               segno === 'L' ? 'bg-green-500/15 text-green-400' :
               segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                               'bg-pitch-800 text-slate-400'
             }`}>{gols}</span>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-mono text-slate-700">
+          <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-slate-700">
             <span>{Number(casa.ftotale).toFixed(1)}</span>
             <span>vs</span>
             <span>{Number(ospite.ftotale).toFixed(1)}</span>
@@ -95,11 +97,11 @@ function MatchCard({ match }) {
         </div>
 
         {/* Ospite */}
-        <div className="flex-1 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500">
+        <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
             {ospite.nome?.[0]}
           </div>
-          <span className="font-semibold text-slate-200 text-sm">{ospite.nome}</span>
+          <span className="font-semibold text-slate-200 text-xs sm:text-sm truncate">{ospite.nome}</span>
         </div>
 
         <ChevronRight className={`w-4 h-4 text-slate-600 transition-transform flex-shrink-0 ${open ? 'rotate-90' : ''}`} />
@@ -107,7 +109,7 @@ function MatchCard({ match }) {
 
       {/* Dettaglio voti */}
       {open && (
-        <div className="border-t border-white/5 grid grid-cols-2 divide-x divide-white/5">
+        <div className="border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-white/5">
           <div>
             <div className="px-3 py-2 border-b border-white/5">
               <p className="text-xs font-semibold text-slate-400">{casa.nome}</p>

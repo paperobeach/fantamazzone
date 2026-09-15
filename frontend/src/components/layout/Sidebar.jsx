@@ -1,9 +1,10 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, Swords, BarChart2,
   Star, Zap, Shield, MessageSquare, LogOut,
-  Settings, ChevronDown, Medal
+  Settings, ChevronDown, Medal, X
 } from 'lucide-react'
 
 const NAV = [
@@ -24,9 +25,24 @@ const ADMIN_NAV = [
   { to: '/admin',        icon: Settings,     label: 'Pannello Admin' },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose = () => {} }) {
   const { stagioni, stagione, changeStagione, utente, doLogout, isAdmin } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Chiude il drawer mobile ad ogni cambio pagina
+  useEffect(() => {
+    onClose()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+
+  // Blocca lo scroll del body quando il drawer mobile è aperto
+  useEffect(() => {
+    if (open) {
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = '' }
+    }
+  }, [open])
 
   const handleLogout = () => {
     doLogout()
@@ -34,21 +50,44 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-56 flex flex-col bg-pitch-900 border-r border-white/5 z-40">
+    <>
+      {/* Overlay mobile */}
+      <div
+        onClick={onClose}
+        aria-hidden="true"
+        className={`fixed inset-0 bg-black/60 backdrop-blur-[1px] z-40 lg:hidden transition-opacity duration-200 ${
+          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+      />
+
+      <aside
+        className={`fixed left-0 top-0 h-screen w-64 sm:w-56 flex flex-col bg-pitch-900 border-r border-white/5 z-50
+                    transition-transform duration-300 ease-out
+                    ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
+      >
 
       {/* Logo */}
-      <div className="px-5 pt-6 pb-5 border-b border-white/5">
-        <div className="flex items-center gap-2 mb-0.5">
-          <div className="w-7 h-7 rounded-lg bg-grass-500 flex items-center justify-center flex-shrink-0">
-            <Trophy className="w-4 h-4 text-pitch-950" />
+      <div className="px-5 pt-6 pb-5 border-b border-white/5 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-0.5">
+            <div className="w-7 h-7 rounded-lg bg-grass-500 flex items-center justify-center flex-shrink-0">
+              <Trophy className="w-4 h-4 text-pitch-950" />
+            </div>
+            <span className="text-display text-lg font-bold tracking-wide text-white leading-none">
+              LFM
+            </span>
           </div>
-          <span className="text-display text-lg font-bold tracking-wide text-white leading-none">
-            LFM
-          </span>
+          <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600 mt-1 pl-9">
+            FantaMazzone
+          </p>
         </div>
-        <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600 mt-1 pl-9">
-          FantaMazzone
-        </p>
+        <button
+          onClick={onClose}
+          aria-label="Chiudi menu"
+          className="lg:hidden p-1.5 -mt-1 -mr-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/[0.05] transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Stagione selector */}
@@ -151,6 +190,7 @@ export default function Sidebar() {
           </NavLink>
         )}
       </div>
-    </aside>
+      </aside>
+    </>
   )
 }

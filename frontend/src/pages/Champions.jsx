@@ -28,7 +28,7 @@ export default function Champions() {
     <div className="animate-fade-up">
       <PageHeader label="Coppa" title="Champions League" />
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-6 overflow-x-auto">
         {['classifica', 'gironi', 'note'].map(s => (
           <button
             key={s}
@@ -50,7 +50,8 @@ export default function Champions() {
                 <div className="px-4 py-3 border-b border-white/5">
                   <h3 className="font-semibold text-slate-300">Girone {g}</h3>
                 </div>
-                <table className="fanta-table">
+                <div className="overflow-x-auto">
+                <table className="fanta-table min-w-[420px]">
                   <thead>
                     <tr>
                       <th>#</th><th>Squadra</th>
@@ -72,6 +73,7 @@ export default function Champions() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             ))}
           </div>

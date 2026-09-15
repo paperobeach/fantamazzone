@@ -57,7 +57,7 @@ export default function Classifica() {
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <StatCard
           label="Capolista"
           value={leader?.squadra ?? '—'}
@@ -78,9 +78,9 @@ export default function Classifica() {
 
       {/* Table */}
       <div className="card overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 border-b border-white/5">
           <h2 className="text-sm font-semibold text-slate-300">Squadre</h2>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <span className="text-xs text-slate-600">Ordina per:</span>
             <SortBtn col="punti" label="Punti" />
             <SortBtn col="media" label="Media" />
@@ -88,7 +88,8 @@ export default function Classifica() {
           </div>
         </div>
 
-        <table className="fanta-table">
+        <div className="overflow-x-auto">
+        <table className="fanta-table min-w-[720px]">
           <thead>
             <tr>
               <th className="w-10">#</th>
@@ -158,10 +159,11 @@ export default function Classifica() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-6 mt-4 px-1">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 px-1">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-sm bg-grass-500/40 border-l-2 border-l-grass-500" />
           <span className="text-xs text-slate-600">Zona promozione</span>

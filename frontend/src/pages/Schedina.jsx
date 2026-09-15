@@ -24,7 +24,7 @@ export default function Schedina() {
     <div className="animate-fade-up">
       <PageHeader label="Mini-gioco" title="Schedina" subtitle={`Giornata ${giornata}`} />
 
-      <div className="mb-6">
+      <div className="mb-6 overflow-x-auto">
         <TabBar tabs={TABS} active={tab} onChange={setTab} />
       </div>
 
@@ -33,7 +33,8 @@ export default function Schedina() {
 
           tab === 'classifica' ? (
             <div className="card overflow-hidden">
-              <table className="fanta-table">
+              <div className="overflow-x-auto">
+              <table className="fanta-table min-w-[420px]">
                 <thead><tr><th className="w-10">#</th><th>Allenatore</th><th className="text-center">Punti</th></tr></thead>
                 <tbody>
                   {[...schedine].sort((a,b) => b.PUNTI - a.PUNTI).map((s, i) => (
@@ -51,6 +52,7 @@ export default function Schedina() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ) : (
             /* Raggruppa pronostici per allenatore */
@@ -70,14 +72,14 @@ export default function Schedina() {
                       </div>
                       <div className="divide-y divide-white/[0.03]">
                         {ps.map((p, i) => (
-                          <div key={i} className="flex items-center gap-4 px-4 py-2.5 text-sm">
-                            <span className="flex-1 text-right text-slate-400">{p.nome_squadra_1}</span>
-                            <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-display ${
+                          <div key={i} className="flex items-center gap-2 sm:gap-4 px-4 py-2.5 text-sm">
+                            <span className="flex-1 min-w-0 truncate text-right text-slate-400">{p.nome_squadra_1}</span>
+                            <span className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center font-bold text-display ${
                               p.PRONOSTICO === '1' ? 'bg-green-500/15 text-green-400' :
                               p.PRONOSTICO === 'X' ? 'bg-yellow-500/15 text-yellow-400' :
                                                      'bg-blue-500/15 text-blue-400'
                             }`}>{p.PRONOSTICO}</span>
-                            <span className="flex-1 text-slate-400">{p.nome_squadra_2}</span>
+                            <span className="flex-1 min-w-0 truncate text-slate-400">{p.nome_squadra_2}</span>
                           </div>
                         ))}
                       </div>

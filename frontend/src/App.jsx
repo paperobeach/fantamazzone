@@ -3,9 +3,10 @@ import { AppProvider, useApp } from './context/AppContext'
 import Sidebar from './components/layout/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Spinner } from './components/ui'
+import { Menu, Trophy } from 'lucide-react'
 
 // Pages (lazy-loaded)
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 
 const Classifica  = lazy(() => import('./pages/Classifica'))
 const Calendario  = lazy(() => import('./pages/Calendario'))
@@ -45,6 +46,7 @@ function AdminRoute({ children }) {
 function AppShell() {
   const { loading } = useApp()
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   if (loading) {
     return (
@@ -61,9 +63,30 @@ function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-pitch-950">
-      <Sidebar />
-      <main className="flex-1 ml-56 min-h-screen">
-        <div className="max-w-6xl mx-auto px-8 py-8">
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Topbar mobile */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 h-14 flex items-center gap-3 px-4
+                          bg-pitch-900/95 backdrop-blur border-b border-white/5">
+        <button
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Apri menu"
+          className="p-2 -ml-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-md bg-grass-500 flex items-center justify-center flex-shrink-0">
+            <Trophy className="w-3.5 h-3.5 text-pitch-950" />
+          </div>
+          <span className="text-display text-base font-bold tracking-wide text-white leading-none">
+            LFM
+          </span>
+        </div>
+      </header>
+
+      <main className="flex-1 lg:ml-56 min-h-screen pt-14 lg:pt-0">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
           <ErrorBoundary key={location.pathname}>
             <Suspense fallback={<PageLoader />}>
               <Routes>

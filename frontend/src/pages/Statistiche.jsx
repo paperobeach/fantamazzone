@@ -57,28 +57,31 @@ export default function Statistiche() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <TabBar
-          tabs={RUOLI}
-          active={ruolo}
-          onChange={setRuolo}
-        />
+        <div className="overflow-x-auto max-w-full">
+          <TabBar
+            tabs={RUOLI}
+            active={ruolo}
+            onChange={setRuolo}
+          />
+        </div>
         <Select
           value={ordine}
           onChange={setOrdine}
           options={ORDINI}
-          className="w-44"
+          className="w-full sm:w-44"
         />
         <Select
           value={squadraFilter}
           onChange={setSquadraFilter}
           options={squadreOpts}
-          className="w-52"
+          className="w-full sm:w-52"
         />
       </div>
 
       {/* Table */}
       <div className="card overflow-hidden">
-        <table className="fanta-table">
+        <div className="overflow-x-auto">
+        <table className="fanta-table min-w-[720px]">
           <thead>
             <tr>
               <th className="w-8">#</th>
@@ -136,6 +139,7 @@ export default function Statistiche() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

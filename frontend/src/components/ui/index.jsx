@@ -80,11 +80,11 @@ export function SkeletonRows({ rows = 5, cols = 4 }) {
 // ── Page header ───────────────────────────────────────────────
 export function PageHeader({ label, title, subtitle, children }) {
   return (
-    <div className="mb-8 animate-fade-up">
+    <div className="mb-6 sm:mb-8 animate-fade-up">
       {label && <p className="section-label">{label}</p>}
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-display text-4xl font-bold tracking-wide text-white">{title}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-display text-3xl sm:text-4xl font-bold tracking-wide text-white truncate">{title}</h1>
           {subtitle && <p className="text-slate-500 text-sm mt-1">{subtitle}</p>}
         </div>
         {children && <div className="flex-shrink-0">{children}</div>}

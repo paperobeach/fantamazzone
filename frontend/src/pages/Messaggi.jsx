@@ -45,11 +45,11 @@ export default function Messaggi() {
       {/* Form invio */}
       <div className="card p-5 mb-6">
         <p className="text-xs font-mono tracking-widest uppercase text-slate-600 mb-4">Nuovo messaggio</p>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <select
             value={dest}
             onChange={e => setDest(e.target.value)}
-            className="fanta-input w-48 cursor-pointer"
+            className="fanta-input w-full sm:w-48 cursor-pointer"
           >
             <option value="">Destinatario...</option>
             {(squadre ?? []).map(s => (
@@ -68,7 +68,7 @@ export default function Messaggi() {
           <button
             onClick={handleSend}
             disabled={sending || !dest || !testo.trim()}
-            className="btn-primary disabled:opacity-40"
+            className="btn-primary disabled:opacity-40 justify-center"
           >
             {sent ? '✓ Inviato' : <><Send className="w-4 h-4" /> Invia</>}
           </button>

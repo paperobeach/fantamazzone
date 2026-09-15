@@ -4,7 +4,7 @@ import Sidebar from './components/layout/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Spinner } from './components/ui'
 
-// Pages (lazy-loaded) COMMENTO NUOVO
+// Pages (lazy-loaded)
 import { lazy, Suspense } from 'react'
 
 const Classifica  = lazy(() => import('./pages/Classifica'))

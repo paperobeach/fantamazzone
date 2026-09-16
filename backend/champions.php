@@ -17,7 +17,7 @@ switch ($sezione) {
         $data = query_all("SELECT
                 gc.squadra AS id_squadra, gc.nome, gc.logo,
                 gc.punti, gc.golf, gc.gols, gc.girone
-            FROM GENERALE_CHAMP gc
+            FROM NEW_GENERALE_CHAMP gc
             WHERE gc.stagione = $stagione $where_girone
             ORDER BY gc.girone, gc.punti DESC, gc.golf DESC");
         api_success($data);
@@ -28,15 +28,15 @@ switch ($sezione) {
         $data = query_all("SELECT
                 cc.giornata, cc.giornata_camp, cc.posizione,
                 cc.squadra AS id_squadra, s.nome, s.logo, cc.girone
-            FROM CALENDARIO_CHAMP cc
-            JOIN SQUADRE s ON s.id = cc.squadra AND s.stagione = cc.stagione
+            FROM NEW_CALENDARIO_CHAMP cc
+            JOIN NEW_SQUADRE s ON s.id = cc.squadra AND s.stagione = cc.stagione
             WHERE cc.stagione = $stagione
             ORDER BY cc.gironata, cc.posizione");
 
         $risultati = query_all("SELECT
                 rc.giornata, rc.squadra AS id_squadra,
                 rc.ftotale, rc.golf, rc.gols, rc.punti, rc.segno, rc.girone
-            FROM RISULTATI_CHAMP rc
+            FROM NEW_RISULTATI_CHAMP rc
             WHERE rc.stagione = $stagione
             ORDER BY rc.giornata");
 
@@ -44,7 +44,7 @@ switch ($sezione) {
         break;
 
     case "note":
-        $data = query_all("SELECT * FROM NOTE_CHAMPIONS
+        $data = query_all("SELECT * FROM NEW_NOTE_CHAMPIONS
                            WHERE stagione = $stagione
                            ORDER BY id");
         api_success($data);

@@ -16,8 +16,8 @@ if ($tipo === "classifica") {
     $data = query_all("SELECT
             sc.ID, sc.PUNTI,
             a.descrizione AS allenatore, a.logo
-        FROM SCHEDINA_CLASSIFICA sc
-        LEFT JOIN ALLENATORI a ON a.id = sc.ID AND a.stagione = sc.STAGIONE
+        FROM NEW_SCHEDINA_CLASSIFICA sc
+        LEFT JOIN NEW_ALLENATORI a ON a.id = sc.ID AND a.stagione = sc.STAGIONE
         WHERE sc.STAGIONE = $stagione
         ORDER BY sc.PUNTI DESC");
     api_success($data);
@@ -35,7 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     // Cancella e reinserisce
-    mysqli_query($conn, "DELETE FROM SCHEDINA
+    mysqli_query($conn, "DELETE FROM NEW_SCHEDINA
                          WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID = $id");
 
     $validi = ["1", "X", "2"];
@@ -44,7 +44,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $s2 = (int)$p["squadra_2"];
         $pr = strtoupper(trim($p["pronostico"] ?? ""));
         if (!in_array($pr, $validi)) continue;
-        mysqli_query($conn, "INSERT INTO SCHEDINA (STAGIONE, GIORNATA, ID, SQUADRA_1, SQUADRA_2, PRONOSTICO)
+        mysqli_query($conn, "INSERT INTO NEW_SCHEDINA (STAGIONE, GIORNATA, ID, SQUADRA_1, SQUADRA_2, PRONOSTICO)
                              VALUES ($stagione, $giornata, $id, $s1, $s2, '$pr')");
     }
 
@@ -62,10 +62,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             sq1.nome AS nome_squadra_1, sq1.logo AS logo_squadra_1,
             sq2.nome AS nome_squadra_2, sq2.logo AS logo_squadra_2,
             a.descrizione AS allenatore
-        FROM SCHEDINA s
-        JOIN SQUADRE sq1 ON sq1.id = s.SQUADRA_1 AND sq1.stagione = s.STAGIONE
-        JOIN SQUADRE sq2 ON sq2.id = s.SQUADRA_2 AND sq2.stagione = s.STAGIONE
-        LEFT JOIN ALLENATORI a ON a.id = s.ID AND a.stagione = s.STAGIONE
+        FROM NEW_SCHEDINA s
+        JOIN NEW_SQUADRE sq1 ON sq1.id = s.SQUADRA_1 AND sq1.stagione = s.STAGIONE
+        JOIN NEW_SQUADRE sq2 ON sq2.id = s.SQUADRA_2 AND sq2.stagione = s.STAGIONE
+        LEFT JOIN NEW_ALLENATORI a ON a.id = s.ID AND a.stagione = s.STAGIONE
         WHERE s.STAGIONE = $stagione AND s.GIORNATA = $giornata $where_id
         ORDER BY s.ID, s.SQUADRA_1");
 

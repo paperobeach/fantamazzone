@@ -28,7 +28,7 @@ $sql = "SELECT
             golf, gols, assist,
             ammonizioni, espulsioni,
             rigores, rigorep, autogol
-        FROM STATISTICHE
+        FROM NEW_STATISTICHE
         WHERE $where_sql
         ORDER BY $ordine DESC, giocatore ASC";
 

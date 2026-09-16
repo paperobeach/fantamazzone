@@ -16,7 +16,7 @@ if ($tipo === null || $tipo === "top") {
     $result["top11"] = query_all("SELECT
             id_giocatore, giocatore, media, ruolo,
             giocate, id_squadra, squadra, logo
-        FROM TOP11
+        FROM NEW_TOP11
         WHERE stagione = $stagione
         ORDER BY ruolo, media DESC");
 }
@@ -25,7 +25,7 @@ if ($tipo === null || $tipo === "flop") {
     $result["flop11"] = query_all("SELECT
             id_giocatore, giocatore, media, ruolo,
             giocate, id_squadra, squadra, logo
-        FROM FLOP11
+        FROM NEW_FLOP11
         WHERE stagione = $stagione
         ORDER BY ruolo, media ASC");
 }

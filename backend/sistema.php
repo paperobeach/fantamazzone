@@ -16,13 +16,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $valore   = post_str("valore");
 
     // Upsert
-    $exists = query_one("SELECT COUNT(*) AS n FROM SISTEMA
+    $exists = query_one("SELECT COUNT(*) AS n FROM NEW_SISTEMA
                          WHERE stagione = $stagione AND label = '$label'");
     if ((int)$exists["n"] > 0) {
-        mysqli_query($conn, "UPDATE SISTEMA SET valore = '$valore'
+        mysqli_query($conn, "UPDATE NEW_SISTEMA SET valore = '$valore'
                              WHERE stagione = $stagione AND label = '$label'");
     } else {
-        mysqli_query($conn, "INSERT INTO SISTEMA (stagione, label, valore)
+        mysqli_query($conn, "INSERT INTO NEW_SISTEMA (stagione, label, valore)
                              VALUES ($stagione, '$label', '$valore')");
     }
     api_success(["ok" => true]);
@@ -30,14 +30,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 if ($tipo === "stagioni") {
     // Tutte le stagioni disponibili (da SQUADRE, che è sempre popolata)
-    $rows = query_all("SELECT DISTINCT stagione FROM SQUADRE ORDER BY stagione DESC");
+    $rows = query_all("SELECT DISTINCT stagione FROM NEW_SQUADRE ORDER BY stagione DESC");
     $stagioni = array_column($rows, "stagione");
     api_success($stagioni);
 }
 
 if ($stagione === null) api_error("Parametro 'stagione' obbligatorio");
 
-$params = query_all("SELECT label, valore FROM SISTEMA WHERE stagione = $stagione");
+$params = query_all("SELECT label, valore FROM NEW_SISTEMA WHERE stagione = $stagione");
 // Trasforma in oggetto chiave/valore per comodità del frontend
 $result = [];
 foreach ($params as $p) {

@@ -20,10 +20,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         api_error("Messaggio troppo lungo (max 100 caratteri)");
     }
 
-    $max = query_one("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM MESSAGGI WHERE stagione = $stagione");
+    $max = query_one("SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM NEW_MESSAGGI WHERE stagione = $stagione");
     $next_id = (int)$max["next_id"];
 
-    mysqli_query($conn, "INSERT INTO MESSAGGI (id, stagione, mittente, destinatario, messaggio)
+    mysqli_query($conn, "INSERT INTO NEW_MESSAGGI (id, stagione, mittente, destinatario, messaggio)
                          VALUES ($next_id, $stagione, $mittente, $destinatario, '$messaggio')");
 
     if (mysqli_affected_rows($conn) === 0) {
@@ -46,9 +46,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 m.id, m.mittente, m.destinatario, m.messaggio,
                 a1.descrizione AS nome_mittente,
                 a2.descrizione AS nome_destinatario
-            FROM MESSAGGI m
-            LEFT JOIN ALLENATORI a1 ON a1.id = m.mittente     AND a1.stagione = m.stagione
-            LEFT JOIN ALLENATORI a2 ON a2.id = m.destinatario AND a2.stagione = m.stagione
+            FROM NEW_MESSAGGI m
+            LEFT JOIN NEW_ALLENATORI a1 ON a1.id = m.mittente     AND a1.stagione = m.stagione
+            LEFT JOIN NEW_ALLENATORI a2 ON a2.id = m.destinatario AND a2.stagione = m.stagione
             WHERE m.stagione = $stagione AND $where_msg
             ORDER BY m.id DESC";
 

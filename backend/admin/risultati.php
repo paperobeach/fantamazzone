@@ -51,11 +51,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     // Upsert risultato squadra di casa
-    $exists = query_one("SELECT COUNT(*) AS n FROM RISULTATI
+    $exists = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI
                          WHERE stagione = $stagione AND giornata = $giornata
                            AND id_squadra = $id_sq");
     if ((int)$exists["n"] > 0) {
-        mysqli_query($conn, "UPDATE RISULTATI SET
+        mysqli_query($conn, "UPDATE NEW_RISULTATI SET
             id_squadra_a = $id_sq_a,
             ftotale = $ftotale, ftotale_a = $ftotale_a,
             golf = $golf, gols = $gols,
@@ -64,7 +64,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             mod_att = $mod_att, num_cc = $num_cc, tot_cc = $tot_cc, mod_cc = $mod_cc
             WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $id_sq");
     } else {
-        mysqli_query($conn, "INSERT INTO RISULTATI
+        mysqli_query($conn, "INSERT INTO NEW_RISULTATI
             (giornata, stagione, id_squadra, id_squadra_a,
              ftotale, ftotale_a, golf, gols,
              modificatore, modificatore_a, punti, fattore_campo, segno,
@@ -91,9 +91,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             r.*,
             s1.nome AS nome_casa,   s1.logo AS logo_casa,
             s2.nome AS nome_ospite, s2.logo AS logo_ospite
-        FROM RISULTATI r
-        JOIN SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
-        JOIN SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
+        FROM NEW_RISULTATI r
+        JOIN NEW_SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
+        JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
         WHERE r.stagione = $stagione AND r.giornata = $giornata
         ORDER BY r.id_squadra");
 

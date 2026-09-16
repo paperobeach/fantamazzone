@@ -25,7 +25,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     // Verifica che la giornata non sia già giocata
-    $ck = query_one("SELECT COUNT(*) AS n FROM CALENDARIO_CK
+    $ck = query_one("SELECT COUNT(*) AS n FROM NEW_CALENDARIO_CK
                      WHERE stagione = $stagione
                        AND giornata <= $giornata
                        AND ck_giocata = 'S'");
@@ -34,7 +34,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     // Cancella formazione precedente e reinserisce
-    mysqli_query($conn, "DELETE FROM FORMAZIONI
+    mysqli_query($conn, "DELETE FROM NEW_FORMAZIONI
                          WHERE STAGIONE = $stagione
                            AND ID_SQUADRA = $id_squadra
                            AND GIORNATA = $giornata");
@@ -43,7 +43,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $id_g   = (int)$g["id"];
         $maglia = (int)$g["maglia"];
         if ($id_g <= 0) continue;
-        mysqli_query($conn, "INSERT INTO FORMAZIONI (STAGIONE, ID_SQUADRA, ID_GIOCATORE, GIORNATA, MAGLIA)
+        mysqli_query($conn, "INSERT INTO NEW_FORMAZIONI (STAGIONE, ID_SQUADRA, ID_GIOCATORE, GIORNATA, MAGLIA)
                              VALUES ($stagione, $id_squadra, $id_g, $giornata, $maglia)");
     }
 
@@ -59,8 +59,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             g.descrizione  AS giocatore,
             g.ruolo,
             f.MAGLIA       AS maglia
-        FROM FORMAZIONI f
-        JOIN GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+        FROM NEW_FORMAZIONI f
+        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
         WHERE f.STAGIONE    = $stagione
           AND f.ID_SQUADRA  = $id_squadra
           AND f.GIORNATA    = $giornata

@@ -18,7 +18,7 @@ $stagione = post_int("stagione");
 $giornata = post_int("giornata");
 
 // Verifica che non sia già chiusa
-$ck = query_one("SELECT ck_giocata FROM CALENDARIO_CK
+$ck = query_one("SELECT ck_giocata FROM NEW_CALENDARIO_CK
                  WHERE stagione = $stagione AND giornata = $giornata");
 
 if ($ck && $ck["ck_giocata"] === "S") {
@@ -26,10 +26,10 @@ if ($ck && $ck["ck_giocata"] === "S") {
 }
 
 if ($ck) {
-    mysqli_query($conn, "UPDATE CALENDARIO_CK SET ck_giocata = 'S'
+    mysqli_query($conn, "UPDATE NEW_CALENDARIO_CK SET ck_giocata = 'S'
                          WHERE stagione = $stagione AND giornata = $giornata");
 } else {
-    mysqli_query($conn, "INSERT INTO CALENDARIO_CK (stagione, giornata, ck_giocata)
+    mysqli_query($conn, "INSERT INTO NEW_CALENDARIO_CK (stagione, giornata, ck_giocata)
                          VALUES ($stagione, $giornata, 'S')");
 }
 

@@ -13,9 +13,9 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") api_error("Usare POST", 405);
 $stagione = post_int("stagione");
 
 // Svuota e ricalcola da zero
-mysqli_query($conn, "DELETE FROM STATISTICHE WHERE stagione = $stagione");
+mysqli_query($conn, "DELETE FROM NEW_STATISTICHE WHERE stagione = $stagione");
 
-$sql = "INSERT INTO STATISTICHE
+$sql = "INSERT INTO NEW_STATISTICHE
             (stagione, id_squadra, squadra, logo,
              id_giocatore, giocatore, ruolo,
              giocate, media, golf, gols, assist,
@@ -41,9 +41,9 @@ $sql = "INSERT INTO STATISTICHE
             SUM(v.rigores)         AS rigores,
             SUM(v.rigorep)         AS rigorep,
             SUM(v.autogol)         AS autogol
-        FROM VOTI v
-        JOIN SQUADRE  s ON s.id = v.id_squadra   AND s.stagione = v.stagione
-        JOIN GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
+        FROM NEW_VOTI v
+        JOIN NEW_SQUADRE  s ON s.id = v.id_squadra   AND s.stagione = v.stagione
+        JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
         WHERE v.stagione = $stagione
         GROUP BY v.stagione, v.id_squadra, s.nome, s.logo,
                  v.id_giocatore, g.descrizione, g.ruolo";
@@ -52,5 +52,5 @@ if (!mysqli_query($conn, $sql)) {
     api_error("Errore aggiornamento statistiche: " . mysqli_error($conn), 500);
 }
 
-$count = query_one("SELECT COUNT(*) AS n FROM STATISTICHE WHERE stagione = $stagione");
+$count = query_one("SELECT COUNT(*) AS n FROM NEW_STATISTICHE WHERE stagione = $stagione");
 api_success(["ok" => true, "righe_inserite" => (int)$count["n"]]);

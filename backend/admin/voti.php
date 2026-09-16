@@ -21,14 +21,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 
     // Verifica giornata aperta
-    $ck = query_one("SELECT ck_giocata FROM CALENDARIO_CK
+    $ck = query_one("SELECT ck_giocata FROM NEW_CALENDARIO_CK
                      WHERE stagione = $stagione AND giornata = $giornata");
     if ($ck && $ck["ck_giocata"] === "S") {
         api_error("Giornata già chiusa, impossibile modificare i voti", 403);
     }
 
     // Cancella e reinserisce
-    mysqli_query($conn, "DELETE FROM VOTI
+    mysqli_query($conn, "DELETE FROM NEW_VOTI
                          WHERE stagione = $stagione
                            AND giornata = $giornata
                            AND id_squadra = $id_squadra");
@@ -62,7 +62,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($id_g <= 0) continue;
 
-        mysqli_query($conn, "INSERT INTO VOTI
+        mysqli_query($conn, "INSERT INTO NEW_VOTI
             (id_squadra, id_giocatore, stagione, voto, giornata,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist)
@@ -84,8 +84,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             v.voto, v.totale, v.giocata,
             v.reti, v.ammonizioni, v.espulsioni, v.autogol,
             v.retis, v.rigores, v.rigorep, v.assist
-        FROM VOTI v
-        JOIN GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
+        FROM NEW_VOTI v
+        JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
         WHERE v.stagione    = $stagione
           AND v.giornata    = $giornata
           AND v.id_squadra  = $id_squadra

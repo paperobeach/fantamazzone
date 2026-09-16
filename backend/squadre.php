@@ -12,13 +12,13 @@ $id       = param_int("id", false);
 if ($id !== null) {
     $squadra = query_one("SELECT s.id, s.nome, s.logo, s.albo,
                                  a.descrizione AS allenatore, a.logo AS logo_allenatore
-                          FROM SQUADRE s
-                          LEFT JOIN ALLENATORI a ON a.id_squadra = s.id AND a.stagione = s.stagione
+                          FROM NEW_SQUADRE s
+                          LEFT JOIN NEW_ALLENATORI a ON a.id_squadra = s.id AND a.stagione = s.stagione
                           WHERE s.id = $id AND s.stagione = $stagione");
     if (!$squadra) api_error("Squadra non trovata", 404);
 
     $rosa = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.crediti
-                       FROM GIOCATORI g
+                       FROM NEW_GIOCATORI g
                        WHERE g.squadra = $id AND g.stagione = $stagione
                        ORDER BY g.ruolo, g.descrizione");
 
@@ -27,8 +27,8 @@ if ($id !== null) {
 } else {
     $sql = "SELECT s.id, s.nome, s.logo, s.albo,
                    a.descrizione AS allenatore, a.logo AS logo_allenatore
-            FROM SQUADRE s
-            LEFT JOIN ALLENATORI a ON a.id_squadra = s.id AND a.stagione = s.stagione
+            FROM NEW_SQUADRE s
+            LEFT JOIN NEW_ALLENATORI a ON a.id_squadra = s.id AND a.stagione = s.stagione
             WHERE s.stagione = $stagione
             ORDER BY s.nome";
     api_success(query_all($sql));

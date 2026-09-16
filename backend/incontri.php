@@ -26,9 +26,9 @@ $risultati = query_all("SELECT
         r.modificatore, r.modificatore_a,
         r.punti, r.segno,
         r.mod_att, r.num_cc, r.tot_cc, r.mod_cc
-    FROM RISULTATI r
-    JOIN SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
-    JOIN SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
+    FROM NEW_RISULTATI r
+    JOIN NEW_SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
+    JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
     WHERE r.stagione = $stagione AND r.giornata = $giornata
     $where_squadra
     ORDER BY r.id_squadra");
@@ -52,9 +52,9 @@ $voti_raw = query_all("SELECT
         v.voto, v.totale, v.giocata,
         v.reti, v.ammonizioni, v.espulsioni, v.autogol,
         v.retis, v.rigores, v.rigorep, v.assist
-    FROM VOTI v
-    JOIN GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
-    LEFT JOIN FORMAZIONI f ON f.ID_GIOCATORE = v.id_giocatore
+    FROM NEW_VOTI v
+    JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
+    LEFT JOIN NEW_FORMAZIONI f ON f.ID_GIOCATORE = v.id_giocatore
                            AND f.ID_SQUADRA  = v.id_squadra
                            AND f.STAGIONE    = v.stagione
                            AND f.GIORNATA    = v.giornata

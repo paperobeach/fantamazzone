@@ -18,7 +18,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") api_error("Usare POST", 405);
 
 $stagione = post_int("stagione");
 
-$squadre = query_all("SELECT id, nome, logo FROM SQUADRE WHERE stagione = $stagione");
+$squadre = query_all("SELECT id, nome, logo FROM NEW_SQUADRE WHERE stagione = $stagione");
 if (empty($squadre)) api_error("Nessuna squadra per questa stagione", 404);
 
 // Soglie range (punteggio totale partita = ftotale)
@@ -29,7 +29,7 @@ define("R3_MIN", 80.0);   define("R3_MAX", 89.9);
 define("R4_MIN", 90.0);   define("R4_MAX", 99.9);
 define("R5_MIN", 100.0);  // quinto range (alto) >= 100
 
-mysqli_query($conn, "DELETE FROM KULOVIC WHERE STAGIONE = $stagione");
+mysqli_query($conn, "DELETE FROM NEW_KULOVIC WHERE STAGIONE = $stagione");
 
 foreach ($squadre as $sq) {
     $id   = (int)$sq["id"];
@@ -37,16 +37,16 @@ foreach ($squadre as $sq) {
     $logo = mysqli_real_escape_string($conn, $sq["logo"]);
 
     // Punteggi fatti (casa + ospite)
-    $pf_casa = query_all("SELECT ftotale AS pt FROM RISULTATI
+    $pf_casa = query_all("SELECT ftotale AS pt FROM NEW_RISULTATI
                           WHERE stagione = $stagione AND id_squadra = $id");
-    $pf_osp  = query_all("SELECT ftotale_a AS pt FROM RISULTATI
+    $pf_osp  = query_all("SELECT ftotale_a AS pt FROM NEW_RISULTATI
                           WHERE stagione = $stagione AND id_squadra_a = $id");
     $punteggi_fatti = array_merge($pf_casa, $pf_osp);
 
     // Punteggi subiti
-    $ps_casa = query_all("SELECT ftotale_a AS pt FROM RISULTATI
+    $ps_casa = query_all("SELECT ftotale_a AS pt FROM NEW_RISULTATI
                           WHERE stagione = $stagione AND id_squadra = $id");
-    $ps_osp  = query_all("SELECT ftotale AS pt FROM RISULTATI
+    $ps_osp  = query_all("SELECT ftotale AS pt FROM NEW_RISULTATI
                           WHERE stagione = $stagione AND id_squadra_a = $id");
     $punteggi_subiti = array_merge($ps_casa, $ps_osp);
 
@@ -75,10 +75,10 @@ foreach ($squadre as $sq) {
     $r5a = $count_above($punteggi_subiti, R5_MIN);
 
     // Culo/Sfiga: vinte/perse con punteggio inferiore all'avversario
-    $partite = query_all("SELECT ftotale, ftotale_a, golf, gols FROM RISULTATI
+    $partite = query_all("SELECT ftotale, ftotale_a, golf, gols FROM NEW_RISULTATI
                           WHERE stagione = $stagione AND id_squadra = $id");
     $partite_osp = query_all("SELECT ftotale_a AS ftotale, ftotale AS ftotale_a, gols AS golf, golf AS gols
-                              FROM RISULTATI
+                              FROM NEW_RISULTATI
                               WHERE stagione = $stagione AND id_squadra_a = $id");
     $tutte = array_merge($partite, $partite_osp);
 
@@ -99,7 +99,7 @@ foreach ($squadre as $sq) {
         if ($g < $gs && $ft > $fta) $sfiga++;  // perso con punteggio superiore
     }
 
-    mysqli_query($conn, "INSERT INTO KULOVIC
+    mysqli_query($conn, "INSERT INTO NEW_KULOVIC
         (STAGIONE, ID_SQUADRA, SQUADRA, LOGO,
          PRIMO_RANGE, SECONDO_RANGE, TERZO_RANGE, QUARTO_RANGE, QUINTO_RANGE,
          PRIMO_RANGE_A, SECONDO_RANGE_A, TERZO_RANGE_A, QUARTO_RANGE_A, QUINTO_RANGE_A,

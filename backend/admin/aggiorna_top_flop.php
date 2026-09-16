@@ -25,13 +25,13 @@ $ruoli = [
     4 => 3,  // Attaccanti: top 3 (a volte 4, adattare)
 ];
 
-mysqli_query($conn, "DELETE FROM TOP11 WHERE stagione = $stagione");
-mysqli_query($conn, "DELETE FROM FLOP11 WHERE stagione = $stagione");
+mysqli_query($conn, "DELETE FROM NEW_TOP11 WHERE stagione = $stagione");
+mysqli_query($conn, "DELETE FROM NEW_FLOP11 WHERE stagione = $stagione");
 
 foreach ($ruoli as $ruolo => $quanti) {
     // TOP
     $top = query_all("SELECT id_squadra, squadra, logo, id_giocatore, giocatore, media, ruolo, giocate
-                      FROM STATISTICHE
+                      FROM NEW_STATISTICHE
                       WHERE stagione = $stagione
                         AND ruolo = $ruolo
                         AND giocate >= $min_giocate
@@ -45,14 +45,14 @@ foreach ($ruoli as $ruolo => $quanti) {
         $nome  = mysqli_real_escape_string($conn, $r["giocatore"]);
         $sqn   = mysqli_real_escape_string($conn, $r["squadra"]);
         $logo  = mysqli_real_escape_string($conn, $r["logo"]);
-        mysqli_query($conn, "INSERT INTO TOP11
+        mysqli_query($conn, "INSERT INTO NEW_TOP11
             (stagione, id_giocatore, giocatore, media, ruolo, giocate, id_squadra, squadra, logo)
             VALUES ($stagione, $id_g, '$nome', $media, $ruolo, $gg, $id_sq, '$sqn', '$logo')");
     }
 
     // FLOP
     $flop = query_all("SELECT id_squadra, squadra, logo, id_giocatore, giocatore, media, ruolo, giocate
-                       FROM STATISTICHE
+                       FROM NEW_STATISTICHE
                        WHERE stagione = $stagione
                          AND ruolo = $ruolo
                          AND giocate >= $min_giocate
@@ -66,7 +66,7 @@ foreach ($ruoli as $ruolo => $quanti) {
         $nome  = mysqli_real_escape_string($conn, $r["giocatore"]);
         $sqn   = mysqli_real_escape_string($conn, $r["squadra"]);
         $logo  = mysqli_real_escape_string($conn, $r["logo"]);
-        mysqli_query($conn, "INSERT INTO FLOP11
+        mysqli_query($conn, "INSERT INTO NEW_FLOP11
             (stagione, id_giocatore, giocatore, media, ruolo, giocate, id_squadra, squadra, logo)
             VALUES ($stagione, $id_g, '$nome', $media, $ruolo, $gg, $id_sq, '$sqn', '$logo')");
     }

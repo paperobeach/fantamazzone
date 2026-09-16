@@ -17,8 +17,8 @@ $sql_cal = "SELECT
                 c.squadra  AS id_squadra,
                 s.nome     AS nome_squadra,
                 s.logo
-            FROM CALENDARIO c
-            JOIN SQUADRE s ON s.id = c.squadra AND s.stagione = c.stagione
+            FROM NEW_CALENDARIO c
+            JOIN NEW_SQUADRE s ON s.id = c.squadra AND s.stagione = c.stagione
             WHERE c.stagione = $stagione
             ORDER BY c.giornata, c.posizione";
 
@@ -35,7 +35,7 @@ $sql_ris = "SELECT
                 gols,
                 punti,
                 segno
-            FROM RISULTATI
+            FROM NEW_RISULTATI
             WHERE stagione = $stagione";
 
 $risultati_raw = query_all($sql_ris);

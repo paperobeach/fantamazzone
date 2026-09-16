@@ -16,7 +16,7 @@ $campi_base = "id_squadra, squadra, logo, id_giocatore, giocatore, ruolo, giocat
 switch ($tipo) {
     case "marcatori":
         $sql = "SELECT $campi_base, gols, autogol
-                FROM STATISTICHE
+                FROM NEW_STATISTICHE
                 WHERE stagione = $stagione AND gols > 0
                 ORDER BY gols DESC, media DESC
                 LIMIT $limit";
@@ -24,7 +24,7 @@ switch ($tipo) {
 
     case "assist":
         $sql = "SELECT $campi_base, assist
-                FROM STATISTICHE
+                FROM NEW_STATISTICHE
                 WHERE stagione = $stagione AND assist > 0
                 ORDER BY assist DESC, media DESC
                 LIMIT $limit";
@@ -32,7 +32,7 @@ switch ($tipo) {
 
     case "migliori":
         $sql = "SELECT $campi_base
-                FROM STATISTICHE
+                FROM NEW_STATISTICHE
                 WHERE stagione = $stagione AND giocate >= 5
                 ORDER BY media DESC
                 LIMIT $limit";
@@ -40,7 +40,7 @@ switch ($tipo) {
 
     case "peggiori":
         $sql = "SELECT $campi_base
-                FROM STATISTICHE
+                FROM NEW_STATISTICHE
                 WHERE stagione = $stagione AND giocate >= 5
                 ORDER BY media ASC
                 LIMIT $limit";

@@ -23,7 +23,7 @@ $pass     = post_str("password");
 // Recupera l'utente (non filtriamo per password in query per
 // evitare timing attack; il controllo avviene in PHP)
 $sql = "SELECT id, utenza, PASSWORD, descrizione, abilitazione
-        FROM UTENZE
+        FROM NEW_UTENZE
         WHERE stagione = $stagione AND utenza = '$utenza'
         LIMIT 1";
 
@@ -57,7 +57,7 @@ foreach ($days_it as $en => $it)   $now = str_replace($en, $it, $now);
 foreach ($months_it as $en => $it) $now = str_replace($en, $it, $now);
 
 $desc_esc = mysqli_real_escape_string($conn, $utente["descrizione"]);
-mysqli_query($conn, "INSERT INTO ACCESSI (stagione, allenatore, time)
+mysqli_query($conn, "INSERT INTO NEW_ACCESSI (stagione, allenatore, time)
                      VALUES ($stagione, '$desc_esc', '$now')");
 
 // Non restituiamo mai la password

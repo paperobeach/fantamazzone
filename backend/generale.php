@@ -30,7 +30,7 @@ $sql = "SELECT
             media_mod_dif,
             media_mod_cc,
             media_mod_att
-        FROM GENERALE
+        FROM NEW_GENERALE
         WHERE stagione = $stagione
         ORDER BY punti DESC, golf DESC, gols DESC";
 

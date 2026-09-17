@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getIncontri, getSistema } from '../api/client'
+import { getIncontri, getCalendario } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge } from '../components/ui'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -129,27 +129,61 @@ function MatchCard({ match }) {
 }
 
 export default function Incontri() {
-  const { stagione, sistemaParams } = useApp()
-  const maxGiornata = Number(sistemaParams?.giornata_corrente ?? 1)
-  const [giornata, setGiornata] = useState(maxGiornata)
+  const { stagione } = useApp()
+
+  // Numero totale di giornate e ultima giornata giocata: li ricaviamo dal
+  // calendario reale (stesso approccio della pagina Calendario), invece che
+  // dal solo parametro di sistema "giornata_corrente". Quel parametro non
+  // viene aggiornato da nessuna azione admin (nemmeno "Chiudi giornata"), per
+  // cui può restare bloccato a un valore fisso e impedire la navigazione tra
+  // le giornate.
+  const { data: calendario } = useFetch(
+    () => getCalendario(stagione),
+    [stagione]
+  )
+
+  const totalGiornate = calendario?.length ?? 1
+  const lastPlayed = calendario?.reduce((acc, g, i) =>
+    g.partite.some(p => p.risultato !== null) ? i + 1 : acc, 0) || 1
+
+  const [giornata, setGiornata] = useState(null)
+  const initRef = useRef(false)
+
+  // Imposta la giornata di default una sola volta, appena il calendario è
+  // disponibile (evita di "congelare" lo state su un valore calcolato prima
+  // che i dati fossero pronti).
+  useEffect(() => {
+    if (!initRef.current && calendario) {
+      setGiornata(lastPlayed)
+      initRef.current = true
+    }
+  }, [calendario, lastPlayed])
 
   const { data, loading, error, refetch } = useFetch(
-    () => getIncontri(stagione, giornata),
+    () => giornata ? getIncontri(stagione, giornata) : Promise.resolve(null),
     [stagione, giornata]
   )
 
-  if (loading) return <LoadingState label="Caricamento incontri..." />
+  if (giornata === null || loading) return <LoadingState label="Caricamento incontri..." />
   if (error)   return <ErrorState message={error} onRetry={refetch} />
 
   return (
     <div className="animate-fade-up">
       <PageHeader label="Risultati" title="Incontri" subtitle={`Giornata ${giornata}`}>
         <div className="flex items-center gap-2">
-          <button onClick={() => setGiornata(g => Math.max(1, g - 1))} className="btn-ghost">
+          <button
+            onClick={() => setGiornata(g => Math.max(1, g - 1))}
+            disabled={giornata <= 1}
+            className="btn-ghost disabled:opacity-30"
+          >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <span className="text-display font-bold text-xl text-white w-10 text-center">{giornata}</span>
-          <button onClick={() => setGiornata(g => Math.min(maxGiornata, g + 1))} className="btn-ghost">
+          <button
+            onClick={() => setGiornata(g => Math.min(totalGiornate, g + 1))}
+            disabled={giornata >= totalGiornate}
+            className="btn-ghost disabled:opacity-30"
+          >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>

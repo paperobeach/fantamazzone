@@ -16,7 +16,13 @@ $where_squadra = $id_squadra !== null
     ? "AND (r.id_squadra = $id_squadra OR r.id_squadra_a = $id_squadra)"
     : "";
 
-// Risultati della giornata
+// Risultati della giornata.
+// NEW_RISULTATI contiene una riga per ciascuna delle due squadre di ogni
+// partita (una prospettiva "A vs B" e una "B vs A", necessarie per i
+// modificatori/statistiche specifici di ciascuna squadra). Per evitare di
+// restituire ogni partita due volte, teniamo solo la riga della squadra di
+// casa, individuata tramite NEW_CALENDARIO (posizione dispari = casa),
+// esattamente come fa già calendario.php.
 $risultati = query_all("SELECT
         r.id_squadra, r.id_squadra_a,
         s1.nome AS nome_casa,  s1.logo AS logo_casa,
@@ -27,9 +33,13 @@ $risultati = query_all("SELECT
         r.punti, r.segno,
         r.mod_att, r.num_cc, r.tot_cc, r.mod_cc
     FROM NEW_RISULTATI r
+    JOIN NEW_CALENDARIO cal ON cal.stagione = r.stagione
+                            AND cal.giornata = r.giornata
+                            AND cal.squadra  = r.id_squadra
     JOIN NEW_SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
     JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
     WHERE r.stagione = $stagione AND r.giornata = $giornata
+      AND cal.posizione % 2 = 1
     $where_squadra
     ORDER BY r.id_squadra");
 

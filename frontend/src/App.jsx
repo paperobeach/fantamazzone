@@ -22,6 +22,7 @@ const Schedina    = lazy(() => import('./pages/Schedina'))
 const Messaggi    = lazy(() => import('./pages/Messaggi'))
 const Login       = lazy(() => import('./pages/Login'))
 const Admin       = lazy(() => import('./pages/Admin'))
+const InserimentoRose = lazy(() => import('./pages/InserimentoRose'))
 
 function PageLoader() {
   return (
@@ -107,6 +108,9 @@ function AppShell() {
                 <Route path="/login"        element={<Login />} />
                 <Route path="/admin"        element={
                   <AdminRoute><Admin /></AdminRoute>
+                } />
+                <Route path="/inserimento-rose" element={
+                  <AdminRoute><InserimentoRose /></AdminRoute>
                 } />
                 <Route path="*"            element={<Navigate to="/" replace />} />
               </Routes>

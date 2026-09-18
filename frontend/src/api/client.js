@@ -16,19 +16,22 @@ const BASE_URL = import.meta.env.VITE_API_URL ?? '/api'
 // (es. AUTH_ERROR -> logout automatico).
 
 class ApiError extends Error {
-  constructor(message, code, status) {
+  constructor(message, code, status, details) {
     super(message)
     this.name = 'ApiError'
     this.code = code
     this.status = status
+    // Dettaglio facoltativo: array di errori riga-per-riga
+    // (es. validazione import Excel) { riga, campo, messaggio }[]
+    this.details = details
   }
 }
 
 function parseErrorBody(body, resStatus) {
   const err = body?.error
-  // Nuovo formato: { error: { code, message, status } }
+  // Nuovo formato: { error: { code, message, status, details? } }
   if (err && typeof err === 'object') {
-    return new ApiError(err.message ?? `HTTP ${resStatus}`, err.code ?? 'UNKNOWN', err.status ?? resStatus)
+    return new ApiError(err.message ?? `HTTP ${resStatus}`, err.code ?? 'UNKNOWN', err.status ?? resStatus, err.details)
   }
   // Fallback di compatibilità: vecchio formato { error: "messaggio" }
   // o risposta non conforme.
@@ -53,6 +56,18 @@ async function post(endpoint, body = {}) {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(body),
+  })
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw parseErrorBody(data, res.status)
+  return data
+}
+
+// Upload multipart/form-data (es. import Excel). Niente header
+// Content-Type: il browser imposta da solo il boundary corretto.
+async function postFile(endpoint, formData) {
+  const res = await fetch(`${BASE_URL}/${endpoint}`, {
+    method: 'POST',
+    body:   formData,
   })
   const data = await res.json().catch(() => null)
   if (!res.ok) throw parseErrorBody(data, res.status)
@@ -167,6 +182,16 @@ export const adminAggiornaTopFlop  = (stagione) =>
 
 export const adminAggiornaKulovic  = (stagione) =>
   post('admin/aggiorna_kulovic.php', { stagione })
+
+// ── Inserimento rose ─────────────────────────────────────────
+// Carica il file Excel (sheet "Giocatori") ed esegue i 3 step
+// di caricamento (BASE_ASTA -> GIOCATORI / GIOCATORI_SVINCOLATI).
+export const adminInserimentoRose = (stagione, file) => {
+  const formData = new FormData()
+  formData.append('stagione', stagione)
+  formData.append('file', file)
+  return postFile('admin/inserimento_rose.php', formData)
+}
 
 /**
  * Chiude una giornata ed esegue in sequenza tutti gli aggiornamenti admin.

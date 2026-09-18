@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, Swords, BarChart2,
   Star, Zap, Shield, MessageSquare, LogOut,
-  Settings, ChevronDown, Medal, X
+  Settings, ChevronDown, Medal, X, Upload
 } from 'lucide-react'
 
 const NAV = [
@@ -22,7 +22,8 @@ const NAV = [
 ]
 
 const ADMIN_NAV = [
-  { to: '/admin',        icon: Settings,     label: 'Pannello Admin' },
+  { to: '/admin',              icon: Settings, label: 'Pannello Admin' },
+  { to: '/inserimento-rose',   icon: Upload,   label: 'Inserimento rose' },
 ]
 
 export default function Sidebar({ open = false, onClose = () => {} }) {

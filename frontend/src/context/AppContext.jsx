@@ -50,7 +50,7 @@ export function AppProvider({ children }) {
     localStorage.removeItem('lfm_utente')
   }, [])
 
-  const isAdmin = utente?.abilitazione === 'A'
+  const isAdmin = utente?.abilitazione === 'Y'
 
   return (
     <AppContext.Provider value={{

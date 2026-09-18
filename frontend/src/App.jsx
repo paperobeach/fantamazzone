@@ -49,19 +49,6 @@ function AppShell() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-pitch-950">
-        <div className="flex flex-col items-center gap-4">
-          <Spinner size="lg" />
-          <p className="text-mono text-xs tracking-widest uppercase text-slate-600">
-            Caricamento...
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex min-h-screen bg-pitch-950">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -88,34 +75,38 @@ function AppShell() {
 
       <main className="flex-1 lg:ml-56 min-h-screen pt-14 lg:pt-0">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-          <ErrorBoundary key={location.pathname}>
-            <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/"              element={<Classifica />} />
-                <Route path="/calendario"   element={<Calendario />} />
-                <Route path="/squadre"      element={<Squadre />} />
-                <Route path="/squadre/:id"  element={<SquadraDetail />} />
-                <Route path="/incontri"     element={<Incontri />} />
-                <Route path="/statistiche"  element={<Statistiche />} />
-                <Route path="/marcatori"    element={<Marcatori />} />
-                <Route path="/top-flop"     element={<TopFlop />} />
-                <Route path="/kulovic"      element={<Kulovic />} />
-                <Route path="/champions"    element={<Champions />} />
-                <Route path="/schedina"     element={<Schedina />} />
-                <Route path="/messaggi"     element={
-                  <ProtectedRoute><Messaggi /></ProtectedRoute>
-                } />
-                <Route path="/login"        element={<Login />} />
-                <Route path="/admin"        element={
-                  <AdminRoute><Admin /></AdminRoute>
-                } />
-                <Route path="/inserimento-rose" element={
-                  <AdminRoute><InserimentoRose /></AdminRoute>
-                } />
-                <Route path="*"            element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
+          {loading ? (
+            <PageLoader />
+          ) : (
+            <ErrorBoundary key={location.pathname}>
+              <Suspense fallback={<PageLoader />}>
+                <Routes>
+                  <Route path="/"              element={<Classifica />} />
+                  <Route path="/calendario"   element={<Calendario />} />
+                  <Route path="/squadre"      element={<Squadre />} />
+                  <Route path="/squadre/:id"  element={<SquadraDetail />} />
+                  <Route path="/incontri"     element={<Incontri />} />
+                  <Route path="/statistiche"  element={<Statistiche />} />
+                  <Route path="/marcatori"    element={<Marcatori />} />
+                  <Route path="/top-flop"     element={<TopFlop />} />
+                  <Route path="/kulovic"      element={<Kulovic />} />
+                  <Route path="/champions"    element={<Champions />} />
+                  <Route path="/schedina"     element={<Schedina />} />
+                  <Route path="/messaggi"     element={
+                    <ProtectedRoute><Messaggi /></ProtectedRoute>
+                  } />
+                  <Route path="/login"        element={<Login />} />
+                  <Route path="/admin"        element={
+                    <AdminRoute><Admin /></AdminRoute>
+                  } />
+                  <Route path="/inserimento-rose" element={
+                    <AdminRoute><InserimentoRose /></AdminRoute>
+                  } />
+                  <Route path="*"            element={<Navigate to="/" replace />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
+          )}
         </div>
       </main>
     </div>

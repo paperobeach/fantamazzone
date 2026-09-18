@@ -191,9 +191,11 @@ if (empty($rows)) {
 // ------------------------------------------------------------
 $headerMap = [
     'id_giocatore'    => 'id_giocatore',
+    'id_squadra'      => 'id_giocatore', // alias: alcuni template usano questa intestazione per l'id giocatore
     'nome'            => 'nome',
     'ruolo'           => 'ruolo',
     'squadra_serie_a' => 'squadra_serie_a',
+    'nazione'         => 'nazione',
     'nazionalità'     => 'nazione',
     'nazionalita'     => 'nazione',
     'id_squadra_lega' => 'id_squadra_lega',
@@ -270,11 +272,18 @@ foreach ($rows as $i => $r) {
         $errors[] = err_row($riga, 'id_squadra_lega', 'Se valorizzato deve essere un numero da 1 a 8');
     }
 
-    // crediti: numerico obbligatorio, <= 470
-    if ($crediti === '' || !is_numeric($crediti) || (int) $crediti < 0) {
-        $errors[] = err_row($riga, 'crediti', 'Campo obbligatorio: valore numerico');
-    } elseif ((int) $crediti > 470) {
-        $errors[] = err_row($riga, 'crediti', 'Non può superare 470 crediti');
+    // crediti: obbligatorio e <= 470 solo per i giocatori assegnati a una
+    // squadra (id_squadra_lega valorizzato). Per gli svincolati il costo
+    // d'asta non esiste: se assente viene trattato come 0.
+    $haSquadra = $idSquadraLega !== '' && ctype_digit($idSquadraLega);
+    if ($haSquadra) {
+        if ($crediti === '' || !is_numeric($crediti) || (int) $crediti < 0) {
+            $errors[] = err_row($riga, 'crediti', 'Campo obbligatorio per i giocatori assegnati: valore numerico');
+        } elseif ((int) $crediti > 470) {
+            $errors[] = err_row($riga, 'crediti', 'Non può superare 470 crediti');
+        }
+    } elseif ($crediti !== '' && (!is_numeric($crediti) || (int) $crediti < 0)) {
+        $errors[] = err_row($riga, 'crediti', 'Se presente deve essere un valore numerico');
     }
 
     // stagione: numerica obbligatoria

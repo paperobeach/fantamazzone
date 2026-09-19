@@ -17,10 +17,13 @@ export function AppProvider({ children }) {
   useEffect(() => {
     getStagioni()
       .then(list => {
-        setStagioni(list)
+        // Il backend PHP restituisce i valori come stringhe: normalizziamo in numeri qui,
+        // così tutto il resto dell'app (select, confronti, somme) lavora su numeri veri.
+        const stagioniNum = list.map(Number)
+        setStagioni(stagioniNum)
         // Stagione corrente = la più recente
         const saved = localStorage.getItem('lfm_stagione')
-        const cur   = saved && list.includes(Number(saved)) ? Number(saved) : list[0]
+        const cur   = saved && stagioniNum.includes(Number(saved)) ? Number(saved) : stagioniNum[0]
         setStagione(cur)
       })
       .catch(console.error)

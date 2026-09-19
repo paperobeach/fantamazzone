@@ -103,7 +103,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
                        focus:outline-none focus:border-grass-500/40"
           >
             {stagioni.map(s => (
-              <option key={s} value={s}>{s} / {s + 1}</option>
+              <option key={s} value={s}>{s} / {Number(s) + 1}</option>
             ))}
           </select>
           <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />

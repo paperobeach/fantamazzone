@@ -20,12 +20,16 @@ if ($id !== null) {
     $rosa = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.crediti,
                               COALESCE(ns.giocate, 0)      AS presenze,
                               COALESCE(ns.media, 0)        AS media,
-                              COALESCE(ns.gols, 0)         AS gol,
+                              CASE WHEN g.ruolo = 1
+                                   THEN COALESCE(ns.gols, 0)
+                                   ELSE COALESCE(ns.golf, 0)
+                              END                          AS gol,
                               COALESCE(ns.assist, 0)       AS assist,
                               COALESCE(ns.ammonizioni, 0)  AS ammonizioni,
                               COALESCE(ns.espulsioni, 0)   AS espulsioni,
                               COALESCE(ns.autogol, 0)      AS autogol,
-                              COALESCE(ns.rigores, 0)      AS rigori
+                              COALESCE(ns.rigorep, 0)      AS rigori_parati,
+                              COALESCE(ns.rigores, 0)      AS rigori_sbagliati
                        FROM NEW_GIOCATORI g
                        LEFT JOIN NEW_STATISTICHE ns
                               ON ns.id_giocatore = g.id AND ns.stagione = g.stagione

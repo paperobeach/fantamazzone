@@ -17,8 +17,18 @@ if ($id !== null) {
                           WHERE s.id = $id AND s.stagione = $stagione");
     if (!$squadra) api_error("Squadra non trovata", 404);
 
-    $rosa = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.crediti
+    $rosa = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.crediti,
+                              COALESCE(ns.giocate, 0)      AS presenze,
+                              COALESCE(ns.media, 0)        AS media,
+                              COALESCE(ns.gols, 0)         AS gol,
+                              COALESCE(ns.assist, 0)       AS assist,
+                              COALESCE(ns.ammonizioni, 0)  AS ammonizioni,
+                              COALESCE(ns.espulsioni, 0)   AS espulsioni,
+                              COALESCE(ns.autogol, 0)      AS autogol,
+                              COALESCE(ns.rigores, 0)      AS rigori
                        FROM NEW_GIOCATORI g
+                       LEFT JOIN NEW_STATISTICHE ns
+                              ON ns.id_giocatore = g.id AND ns.stagione = g.stagione
                        WHERE g.squadra = $id AND g.stagione = $stagione
                        ORDER BY g.ruolo, g.descrizione");
 

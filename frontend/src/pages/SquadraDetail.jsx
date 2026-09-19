@@ -60,12 +60,20 @@ export default function SquadraDetail() {
               <span className="text-xs text-slate-600 font-mono">{grouped[r].length} giocatori</span>
             </div>
             <div className="overflow-x-auto">
-            <table className="fanta-table">
+            <table className="fanta-table min-w-[820px]">
               <thead>
                 <tr>
-                  <th>Giocatore</th>
-                  <th className="text-center">Crediti</th>
-                  <th>Nazione</th>
+                  <th className="whitespace-nowrap">Giocatore</th>
+                  <th className="text-center whitespace-nowrap">Crediti</th>
+                  <th className="whitespace-nowrap">Nazione</th>
+                  <th className="text-center whitespace-nowrap">Presenze</th>
+                  <th className="text-center whitespace-nowrap">Media</th>
+                  <th className="text-center whitespace-nowrap">Gol</th>
+                  <th className="text-center whitespace-nowrap">Assist</th>
+                  <th className="text-center whitespace-nowrap">Amm.</th>
+                  <th className="text-center whitespace-nowrap">Esp.</th>
+                  <th className="text-center whitespace-nowrap">Autogol</th>
+                  <th className="text-center whitespace-nowrap">Rigori</th>
                 </tr>
               </thead>
               <tbody>
@@ -79,6 +87,44 @@ export default function SquadraDetail() {
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="text-xs text-slate-600">{g.nazione}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className="font-mono text-xs text-slate-400">{g.presenze}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <span className="font-mono text-xs text-slate-300 font-semibold">
+                        {Number(g.presenze) > 0 ? Number(g.media).toFixed(2) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.gol) > 0
+                        ? <span className="font-mono text-xs font-semibold text-grass-400">{g.gol}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.assist) > 0
+                        ? <span className="font-mono text-xs text-blue-400">{g.assist}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.ammonizioni) > 0
+                        ? <span className="font-mono text-xs text-yellow-400">{g.ammonizioni}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.espulsioni) > 0
+                        ? <span className="font-mono text-xs text-red-400">{g.espulsioni}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.autogol) > 0
+                        ? <span className="font-mono text-xs text-red-400">{g.autogol}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {Number(g.rigori) > 0
+                        ? <span className="font-mono text-xs text-slate-300">{g.rigori}</span>
+                        : <span className="text-slate-700 text-xs">—</span>}
                     </td>
                   </tr>
                 ))}

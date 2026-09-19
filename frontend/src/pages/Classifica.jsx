@@ -12,6 +12,33 @@ function TrendIcon({ segno }) {
   return <Minus className="w-3.5 h-3.5 text-slate-600" />
 }
 
+// Badge di posizione: campione (1°), secondo posto (2°), maglia nera (ultimo)
+function posizioneInfo(i, totale) {
+  const isLast = totale > 2 && i === totale - 1
+  if (i === 0) {
+    return {
+      label: 'Campione',
+      badgeClass: 'bg-gradient-to-br from-gold-300 to-gold-500 text-pitch-900 ring-1 ring-gold-300/60',
+      rowBorderClass: 'border-l-2 border-l-gold-400',
+    }
+  }
+  if (i === 1) {
+    return {
+      label: 'Secondo posto',
+      badgeClass: 'bg-gradient-to-br from-slate-200 to-slate-400 text-pitch-900 ring-1 ring-slate-100/60',
+      rowBorderClass: 'border-l-2 border-l-slate-300',
+    }
+  }
+  if (isLast) {
+    return {
+      label: 'Maglia nera',
+      badgeClass: 'bg-black text-white ring-1 ring-white/30',
+      rowBorderClass: 'border-l-2 border-l-white/20 bg-black/20',
+    }
+  }
+  return null
+}
+
 export default function Classifica() {
   const { stagione } = useApp()
   const [sortBy, setSortBy] = useState('punti')
@@ -107,22 +134,25 @@ export default function Classifica() {
           </thead>
           <tbody>
             {squadre.map((sq, i) => {
-              const isTop3   = i < 3
-              const isBottom = i === squadre.length - 1
+              const pos = posizioneInfo(i, squadre.length)
               return (
                 <tr
                   key={sq.id_squadra}
                   className={`border-b border-white/[0.03] transition-colors hover:bg-white/[0.02] ${
-                    isTop3 ? 'border-l-2 border-l-grass-500/40' : ''
-                  } ${isBottom ? 'border-l-2 border-l-red-500/40' : ''}`}
+                    pos ? pos.rowBorderClass : ''
+                  }`}
                 >
                   <td className="px-4 py-3 text-center">
-                    <span className={`text-display font-bold text-lg ${
-                      i === 0 ? 'text-gold-400' :
-                      i === 1 ? 'text-slate-400' :
-                      i === 2 ? 'text-amber-700' :
-                      'text-slate-600'
-                    }`}>{i + 1}</span>
+                    {pos ? (
+                      <span
+                        title={pos.label}
+                        className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold text-display ${pos.badgeClass}`}
+                      >
+                        {i + 1}
+                      </span>
+                    ) : (
+                      <span className="text-display font-bold text-lg text-slate-600">{i + 1}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <Link
@@ -165,12 +195,16 @@ export default function Classifica() {
       {/* Legend */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-4 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-grass-500/40 border-l-2 border-l-grass-500" />
-          <span className="text-xs text-slate-600">Zona promozione</span>
+          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-gold-300 to-gold-500 ring-1 ring-gold-300/60" />
+          <span className="text-xs text-slate-600">Campione</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-sm bg-red-500/10 border-l-2 border-l-red-500" />
-          <span className="text-xs text-slate-600">Zona retrocessione</span>
+          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-slate-200 to-slate-400 ring-1 ring-slate-100/60" />
+          <span className="text-xs text-slate-600">Secondo posto</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-black ring-1 ring-white/30" />
+          <span className="text-xs text-slate-600">Maglia nera</span>
         </div>
       </div>
     </div>

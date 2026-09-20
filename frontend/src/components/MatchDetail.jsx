@@ -18,7 +18,7 @@ export function VotoBox({ voto, totale, giocata }) {
 export function GiocatoriTable({ giocatori }) {
   return (
     <div className="overflow-x-auto">
-    <table className="w-full text-xs min-w-[420px]">
+    <table className="w-full text-xs min-w-[560px]">
       <thead>
         <tr className="border-b border-white/5">
           <th className="px-3 py-2 text-left font-mono tracking-widest uppercase text-slate-700 font-normal">R</th>
@@ -26,6 +26,9 @@ export function GiocatoriTable({ giocatori }) {
           <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Voto</th>
           <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Tot</th>
           <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">⚽</th>
+          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Assist">🅰️</th>
+          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Gol subiti (portiere)">GS</th>
+          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Autogol">AG</th>
           <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">🟨</th>
           <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">🟥</th>
         </tr>
@@ -42,12 +45,42 @@ export function GiocatoriTable({ giocatori }) {
               <VotoBox voto={g.totale} totale={g.totale} giocata={g.giocata} />
             </td>
             <td className="px-3 py-2 text-center text-slate-500">{g.reti > 0 ? g.reti : '—'}</td>
+            <td className="px-3 py-2 text-center text-slate-500">{g.assist > 0 ? g.assist : '—'}</td>
+            <td className="px-3 py-2 text-center text-slate-500">{g.retis > 0 ? g.retis : '—'}</td>
+            <td className="px-3 py-2 text-center text-slate-500">{g.autogol > 0 ? g.autogol : '—'}</td>
             <td className="px-3 py-2 text-center text-slate-500">{g.ammonizioni > 0 ? g.ammonizioni : '—'}</td>
             <td className="px-3 py-2 text-center text-slate-500">{g.espulsioni > 0 ? g.espulsioni : '—'}</td>
           </tr>
         ))}
       </tbody>
     </table>
+    </div>
+  )
+}
+
+// ── Riepilogo modificatori (difesa / centrocampo / attacco) di una squadra ──
+function ModBox({ label, value }) {
+  const num = value === null || value === undefined ? null : Number(value)
+  return (
+    <div className="flex flex-col items-center px-2 py-1.5 rounded-lg bg-pitch-800/60 border border-white/5 min-w-[72px]">
+      <span className="text-[9px] font-mono tracking-widest uppercase text-slate-600">{label}</span>
+      <span className={`font-mono text-xs font-semibold ${
+        num === null ? 'text-slate-700' :
+        num > 0      ? 'text-green-400' :
+        num < 0      ? 'text-red-400'   :
+                       'text-slate-400'
+      }`}>{num === null ? '—' : (num > 0 ? `+${num}` : num)}</span>
+    </div>
+  )
+}
+
+export function ModificatoriRow({ squadra }) {
+  if (!squadra) return null
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
+      <ModBox label="Difesa"      value={squadra.mod_dif} />
+      <ModBox label="Centrocampo" value={squadra.mod_cc} />
+      <ModBox label="Attacco"     value={squadra.mod_att} />
     </div>
   )
 }
@@ -81,12 +114,14 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
         <div className="px-3 py-2 border-b border-white/5">
           <p className="text-xs font-semibold text-slate-400">{casa.nome}</p>
         </div>
+        <ModificatoriRow squadra={casa} />
         <GiocatoriTable giocatori={casa.giocatori} />
       </div>
       <div>
         <div className="px-3 py-2 border-b border-white/5">
           <p className="text-xs font-semibold text-slate-400">{ospite.nome}</p>
         </div>
+        <ModificatoriRow squadra={ospite} />
         <GiocatoriTable giocatori={ospite.giocatori} />
       </div>
     </div>

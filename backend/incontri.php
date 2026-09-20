@@ -20,9 +20,12 @@ $where_squadra = $id_squadra !== null
 // NEW_RISULTATI contiene una riga per ciascuna delle due squadre di ogni
 // partita (una prospettiva "A vs B" e una "B vs A", necessarie per i
 // modificatori/statistiche specifici di ciascuna squadra). Per evitare di
-// restituire ogni partita due volte, teniamo solo la riga della squadra di
-// casa, individuata tramite NEW_CALENDARIO (posizione dispari = casa),
-// esattamente come fa già calendario.php.
+// restituire ogni partita due volte, teniamo come riga principale quella
+// della squadra di casa, individuata tramite NEW_CALENDARIO (posizione
+// dispari = casa), esattamente come fa già calendario.php. La riga
+// "gemella" (r2, prospettiva dell'ospite) viene agganciata in JOIN solo
+// per recuperare i modificatori attacco/centrocampo specifici dell'ospite,
+// che nella riga di casa non sono presenti.
 $risultati = query_all("SELECT
         r.id_squadra, r.id_squadra_a,
         s1.nome AS nome_casa,  s1.logo AS logo_casa,
@@ -31,13 +34,20 @@ $risultati = query_all("SELECT
         r.golf, r.gols,
         r.modificatore, r.modificatore_a,
         r.punti, r.segno,
-        r.mod_att, r.num_cc, r.tot_cc, r.mod_cc
+        r.mod_att  AS mod_att_casa,  r.mod_cc  AS mod_cc_casa,
+        r.num_cc   AS num_cc_casa,   r.tot_cc  AS tot_cc_casa,
+        r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
+        r2.num_cc  AS num_cc_ospite,  r2.tot_cc AS tot_cc_ospite
     FROM NEW_RISULTATI r
     JOIN NEW_CALENDARIO cal ON cal.stagione = r.stagione
                             AND cal.giornata = r.giornata
                             AND cal.squadra  = r.id_squadra
     JOIN NEW_SQUADRE s1 ON s1.id = r.id_squadra   AND s1.stagione = r.stagione
     JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
+    LEFT JOIN NEW_RISULTATI r2 ON r2.stagione    = r.stagione
+                               AND r2.giornata   = r.giornata
+                               AND r2.id_squadra = r.id_squadra_a
+                               AND r2.id_squadra_a = r.id_squadra
     WHERE r.stagione = $stagione AND r.giornata = $giornata
       AND cal.posizione % 2 = 1
     $where_squadra
@@ -86,29 +96,35 @@ foreach ($risultati as $r) {
     $id_ospite = (int)$r["id_squadra_a"];
     $output[] = [
         "casa"   => [
-            "id"     => $id_casa,
-            "nome"   => $r["nome_casa"],
-            "logo"   => $r["logo_casa"],
-            "ftotale"=> (float)$r["ftotale"],
-            "mod"    => (int)$r["modificatore"],
-            "giocatori" => $voti_per_squadra[$id_casa] ?? [],
+            "id"         => $id_casa,
+            "nome"       => $r["nome_casa"],
+            "logo"       => $r["logo_casa"],
+            "ftotale"    => (float)$r["ftotale"],
+            // Modificatori che compongono il punteggio totale della squadra
+            "mod_dif"    => (int)$r["modificatore"],
+            "mod_cc"     => $r["mod_cc_casa"]  !== null ? (float)$r["mod_cc_casa"]  : null,
+            "mod_att"    => $r["mod_att_casa"] !== null ? (float)$r["mod_att_casa"] : null,
+            "num_cc"     => $r["num_cc_casa"]  !== null ? (int)$r["num_cc_casa"]    : null,
+            "tot_cc"     => $r["tot_cc_casa"]  !== null ? (float)$r["tot_cc_casa"]  : null,
+            "giocatori"  => $voti_per_squadra[$id_casa] ?? [],
         ],
         "ospite" => [
-            "id"     => $id_ospite,
-            "nome"   => $r["nome_ospite"],
-            "logo"   => $r["logo_ospite"],
-            "ftotale"=> (float)$r["ftotale_a"],
-            "mod"    => (int)$r["modificatore_a"],
-            "giocatori" => $voti_per_squadra[$id_ospite] ?? [],
+            "id"         => $id_ospite,
+            "nome"       => $r["nome_ospite"],
+            "logo"       => $r["logo_ospite"],
+            "ftotale"    => (float)$r["ftotale_a"],
+            // Modificatori che compongono il punteggio totale della squadra
+            "mod_dif"    => (int)$r["modificatore_a"],
+            "mod_cc"     => $r["mod_cc_ospite"]  !== null ? (float)$r["mod_cc_ospite"]  : null,
+            "mod_att"    => $r["mod_att_ospite"] !== null ? (float)$r["mod_att_ospite"] : null,
+            "num_cc"     => $r["num_cc_ospite"]  !== null ? (int)$r["num_cc_ospite"]    : null,
+            "tot_cc"     => $r["tot_cc_ospite"]  !== null ? (float)$r["tot_cc_ospite"]  : null,
+            "giocatori"  => $voti_per_squadra[$id_ospite] ?? [],
         ],
         "golf"   => (int)$r["golf"],
         "gols"   => (int)$r["gols"],
         "punti_casa" => (int)$r["punti"],
         "segno"  => $r["segno"],
-        "mod_att"=> (float)$r["mod_att"],
-        "num_cc" => (int)$r["num_cc"],
-        "tot_cc" => (float)$r["tot_cc"],
-        "mod_cc" => (float)$r["mod_cc"],
     ];
 }
 

@@ -178,7 +178,17 @@ export default function Incontri() {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-display font-bold text-xl text-white w-10 text-center">{giornata}</span>
+          <select
+            value={giornata}
+            onChange={(e) => setGiornata(Number(e.target.value))}
+            className="bg-pitch-800 border border-white/10 rounded-lg text-display font-bold text-sm sm:text-base text-white text-center px-2 py-1.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/20"
+          >
+            {Array.from({ length: totalGiornate }, (_, i) => i + 1).map(g => (
+              <option key={g} value={g} className="bg-pitch-800 text-white">
+                Giornata {g}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => setGiornata(g => Math.min(totalGiornate, g + 1))}
             disabled={giornata >= totalGiornate}

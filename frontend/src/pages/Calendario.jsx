@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getCalendario } from '../api/client'
+import { getCalendario, getIncontri } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { MatchDetailPanel } from '../components/MatchDetail'
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 function ScoreBox({ risultato }) {
@@ -32,39 +33,77 @@ function ScoreBox({ risultato }) {
   )
 }
 
-function MatchRow({ partita }) {
+function MatchRow({ partita, stagione, giornata }) {
   const { casa, ospite, risultato } = partita
   const giocata = risultato !== null
-  return (
-    <div className={`flex items-center gap-4 py-3 px-4 border-b border-white/[0.03] last:border-0 transition-colors hover:bg-white/[0.02] ${!giocata ? 'opacity-60' : ''}`}>
-      {/* Casa */}
-      <Link to={`/squadre/${casa?.id}`} className="flex items-center gap-2 flex-1 justify-end group">
-        <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium text-right">{casa?.nome}</span>
-        <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
-          {casa?.nome?.[0]}
-        </div>
-      </Link>
+  const [open, setOpen] = useState(false)
 
-      {/* Score */}
-      <div className="flex-shrink-0">
-        <ScoreBox risultato={risultato} />
+  // Dettaglio voti caricato on-demand solo alla prima apertura della riga,
+  // e solo se la partita è già stata giocata (altrimenti non c'è nulla da
+  // mostrare).
+  const { data: dettaglio, loading, error } = useFetch(
+    () => (open && giocata) ? getIncontri(stagione, giornata, casa?.id) : Promise.resolve(null),
+    [open, giocata, stagione, giornata, casa?.id]
+  )
+  const match = dettaglio?.[0] ?? null
+
+  const stop = (e) => e.stopPropagation()
+
+  return (
+    <div className="border-b border-white/[0.03] last:border-0">
+      <div
+        role="button"
+        tabIndex={giocata ? 0 : -1}
+        onClick={() => giocata && setOpen(o => !o)}
+        onKeyDown={(e) => giocata && (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
+        className={`flex items-center gap-2 sm:gap-4 py-3 px-4 transition-colors ${
+          giocata ? 'cursor-pointer hover:bg-white/[0.02]' : 'opacity-60 cursor-default'
+        }`}
+      >
+        {/* Casa */}
+        <Link onClick={stop} to={`/squadre/${casa?.id}`} className="flex items-center gap-2 flex-1 justify-end group min-w-0">
+          <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium text-right truncate">{casa?.nome}</span>
+          <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
+            {casa?.nome?.[0]}
+          </div>
+        </Link>
+
+        {/* Score */}
+        <div className="flex-shrink-0">
+          <ScoreBox risultato={risultato} />
+        </div>
+
+        {/* Ospite */}
+        <Link onClick={stop} to={`/squadre/${ospite?.id}`} className="flex items-center gap-2 flex-1 group min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
+            {ospite?.nome?.[0]}
+          </div>
+          <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium truncate">{ospite?.nome}</span>
+        </Link>
+
+        {/* Punteggi */}
+        {giocata && (
+          <div className="hidden md:flex items-center gap-3 text-xs font-mono text-slate-600 flex-shrink-0">
+            <span>{Number(risultato.ftotale_casa).toFixed(1)}</span>
+            <span className="text-slate-700">vs</span>
+            <span>{Number(risultato.ftotale_ospite).toFixed(1)}</span>
+          </div>
+        )}
+
+        {/* Indicatore espansione */}
+        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${
+          giocata ? 'text-slate-600' : 'text-slate-800'
+        } ${open ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Ospite */}
-      <Link to={`/squadre/${ospite?.id}`} className="flex items-center gap-2 flex-1 group">
-        <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
-          {ospite?.nome?.[0]}
-        </div>
-        <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium">{ospite?.nome}</span>
-      </Link>
-
-      {/* Punteggi */}
-      {giocata && (
-        <div className="hidden md:flex items-center gap-3 text-xs font-mono text-slate-600">
-          <span>{Number(risultato.ftotale_casa).toFixed(1)}</span>
-          <span className="text-slate-700">vs</span>
-          <span>{Number(risultato.ftotale_ospite).toFixed(1)}</span>
-        </div>
+      {/* Dettaglio voti */}
+      {open && (
+        <MatchDetailPanel
+          casa={match?.casa}
+          ospite={match?.ospite}
+          loading={loading}
+          error={error}
+        />
       )}
     </div>
   )
@@ -148,7 +187,9 @@ export default function Calendario() {
           <h2 className="text-sm font-semibold text-slate-300">Partite</h2>
           <span className="text-xs text-slate-600 font-mono">{cur?.partite?.length} incontri</span>
         </div>
-        {cur?.partite?.map((p, i) => <MatchRow key={i} partita={p} />)}
+        {cur?.partite?.map((p, i) => (
+          <MatchRow key={i} partita={p} stagione={stagione} giornata={cur.giornata} />
+        ))}
       </div>
     </div>
   )

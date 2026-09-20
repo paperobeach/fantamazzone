@@ -12,7 +12,6 @@ const Classifica  = lazy(() => import('./pages/Classifica'))
 const Calendario  = lazy(() => import('./pages/Calendario'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
-const Incontri    = lazy(() => import('./pages/Incontri'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
 const Marcatori   = lazy(() => import('./pages/Marcatori'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
@@ -85,7 +84,10 @@ function AppShell() {
                   <Route path="/calendario"   element={<Calendario />} />
                   <Route path="/squadre"      element={<Squadre />} />
                   <Route path="/squadre/:id"  element={<SquadraDetail />} />
-                  <Route path="/incontri"     element={<Incontri />} />
+                  {/* Pagina "Incontri" rimossa: i dettagli partita sono ora
+                      consultabili direttamente da "Calendario". Redirect
+                      mantenuto per eventuali link/segnalibri esistenti. */}
+                  <Route path="/incontri"     element={<Navigate to="/calendario" replace />} />
                   <Route path="/statistiche"  element={<Statistiche />} />
                   <Route path="/marcatori"    element={<Marcatori />} />
                   <Route path="/top-flop"     element={<TopFlop />} />

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
-  Trophy, Calendar, Users, Swords, BarChart2,
+  Trophy, Calendar, Users, BarChart2,
   Star, Zap, Shield, MessageSquare, LogOut,
   Settings, ChevronDown, Medal, X, Upload
 } from 'lucide-react'
@@ -11,7 +11,6 @@ const NAV = [
   { to: '/',              icon: Trophy,       label: 'Classifica'    },
   { to: '/calendario',   icon: Calendar,     label: 'Calendario'    },
   { to: '/squadre',      icon: Users,        label: 'Squadre'       },
-  { to: '/incontri',     icon: Swords,       label: 'Incontri'      },
   { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
   { to: '/marcatori',    icon: Medal,        label: 'Marcatori'     },
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },

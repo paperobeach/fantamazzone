@@ -116,19 +116,25 @@ export default function Classifica() {
         </div>
 
         <div className="overflow-x-auto">
-        <table className="fanta-table min-w-[720px]">
+        <table className="fanta-table min-w-[1080px]">
           <thead>
             <tr>
               <th className="w-10">#</th>
               <th>Squadra</th>
               <th className="text-center">PG</th>
+              <th className="text-center">Pts</th>
               <th className="text-center">V</th>
               <th className="text-center">P</th>
               <th className="text-center">S</th>
               <th className="text-center">GF</th>
               <th className="text-center">GS</th>
               <th className="text-center">Media</th>
-              <th className="text-center">Pts</th>
+              <th className="text-center">Media A</th>
+              <th className="text-center">Max</th>
+              <th className="text-center">Min</th>
+              <th className="text-center">Mod D</th>
+              <th className="text-center">Mod C</th>
+              <th className="text-center">Mod A</th>
               <th className="text-center">Trend</th>
             </tr>
           </thead>
@@ -168,6 +174,9 @@ export default function Classifica() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.partiteg}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="text-display font-bold text-lg text-white">{sq.punti}</span>
+                  </td>
                   <td className="px-4 py-3 text-center text-green-400 text-sm font-medium">{sq.vinte}</td>
                   <td className="px-4 py-3 text-center text-yellow-400 text-sm">{sq.nulle}</td>
                   <td className="px-4 py-3 text-center text-red-400 text-sm">{sq.perse}</td>
@@ -177,7 +186,22 @@ export default function Classifica() {
                     <span className="font-mono text-xs text-slate-400">{Number(sq.media).toFixed(1)}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="text-display font-bold text-lg text-white">{sq.punti}</span>
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.media_a).toFixed(1)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.maxp).toFixed(1)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.minp).toFixed(1)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.media_mod_dif).toFixed(2)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.media_mod_cc).toFixed(2)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <span className="font-mono text-xs text-slate-400">{Number(sq.media_mod_att).toFixed(2)}</span>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex justify-center">

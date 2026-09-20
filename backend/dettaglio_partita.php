@@ -1,6 +1,10 @@
 <?php
 // ============================================================
-// api/incontri.php
+// api/dettaglio_partita.php
+// (già "incontri.php": rinominato perché la pagina "Incontri" del
+//  front end è stata rimossa — il dettaglio partita è ora
+//  consultabile dalla pagina "Calendario")
+//
 // GET ?stagione=2024&giornata=5
 // GET ?stagione=2024&giornata=5&id_squadra=3  (singola partita)
 //

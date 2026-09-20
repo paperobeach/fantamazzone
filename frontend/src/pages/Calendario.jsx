@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getCalendario, getIncontri } from '../api/client'
+import { getCalendario, getDettaglioPartita } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
@@ -42,7 +42,7 @@ function MatchRow({ partita, stagione, giornata }) {
   // e solo se la partita è già stata giocata (altrimenti non c'è nulla da
   // mostrare).
   const { data: dettaglio, loading, error } = useFetch(
-    () => (open && giocata) ? getIncontri(stagione, giornata, casa?.id) : Promise.resolve(null),
+    () => (open && giocata) ? getDettaglioPartita(stagione, giornata, casa?.id) : Promise.resolve(null),
     [open, giocata, stagione, giornata, casa?.id]
   )
   const match = dettaglio?.[0] ?? null

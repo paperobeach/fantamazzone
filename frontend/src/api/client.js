@@ -94,10 +94,13 @@ export const getCalendario = (stagione) => get('calendario.php', { stagione })
 export const getSquadre = (stagione)      => get('squadre.php', { stagione })
 export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id })
 
-// ── Incontri ─────────────────────────────────────────────────
+// ── Dettaglio partita ────────────────────────────────────────
+// (endpoint già "incontri.php": rinominato quando è stata rimossa
+//  la pagina "Incontri" dal front end — il dettaglio è ora
+//  consultabile dalla pagina "Calendario")
 
-export const getIncontri = (stagione, giornata, id_squadra = null) =>
-  get('incontri.php', { stagione, giornata, id_squadra })
+export const getDettaglioPartita = (stagione, giornata, id_squadra = null) =>
+  get('dettaglio_partita.php', { stagione, giornata, id_squadra })
 
 // ── Statistiche ──────────────────────────────────────────────
 

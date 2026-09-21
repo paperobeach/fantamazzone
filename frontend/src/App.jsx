@@ -18,6 +18,7 @@ const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Kulovic     = lazy(() => import('./pages/Kulovic'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const Schedina    = lazy(() => import('./pages/Schedina'))
+const Formazione  = lazy(() => import('./pages/Formazione'))
 const Messaggi    = lazy(() => import('./pages/Messaggi'))
 const Login       = lazy(() => import('./pages/Login'))
 const Admin       = lazy(() => import('./pages/Admin'))
@@ -94,6 +95,9 @@ function AppShell() {
                   <Route path="/kulovic"      element={<Kulovic />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/schedina"     element={<Schedina />} />
+                  <Route path="/formazione"   element={
+                    <ProtectedRoute><Formazione /></ProtectedRoute>
+                  } />
                   <Route path="/messaggi"     element={
                     <ProtectedRoute><Messaggi /></ProtectedRoute>
                   } />

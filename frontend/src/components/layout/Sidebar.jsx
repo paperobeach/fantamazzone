@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Zap, Shield, MessageSquare, LogOut,
-  Settings, ChevronDown, Medal, X, Upload
+  Settings, ChevronDown, Medal, X, Upload, ClipboardList
 } from 'lucide-react'
 
 const NAV = [
@@ -17,6 +17,7 @@ const NAV = [
   { to: '/kulovic',      icon: Zap,          label: 'Kulovic'       },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
   { to: '/schedina',     icon: Medal,        label: 'Schedina'      },
+  { to: '/formazione',   icon: ClipboardList,label: 'Formazione'    },
   { to: '/messaggi',     icon: MessageSquare,label: 'Messaggi'      },
 ]
 

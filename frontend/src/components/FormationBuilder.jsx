@@ -1,15 +1,11 @@
 import { useMemo, useState } from 'react'
-import { X, GripVertical, RotateCcw } from 'lucide-react'
+import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
 import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo } from '../lib/pitchLayout'
 
 // ── Gettone giocatore (in campo o in panchina) ─────────────────
-function PlayerChip({ player, onClick, selected, small, dragProps }) {
+function PlayerChip({ player, selected, dragProps }) {
   return (
-    <div
-      {...dragProps}
-      onClick={onClick}
-      className={`flex flex-col items-center gap-1 select-none cursor-pointer ${small ? 'w-16' : 'w-16 sm:w-20'}`}
-    >
+    <div {...dragProps} className="flex flex-col items-center gap-1 select-none cursor-pointer w-16 sm:w-20">
       <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2 shadow-lg transition-all
         ${selected ? 'ring-2 ring-grass-400 ring-offset-2 ring-offset-pitch-950' : ''}
         bg-grass-500/90 border-grass-300 text-pitch-950`}>
@@ -56,6 +52,14 @@ function PitchSlot({ x, y, ruolo, player, onDrop, onClick, selected, dragOverAct
 /**
  * Editor formazione: modulo + campo (drag&drop / click) + panchina riordinabile.
  *
+ * Modello dati interno: gli slot in campo sono un array a posizione FISSA
+ * (allineato 1:1 a `getSlotsForModulo(modulo)`); ogni slot contiene
+ * `null` oppure l'id di un giocatore. Un giocatore esiste sempre in uno
+ * ed un solo posto: o in uno slot di `slotPlayers`, o nell'array
+ * `panchinaIds`. Ogni operazione (posiziona / rimuovi / riordina) rimuove
+ * esplicitamente l'id dalla sua posizione precedente prima di inserirlo
+ * nella nuova, così le due liste non possono mai sovrapporsi.
+ *
  * props:
  *  - rosa: [{ id, descrizione, ruolo }]  rosa completa della squadra
  *  - modulo, onModuloChange
@@ -74,92 +78,71 @@ export function FormationBuilder({
 }) {
   const [selectedId, setSelectedId] = useState(null)
   const [dragOverSlot, setDragOverSlot] = useState(null)
-  const [dragOverBenchIdx, setDragOverBenchIdx] = useState(null)
+  const [draggedBenchIdx, setDraggedBenchIdx] = useState(null)
 
   const byId = useMemo(() => Object.fromEntries(rosa.map(p => [p.id, p])), [rosa])
   const slots = useMemo(() => getSlotsForModulo(modulo), [modulo])
 
-  // Assegna ogni titolare allo slot del proprio ruolo, nell'ordine indicato
-  const slotAssignment = useMemo(() => {
+  // Assegna ogni titolare allo slot del proprio ruolo, nell'ordine in cui
+  // compare in titolariIds (che è sempre mantenuto già ordinato per ruolo)
+  const slotPlayers = useMemo(() => {
     const cursor = { '1': 0, '2': 0, '3': 0, '4': 0 }
-    const titolariByRuolo = { '1': [], '2': [], '3': [], '4': [] }
+    const byRuolo = { '1': [], '2': [], '3': [], '4': [] }
     titolariIds.forEach(id => {
       const p = byId[id]
-      if (p) titolariByRuolo[String(p.ruolo)]?.push(id)
+      if (p) byRuolo[String(p.ruolo)]?.push(id)
     })
-    return slots.map(slot => {
-      const idx = cursor[slot.ruolo]++
-      const id = titolariByRuolo[slot.ruolo]?.[idx] ?? null
-      return { ...slot, playerId: id }
-    })
+    return slots.map(slot => byRuolo[slot.ruolo]?.[cursor[slot.ruolo]++] ?? null)
   }, [slots, titolariIds, byId])
 
   const panchinaPlayers = panchinaIds.map(id => byId[id]).filter(Boolean)
 
-  function commit(nextTitolari, nextPanchina) {
-    onChange?.(nextTitolari, nextPanchina)
+  function commit(nextSlotPlayers, nextPanchina) {
+    onChange?.(nextSlotPlayers.filter(Boolean), nextPanchina)
   }
 
+  // ── Posiziona un giocatore (dalla panchina o da un altro slot) ──
   function placePlayer(playerId, slotIndex) {
     if (readOnly) return
     const player = byId[playerId]
-    const slot = slotAssignment[slotIndex]
+    const slot = slots[slotIndex]
     if (!player || !slot) return
     if (String(player.ruolo) !== slot.ruolo) return // ruolo incompatibile
+    if (slotPlayers[slotIndex] === playerId) { setSelectedId(null); return }
 
-    const outgoingId = slot.playerId
-    const nextTitolari = [...titolariIds]
+    const nextSlots = [...slotPlayers]
+    const outgoingId = nextSlots[slotIndex]
 
-    if (outgoingId === playerId) return // già lì
+    // Se il giocatore proveniva da un altro slot, liberalo
+    const fromSlotIdx = nextSlots.indexOf(playerId)
+    if (fromSlotIdx !== -1) nextSlots[fromSlotIdx] = null
 
-    // Rimuovi il giocatore in arrivo da dove si trovava
+    nextSlots[slotIndex] = playerId
+
+    // Rimuove il giocatore in arrivo dalla panchina (se ci si trovava) e,
+    // se lo slot era occupato, rimanda l'occupante precedente in panchina
     let nextPanchina = panchinaIds.filter(id => id !== playerId)
-    const wasIdx = nextTitolari.indexOf(playerId)
-    if (wasIdx !== -1) nextTitolari.splice(wasIdx, 1)
+    if (outgoingId) nextPanchina = [outgoingId, ...nextPanchina]
 
-    if (outgoingId) {
-      // Sostituisce chi occupava lo slot: lo rimuove dai titolari e lo
-      // rimette in panchina in cima
-      const outIdx = nextTitolari.indexOf(outgoingId)
-      if (outIdx !== -1) nextTitolari.splice(outIdx, 1)
-      nextPanchina = [outgoingId, ...nextPanchina]
-    }
-
-    // Inserisce il nuovo titolare mantenendo il raggruppamento per ruolo,
-    // nella posizione corrispondente allo slot scelto
-    const ruoloPlayers = nextTitolari.filter(id => String(byId[id]?.ruolo) === slot.ruolo)
-    const others = nextTitolari.filter(id => String(byId[id]?.ruolo) !== slot.ruolo)
-    const posInRole = slotIndex - slots.findIndex(s => s.ruolo === slot.ruolo)
-    ruoloPlayers.splice(Math.max(0, Math.min(posInRole, ruoloPlayers.length)), 0, playerId)
-
-    // Ricompone rispettando l'ordine dei ruoli: P, D, C, A
-    const merged = [
-      ...ruoloPlayers.filter(id => String(byId[id]?.ruolo) === '1'),
-      ...(slot.ruolo === '1' ? [] : others.filter(id => String(byId[id]?.ruolo) === '1')),
-      ...(slot.ruolo === '2' ? ruoloPlayers : others.filter(id => String(byId[id]?.ruolo) === '2')),
-      ...(slot.ruolo === '3' ? ruoloPlayers : others.filter(id => String(byId[id]?.ruolo) === '3')),
-      ...(slot.ruolo === '4' ? ruoloPlayers : others.filter(id => String(byId[id]?.ruolo) === '4')),
-    ]
-
-    commit(merged, nextPanchina)
+    commit(nextSlots, nextPanchina)
     setSelectedId(null)
   }
 
   function removeFromSlot(slotIndex) {
     if (readOnly) return
-    const slot = slotAssignment[slotIndex]
-    if (!slot?.playerId) return
-    const nextTitolari = titolariIds.filter(id => id !== slot.playerId)
-    commit(nextTitolari, [slot.playerId, ...panchinaIds])
+    const playerId = slotPlayers[slotIndex]
+    if (!playerId) return
+    const nextSlots = [...slotPlayers]
+    nextSlots[slotIndex] = null
+    commit(nextSlots, [playerId, ...panchinaIds])
     setSelectedId(null)
   }
 
   function handleSlotClick(slotIndex) {
     if (readOnly) return
-    const slot = slotAssignment[slotIndex]
     if (selectedId) {
       placePlayer(selectedId, slotIndex)
-    } else if (slot.playerId) {
+    } else if (slotPlayers[slotIndex]) {
       removeFromSlot(slotIndex)
     }
   }
@@ -169,15 +152,16 @@ export function FormationBuilder({
     setSelectedId(cur => (cur === id ? null : id))
   }
 
-  // ── Riordino panchina (drag & drop nativo) ──
-  function reorderPanchina(fromId, toIndex) {
-    if (readOnly) return
-    const cur = panchinaIds.filter(id => id !== fromId)
-    cur.splice(toIndex, 0, fromId)
-    commit(titolariIds, cur)
+  // ── Riordino panchina: sposta l'elemento fromIdx alla posizione toIdx ──
+  function movePanchina(fromIdx, toIdx) {
+    if (readOnly || fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
+    const arr = [...panchinaIds]
+    const [moved] = arr.splice(fromIdx, 1)
+    arr.splice(toIdx, 0, moved)
+    onChange?.(titolariIds, arr)
   }
 
-  const moduloAttesoOk = slotAssignment.every(s => !!s.playerId)
+  const moduloAttesoOk = slotPlayers.every(Boolean)
 
   return (
     <div className="space-y-5">
@@ -221,12 +205,12 @@ export function FormationBuilder({
             <div className="absolute left-1/2 bottom-3 w-36 sm:w-40 h-14 sm:h-16 border border-white/25 border-b-0 -translate-x-1/2" />
             <div className="absolute left-1/2 top-3 w-36 sm:w-40 h-14 sm:h-16 border border-white/25 border-t-0 -translate-x-1/2" />
 
-            {slotAssignment.map((slot, i) => (
+            {slots.map((slot, i) => (
               <PitchSlot
                 key={i}
                 x={slot.x} y={slot.y} ruolo={slot.ruolo}
-                player={slot.playerId ? byId[slot.playerId] : null}
-                selected={selectedId === slot.playerId}
+                player={slotPlayers[i] ? byId[slotPlayers[i]] : null}
+                selected={selectedId === slotPlayers[i]}
                 dragOverActive={dragOverSlot === i}
                 onDragOver={() => setDragOverSlot(i)}
                 onDragLeave={() => setDragOverSlot(cur => (cur === i ? null : cur))}
@@ -261,19 +245,22 @@ export function FormationBuilder({
               <div
                 key={p.id}
                 draggable={!readOnly}
-                onDragStart={e => e.dataTransfer.setData('text/plain', String(p.id))}
-                onDragOver={e => { e.preventDefault(); setDragOverBenchIdx(idx) }}
-                onDragLeave={() => setDragOverBenchIdx(cur => (cur === idx ? null : cur))}
-                onDrop={e => {
+                onDragStart={() => setDraggedBenchIdx(idx)}
+                onDragOver={e => {
                   e.preventDefault()
-                  const draggedId = Number(e.dataTransfer.getData('text/plain'))
-                  if (draggedId && panchinaIds.includes(draggedId)) reorderPanchina(draggedId, idx)
-                  setDragOverBenchIdx(null)
+                  if (draggedBenchIdx === null || draggedBenchIdx === idx) return
+                  // Riordino "live": mentre trascino sopra un elemento, lo
+                  // scambio subito di posizione, così l'ordine finale
+                  // corrisponde esattamente a dove rilascio il mouse.
+                  movePanchina(draggedBenchIdx, idx)
+                  setDraggedBenchIdx(idx)
                 }}
+                onDrop={e => e.preventDefault()}
+                onDragEnd={() => setDraggedBenchIdx(null)}
                 onClick={() => handleBenchClick(p.id)}
                 className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors border
                   ${selectedId === p.id ? 'border-grass-500/50 bg-grass-500/10' : 'border-transparent hover:bg-white/[0.03]'}
-                  ${dragOverBenchIdx === idx ? 'border-t-2 border-t-grass-400' : ''}`}
+                  ${draggedBenchIdx === idx ? 'opacity-50' : ''}`}
               >
                 {!readOnly && <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />}
                 <span className="text-[9px] font-mono w-4 text-slate-600 flex-shrink-0">{idx + 1}</span>
@@ -281,11 +268,34 @@ export function FormationBuilder({
                   p.ruolo == 1 ? 'badge-role-p' : p.ruolo == 2 ? 'badge-role-d' : p.ruolo == 3 ? 'badge-role-c' : 'badge-role-a'
                 }`}>{ROLE_LABEL[String(p.ruolo)]}</span>
                 <span className="text-sm text-slate-300 truncate flex-1">{p.descrizione}</span>
+
+                {!readOnly && (
+                  <div className="flex flex-col -my-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      title="Sposta su"
+                      disabled={idx === 0}
+                      onClick={e => { e.stopPropagation(); movePanchina(idx, idx - 1) }}
+                      className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Sposta giù"
+                      disabled={idx === panchinaPlayers.length - 1}
+                      onClick={e => { e.stopPropagation(); movePanchina(idx, idx + 1) }}
+                      className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
           <p className="text-[10px] text-slate-600 px-3 py-2 border-t border-white/5">
-            Trascina i giocatori per riordinare la panchina (ordine di subentro).
+            Trascina i giocatori (o usa le frecce) per riordinare la panchina.
           </p>
         </div>
       </div>
@@ -293,7 +303,7 @@ export function FormationBuilder({
       {!readOnly && (
         <button
           type="button"
-          onClick={() => commit([], rosa.map(p => p.id))}
+          onClick={() => commit(slots.map(() => null), rosa.map(p => p.id))}
           className="btn-ghost text-xs"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Svuota il campo

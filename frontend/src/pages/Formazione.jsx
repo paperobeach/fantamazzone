@@ -41,8 +41,11 @@ export default function Formazione() {
   }, [squadre, utente?.id, idSquadra])
 
   // ── Rosa della squadra selezionata ──
-  const { data: squadra, loading: loadingSquadra, error: errorSquadra2 } = useFetch(
-    () => getSquadra(stagione, idSquadra),
+  // fetcher = null finché idSquadra non è stato determinato: useFetch non
+  // esegue la chiamata (altrimenti, senza "id", squadre.php risponderebbe
+  // con l'elenco squadre invece che con una singola rosa).
+  const { data: squadra, loading: loadingRosa, error: errorRosa } = useFetch(
+    idSquadra !== null ? () => getSquadra(stagione, idSquadra) : null,
     [stagione, idSquadra]
   )
 
@@ -70,8 +73,9 @@ export default function Formazione() {
   const formazioneCompleta = titolari.length === 11 &&
     JSON.stringify(conteggio) === JSON.stringify(attesi)
 
-  if (loadingSquadre) return <LoadingState label="Caricamento squadre..." />
-  if (errorSquadre)   return <ErrorState message={errorSquadre} />
+  if (loadingSquadre)      return <LoadingState label="Caricamento squadre..." />
+  if (errorSquadre)        return <ErrorState message={errorSquadre} />
+  if (idSquadra === null)  return <LoadingState label="Caricamento squadre..." />
 
   return (
     <div className="animate-fade-up">
@@ -102,10 +106,10 @@ export default function Formazione() {
         </p>
       </div>
 
-      {loadingSquadra ? (
+      {loadingRosa ? (
         <LoadingState label="Caricamento rosa..." />
-      ) : errorSquadre2 ? (
-        <ErrorState message={errorSquadre2} />
+      ) : errorRosa ? (
+        <ErrorState message={errorRosa} />
       ) : (
         <>
           <FormationBuilder

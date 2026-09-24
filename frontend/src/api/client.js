@@ -186,6 +186,19 @@ export const adminAggiornaTopFlop  = (stagione) =>
 export const adminAggiornaKulovic  = (stagione) =>
   post('admin/aggiorna_kulovic.php', { stagione })
 
+// ── Inizializzazione stagione (pagina admin) ──────────────────
+// GET  → dati già presenti per la stagione, una riga per squadra
+//        (join Squadre + Allenatori + Utenze), per precompilare
+//        la tabella; la password non viene mai restituita.
+// POST → consolida in un'unica chiamata NEW_SQUADRE + NEW_ALLENATORI
+//        + NEW_UTENZE, con cancellazione preventiva per stagione
+//        (operazione ripetibile). Body: { stagione, righe: [...] }.
+export const getInizializzazioneStagione = (stagione) =>
+  get('admin/inizializza_stagione.php', { stagione })
+
+export const adminInizializzaStagione = (stagione, payload) =>
+  post('admin/inizializza_stagione.php', { stagione, ...payload })
+
 // ── Inserimento rose ─────────────────────────────────────────
 // Carica il file Excel (sheet "Giocatori") ed esegue i 3 step
 // di caricamento (BASE_ASTA -> GIOCATORI / GIOCATORI_SVINCOLATI).

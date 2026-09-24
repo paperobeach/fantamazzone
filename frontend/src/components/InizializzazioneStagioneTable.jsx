@@ -184,67 +184,82 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          {/* overflow-x-auto + min-width sulla tabella: sotto quella soglia
+              scorre in orizzontale invece di schiacciare le colonne, così
+              ogni campo resta leggibile per intero */}
+          <div className="overflow-x-auto -mx-2 px-2">
+            <table className="text-sm border-separate" style={{ borderSpacing: 0, minWidth: '1360px', width: '100%', tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '90px' }} />   {/* Ordine */}
+                <col style={{ width: '190px' }} />  {/* Nome squadra */}
+                <col style={{ width: '170px' }} />  {/* Logo squadra */}
+                <col style={{ width: '90px' }} />   {/* Albo */}
+                <col style={{ width: '190px' }} />  {/* Allenatore */}
+                <col style={{ width: '170px' }} />  {/* Foto allenatore */}
+                <col style={{ width: '160px' }} />  {/* Utenza */}
+                <col style={{ width: '150px' }} />  {/* Password */}
+                <col style={{ width: '110px' }} />  {/* Abilitata */}
+                <col style={{ width: '44px' }} />   {/* Elimina */}
+              </colgroup>
               <thead>
                 <tr className="text-xs text-slate-600 text-left">
-                  <th className="pb-2 pr-2 w-16">Ordine</th>
-                  <th className="pb-2 pr-2">Nome squadra</th>
-                  <th className="pb-2 pr-2">Logo squadra</th>
-                  <th className="pb-2 pr-2 w-16">Albo</th>
-                  <th className="pb-2 pr-2">Allenatore</th>
-                  <th className="pb-2 pr-2">Foto allenatore</th>
-                  <th className="pb-2 pr-2">Utenza</th>
-                  <th className="pb-2 pr-2">Password</th>
-                  <th className="pb-2 pr-2 w-24">Abilitata</th>
-                  <th className="pb-2 w-10" />
+                  <th className="pb-2 pr-3">Ordine</th>
+                  <th className="pb-2 pr-3">Nome squadra</th>
+                  <th className="pb-2 pr-3">Logo squadra</th>
+                  <th className="pb-2 pr-3">Albo</th>
+                  <th className="pb-2 pr-3">Allenatore</th>
+                  <th className="pb-2 pr-3">Foto allenatore</th>
+                  <th className="pb-2 pr-3">Utenza</th>
+                  <th className="pb-2 pr-3">Password</th>
+                  <th className="pb-2 pr-3">Abilitata</th>
+                  <th className="pb-2" />
                 </tr>
               </thead>
               <tbody>
                 {righe.map((r, i) => {
                   const err = (k) => errorMap[`${i}:${k}`]
-                  const cls = (k) => `fanta-input ${err(k) ? 'border-red-500/60' : ''}`
+                  const cls = (k) => `fanta-input w-full ${err(k) ? 'border-red-500/60' : ''}`
                   return (
                     <tr key={i} className="border-t border-white/5 align-top">
-                      <td className="py-1.5 pr-2">
-                        <input type="number" value={r.ordine} onChange={e => update(i, 'ordine', e.target.value)} className={`${cls('ordine')} w-16`} />
-                        {err('ordine') && <p className="text-[10px] text-red-400 mt-0.5">{err('ordine')}</p>}
+                      <td className="py-2 pr-3">
+                        <input type="number" value={r.ordine} onChange={e => update(i, 'ordine', e.target.value)} className={cls('ordine')} />
+                        {err('ordine') && <p className="text-[10px] text-red-400 mt-1">{err('ordine')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.nome} onChange={e => update(i, 'nome', e.target.value)} className={cls('nome')} placeholder="Nome squadra" />
-                        {err('nome') && <p className="text-[10px] text-red-400 mt-0.5">{err('nome')}</p>}
+                        {err('nome') && <p className="text-[10px] text-red-400 mt-1">{err('nome')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.logo} onChange={e => update(i, 'logo', e.target.value)} className={cls('logo')} placeholder="logo.png" />
-                        {err('logo') && <p className="text-[10px] text-red-400 mt-0.5">{err('logo')}</p>}
+                        {err('logo') && <p className="text-[10px] text-red-400 mt-1">{err('logo')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
-                        <input value={r.albo} onChange={e => update(i, 'albo', e.target.value)} className={`${cls('albo')} w-16`} maxLength={2} placeholder="—" />
-                        {err('albo') && <p className="text-[10px] text-red-400 mt-0.5">{err('albo')}</p>}
+                      <td className="py-2 pr-3">
+                        <input value={r.albo} onChange={e => update(i, 'albo', e.target.value)} className={`${cls('albo')} text-center`} maxLength={2} placeholder="—" />
+                        {err('albo') && <p className="text-[10px] text-red-400 mt-1">{err('albo')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.allenatore} onChange={e => update(i, 'allenatore', e.target.value)} className={cls('allenatore')} placeholder="Nome allenatore" />
-                        {err('allenatore') && <p className="text-[10px] text-red-400 mt-0.5">{err('allenatore')}</p>}
+                        {err('allenatore') && <p className="text-[10px] text-red-400 mt-1">{err('allenatore')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.foto_allenatore} onChange={e => update(i, 'foto_allenatore', e.target.value)} className={cls('foto_allenatore')} placeholder="foto.png" />
-                        {err('foto_allenatore') && <p className="text-[10px] text-red-400 mt-0.5">{err('foto_allenatore')}</p>}
+                        {err('foto_allenatore') && <p className="text-[10px] text-red-400 mt-1">{err('foto_allenatore')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.utenza} onChange={e => update(i, 'utenza', e.target.value)} className={cls('utenza')} placeholder="username" />
-                        {err('utenza') && <p className="text-[10px] text-red-400 mt-0.5">{err('utenza')}</p>}
+                        {err('utenza') && <p className="text-[10px] text-red-400 mt-1">{err('utenza')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <input value={r.password} onChange={e => update(i, 'password', e.target.value)} className={cls('password')} maxLength={8} placeholder="invariata se vuota" />
-                        {err('password') && <p className="text-[10px] text-red-400 mt-0.5">{err('password')}</p>}
+                        {err('password') && <p className="text-[10px] text-red-400 mt-1">{err('password')}</p>}
                       </td>
-                      <td className="py-1.5 pr-2">
+                      <td className="py-2 pr-3">
                         <select value={r.abilitazione} onChange={e => update(i, 'abilitazione', e.target.value)} className={`${cls('abilitazione')} cursor-pointer`}>
                           <option value="Y">Sì</option>
                           <option value="N">No</option>
                         </select>
                       </td>
-                      <td className="py-1.5">
+                      <td className="py-2">
                         <button onClick={() => removeRiga(i)} className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                       </td>
                     </tr>

@@ -5,6 +5,7 @@ import { getIncontri, getCalendario } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import TeamLogo from '../components/TeamLogo'
 
 function MatchCard({ match }) {
   const [open, setOpen] = useState(false)
@@ -20,9 +21,7 @@ function MatchCard({ match }) {
         {/* Casa */}
         <div className="flex-1 min-w-0 flex items-center justify-end gap-2 sm:gap-3">
           <span className="font-semibold text-slate-200 text-xs sm:text-sm truncate text-right">{casa.nome}</span>
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
-            {casa.nome?.[0]}
-          </div>
+          <TeamLogo logo={casa.logo} nome={casa.nome} size="md" />
         </div>
 
         {/* Score */}
@@ -49,9 +48,7 @@ function MatchCard({ match }) {
 
         {/* Ospite */}
         <div className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">
-            {ospite.nome?.[0]}
-          </div>
+          <TeamLogo logo={ospite.logo} nome={ospite.nome} size="md" />
           <span className="font-semibold text-slate-200 text-xs sm:text-sm truncate">{ospite.nome}</span>
         </div>
 

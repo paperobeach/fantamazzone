@@ -6,6 +6,7 @@ import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/
 import { MatchDetailPanel } from '../components/MatchDetail'
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import TeamLogo from '../components/TeamLogo'
 
 function ScoreBox({ risultato }) {
   if (!risultato) return (
@@ -63,9 +64,7 @@ function MatchRow({ partita, stagione, giornata }) {
         {/* Casa */}
         <Link onClick={stop} to={`/squadre/${casa?.id}`} className="flex items-center gap-2 flex-1 justify-end group min-w-0">
           <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium text-right truncate">{casa?.nome}</span>
-          <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
-            {casa?.nome?.[0]}
-          </div>
+          <TeamLogo logo={casa?.logo} nome={casa?.nome} size="sm" />
         </Link>
 
         {/* Score */}
@@ -75,9 +74,7 @@ function MatchRow({ partita, stagione, giornata }) {
 
         {/* Ospite */}
         <Link onClick={stop} to={`/squadre/${ospite?.id}`} className="flex items-center gap-2 flex-1 group min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-500 flex-shrink-0">
-            {ospite?.nome?.[0]}
-          </div>
+          <TeamLogo logo={ospite?.logo} nome={ospite?.nome} size="sm" />
           <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium truncate">{ospite?.nome}</span>
         </Link>
 

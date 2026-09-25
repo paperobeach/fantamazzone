@@ -5,6 +5,7 @@ import { getGenerale } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, SignBadge, StatCard } from '../components/ui'
 import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import TeamLogo from '../components/TeamLogo'
 
 function TrendIcon({ segno }) {
   if (segno === 'W') return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
@@ -165,9 +166,7 @@ export default function Classifica() {
                       to={`/squadre/${sq.id_squadra}`}
                       className="flex items-center gap-3 group"
                     >
-                      <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-400 flex-shrink-0 group-hover:border-grass-500/30 transition-colors">
-                        {sq.squadra?.[0]}
-                      </div>
+                      <TeamLogo logo={sq.logo} nome={sq.squadra} size="sm" />
                       <span className="font-medium text-slate-200 group-hover:text-grass-400 transition-colors text-sm">
                         {sq.squadra}
                       </span>

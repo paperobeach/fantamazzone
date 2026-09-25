@@ -4,6 +4,7 @@ import { getSquadre } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { Link } from 'react-router-dom'
 import { Users, Trophy } from 'lucide-react'
+import TeamLogo from '../components/TeamLogo'
 
 export default function Squadre() {
   const { stagione } = useApp()
@@ -35,10 +36,8 @@ export default function Squadre() {
           >
             {/* Avatar + name */}
             <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-pitch-800 border border-white/10 flex items-center justify-center text-xl font-bold text-grass-400 group-hover:border-grass-500/30 transition-colors">
-                {sq.nome?.[0]}
-              </div>
-              <div>
+              <TeamLogo logo={sq.logo} nome={sq.nome} size="lg" />
+              <div className="min-w-0">
                 <h3 className="font-semibold text-slate-200 group-hover:text-grass-400 transition-colors">
                   {sq.nome}
                 </h3>

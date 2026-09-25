@@ -3,7 +3,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getSquadre } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { Link } from 'react-router-dom'
-import { Users, Trophy } from 'lucide-react'
+import { Users } from 'lucide-react'
 import TeamLogo from '../components/TeamLogo'
 
 export default function Squadre() {
@@ -47,12 +47,6 @@ export default function Squadre() {
 
             {/* Stats row */}
             <div className="flex items-center gap-4 pt-4 border-t border-white/5">
-              {sq.albo && Number(sq.albo) > 0 && (
-                <div className="flex items-center gap-1.5 text-gold-400">
-                  <Trophy className="w-3.5 h-3.5" />
-                  <span className="text-xs font-mono">{sq.albo} titoli</span>
-                </div>
-              )}
               <div className="flex items-center gap-1.5 text-slate-600">
                 <Users className="w-3.5 h-3.5" />
                 <span className="text-xs font-mono">Vedi rosa →</span>

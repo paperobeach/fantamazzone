@@ -11,21 +11,21 @@ import TeamLogo from '../components/TeamLogo'
 function ScoreBox({ risultato }) {
   if (!risultato) return (
     <div className="flex items-center gap-2">
-      <span className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-sm">—</span>
+      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
       <span className="text-slate-700 text-xs">:</span>
-      <span className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-sm">—</span>
+      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
     </div>
   )
   const { golf, gols, segno } = risultato
   return (
     <div className="flex items-center gap-2">
-      <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold ${
+      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
         segno === 'W' ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
       }`}>{golf}</span>
       <span className="text-slate-600 text-xs font-mono">:</span>
-      <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold ${
+      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
         segno === 'L' ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
@@ -34,7 +34,19 @@ function ScoreBox({ risultato }) {
   )
 }
 
-function MatchRow({ partita, stagione, giornata }) {
+function PunteggioBadge({ valore, isMax, isMin }) {
+  return (
+    <span className={`px-2.5 py-1 rounded-md font-mono text-sm font-bold ${
+      isMax ? 'bg-green-500/15 text-green-400 ring-1 ring-green-500/30' :
+      isMin ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30' :
+              'bg-pitch-800 text-slate-300'
+    }`}>
+      {Number(valore).toFixed(1)}
+    </span>
+  )
+}
+
+function MatchRow({ partita, stagione, giornata, maxScore, minScore }) {
   const { casa, ospite, risultato } = partita
   const giocata = risultato !== null
   const [open, setOpen] = useState(false)
@@ -80,10 +92,18 @@ function MatchRow({ partita, stagione, giornata }) {
 
         {/* Punteggi */}
         {giocata && (
-          <div className="hidden md:flex items-center gap-3 text-xs font-mono text-slate-600 flex-shrink-0">
-            <span>{Number(risultato.ftotale_casa).toFixed(1)}</span>
-            <span className="text-slate-700">vs</span>
-            <span>{Number(risultato.ftotale_ospite).toFixed(1)}</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <PunteggioBadge
+              valore={risultato.ftotale_casa}
+              isMax={Number(risultato.ftotale_casa) === maxScore}
+              isMin={Number(risultato.ftotale_casa) === minScore}
+            />
+            <span className="text-slate-700 text-xs hidden sm:inline">vs</span>
+            <PunteggioBadge
+              valore={risultato.ftotale_ospite}
+              isMax={Number(risultato.ftotale_ospite) === maxScore}
+              isMin={Number(risultato.ftotale_ospite) === minScore}
+            />
           </div>
         )}
 
@@ -130,6 +150,15 @@ export default function Calendario() {
 
   const prev = () => setGiornataIdx(i => Math.max(1, (i === 0 ? lastPlayed + 1 : i) - 1))
   const next = () => setGiornataIdx(i => Math.min(total, (i === 0 ? lastPlayed + 1 : i) + 1))
+
+  // Punteggio più alto e più basso tra le partite giocate della giornata corrente
+  const punteggiGiocati = (cur?.partite ?? [])
+    .filter(p => p.risultato !== null)
+    .flatMap(p => [Number(p.risultato.ftotale_casa), Number(p.risultato.ftotale_ospite)])
+  const puntiGiornata = {
+    max: punteggiGiocati.length ? Math.max(...punteggiGiocati) : null,
+    min: punteggiGiocati.length ? Math.min(...punteggiGiocati) : null,
+  }
 
   return (
     <div className="animate-fade-up">
@@ -182,10 +211,16 @@ export default function Calendario() {
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-slate-300">Partite</h2>
-          <span className="text-xs text-slate-600 font-mono">{cur?.partite?.length} incontri</span>
         </div>
         {cur?.partite?.map((p, i) => (
-          <MatchRow key={i} partita={p} stagione={stagione} giornata={cur.giornata} />
+          <MatchRow
+            key={i}
+            partita={p}
+            stagione={stagione}
+            giornata={cur.giornata}
+            maxScore={puntiGiornata.max}
+            minScore={puntiGiornata.min}
+          />
         ))}
       </div>
     </div>

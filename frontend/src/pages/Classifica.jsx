@@ -60,7 +60,10 @@ export default function Classifica() {
     return 0
   })
 
-  const leader = squadre[0]
+  const migliorMedia = [...data].sort((a, b) => b.media - a.media)[0]
+  const peggiorMedia = [...data].sort((a, b) => a.media - b.media)[0]
+  const migliorRisultato = [...data].sort((a, b) => b.maxp - a.maxp)[0]
+  const peggiorRisultato = [...data].sort((a, b) => a.minp - b.minp)[0]
 
   const SortBtn = ({ col, label }) => (
     <button
@@ -85,22 +88,27 @@ export default function Classifica() {
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
-          label="Capolista"
-          value={leader?.squadra ?? '—'}
-          sub={`${leader?.punti} punti`}
+          label="Miglior media"
+          value={migliorMedia?.squadra ?? '—'}
+          sub={`Media ${Number(migliorMedia?.media ?? 0).toFixed(1)}`}
           accent
         />
         <StatCard
-          label="Miglior media"
-          value={[...data].sort((a,b) => b.media - a.media)[0]?.squadra ?? '—'}
-          sub={`Media ${[...data].sort((a,b) => b.media - a.media)[0]?.media}`}
+          label="Peggior media"
+          value={peggiorMedia?.squadra ?? '—'}
+          sub={`Media ${Number(peggiorMedia?.media ?? 0).toFixed(1)}`}
         />
         <StatCard
-          label="Giornata"
-          value={data[0]?.partiteg ?? '—'}
-          sub="partite giocate"
+          label="Miglior risultato"
+          value={migliorRisultato?.squadra ?? '—'}
+          sub={`${Number(migliorRisultato?.maxp ?? 0).toFixed(1)} punti`}
+        />
+        <StatCard
+          label="Peggior risultato"
+          value={peggiorRisultato?.squadra ?? '—'}
+          sub={`${Number(peggiorRisultato?.minp ?? 0).toFixed(1)} punti`}
         />
       </div>
 
@@ -123,7 +131,7 @@ export default function Classifica() {
               <th className="w-10">#</th>
               <th>Squadra</th>
               <th className="text-center">PG</th>
-              <th className="text-center">Pts</th>
+              <th className="text-center bg-grass-500/10">Pts</th>
               <th className="text-center">V</th>
               <th className="text-center">P</th>
               <th className="text-center">S</th>
@@ -173,12 +181,12 @@ export default function Classifica() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.partiteg}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="text-display font-bold text-lg text-white">{sq.punti}</span>
+                  <td className="px-3 py-3 text-center bg-grass-500/10 border-x border-grass-500/20">
+                    <span className="text-display font-extrabold text-2xl text-grass-400">{sq.punti}</span>
                   </td>
-                  <td className="px-4 py-3 text-center text-green-400 text-sm font-medium">{sq.vinte}</td>
-                  <td className="px-4 py-3 text-center text-yellow-400 text-sm">{sq.nulle}</td>
-                  <td className="px-4 py-3 text-center text-red-400 text-sm">{sq.perse}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.vinte}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.nulle}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.perse}</td>
                   <td className="px-4 py-3 text-center text-slate-300 text-sm">{sq.golf}</td>
                   <td className="px-4 py-3 text-center text-slate-500 text-sm">{sq.gols}</td>
                   <td className="px-4 py-3 text-center">

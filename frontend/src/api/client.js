@@ -187,12 +187,21 @@ export const adminAggiornaKulovic  = (stagione) =>
   post('admin/aggiorna_kulovic.php', { stagione })
 
 // ── Inizializzazione stagione (pagina admin) ──────────────────
-// GET  → dati già presenti per la stagione, una riga per squadra
-//        (join Squadre + Allenatori + Utenze), per precompilare
-//        la tabella; la password non viene mai restituita.
-// POST → consolida in un'unica chiamata NEW_SQUADRE + NEW_ALLENATORI
-//        + NEW_UTENZE, con cancellazione preventiva per stagione
-//        (operazione ripetibile). Body: { stagione, righe: [...] }.
+// GET  → dati per la stagione, una riga per squadra (join Squadre +
+//        Allenatori + Utenze). Se la stagione non ha ancora dati,
+//        risponde con quelli dell'ultima stagione disponibile
+//        (campo "fonte_stagione" nella risposta). "formazione_presente"
+//        indica se la stagione ha già formazioni inserite (in tal
+//        caso il salvataggio è limitato a utenza/password/abilitazione).
+//        La password non viene mai restituita.
+// POST → Body: { stagione, giornate?, righe: [...] }. Se non esistono
+//        ancora formazioni per la stagione, consolida NEW_SQUADRE +
+//        NEW_ALLENATORI + NEW_UTENZE (cancellazione preventiva per
+//        stagione, operazione ripetibile) e, se è indicato "giornate"
+//        (1-99), rigenera anche NEW_CALENDARIO e NEW_CALENDARIO_CHAMP.
+//        Se invece esistono già formazioni, aggiorna solo utenza/
+//        password/abilitazione delle squadre esistenti e non tocca
+//        calendario.
 export const getInizializzazioneStagione = (stagione) =>
   get('admin/inizializza_stagione.php', { stagione })
 

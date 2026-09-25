@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Plus, Trash2, CheckCircle2, XCircle, AlertTriangle, RotateCcw, DownloadCloud,
+  Plus, Trash2, CheckCircle2, XCircle, AlertTriangle, RotateCcw, DownloadCloud, Lock,
 } from 'lucide-react'
 import { getInizializzazioneStagione, adminInizializzaStagione } from '../api/client'
 import { Spinner } from './ui'
@@ -10,12 +10,20 @@ import { Spinner } from './ui'
 //
 // 1) L'utente indica la stagione (anno a 4 cifre, libero) e preme
 //    "Carica".
-// 2) Viene mostrata un'unica tabella, una riga per squadra, con i
-//    valori già presenti su DB per quella stagione (se esistono).
-// 3) Al salvataggio, un'unica chiamata aggiorna in blocco le tre
-//    tabelle coinvolte (NEW_SQUADRE, NEW_ALLENATORI, NEW_UTENZE),
-//    con cancellazione preventiva per stagione così l'operazione
-//    è ripetibile.
+// 2) Viene mostrata un'unica tabella, una riga per squadra:
+//    - se la stagione non ha ancora dati, viene precompilata con
+//      quelli dell'ultima stagione disponibile (da rivedere e
+//      salvare come nuova stagione);
+//    - se la stagione ha già formazioni inserite, i campi restano
+//      visibili ma solo Utenza/Password/Abilitazione sono
+//      modificabili (le squadre/allenatori di una stagione già
+//      giocata non si toccano più).
+// 3) Al salvataggio, un'unica chiamata aggiorna in blocco le tabelle
+//    coinvolte, con cancellazione preventiva per stagione così
+//    l'operazione è ripetibile. Se non ci sono ancora formazioni ed
+//    è stato indicato il numero di giornate, vengono anche
+//    rigenerati NEW_CALENDARIO (dal calendario modello) e
+//    NEW_CALENDARIO_CHAMP (dalla stagione precedente).
 //
 // Mapping colonna → campo DB (in lettura da NEW_SQUADRE quando il
 // campo è duplicato su più tabelle, in scrittura su tutte):
@@ -47,6 +55,10 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
   const [stagione, setStagione] = useState(stagioneIniziale ? String(stagioneIniziale) : '')
   const [caricata, setCaricata] = useState(false)
   const [righe, setRighe]       = useState([])
+  const [giornate, setGiornate] = useState('')
+
+  const [fonteStagione, setFonteStagione]             = useState(null)  // stagione da cui sono stati precaricati i dati (null = già quelli richiesti)
+  const [formazionePresente, setFormazionePresente]   = useState(false) // blocca i campi squadra/allenatore
 
   const [loading, setLoading]   = useState(false)
   const [saving,  setSaving]    = useState(false)
@@ -63,7 +75,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
   }
   const erroriGenerali = (errors ?? []).filter(e => e.indice === null || e.indice === undefined)
 
-  // ── Fase 1 → 2: carica (o inizializza vuota) la tabella ──────
+  // ── Fase 1 → 2: carica (o precompila) la tabella ─────────────
   const carica = async () => {
     if (!stagioneValida) return
     setLoading(true)
@@ -80,6 +92,9 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
             utenza: r.utenza ?? '', password: '', abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
           }))
         : [emptyRiga(1)])
+      setFonteStagione(dati.fonte_stagione ?? null)
+      setFormazionePresente(!!dati.formazione_presente)
+      setGiornate('')
       setCaricata(true)
     } catch (e) {
       setErrorMsg(e.message)
@@ -91,6 +106,9 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
   const cambiaStagione = () => {
     setCaricata(false)
     setRighe([])
+    setFonteStagione(null)
+    setFormazionePresente(false)
+    setGiornate('')
     setResult(null)
     setErrors(null)
     setErrorMsg(null)
@@ -118,6 +136,8 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
           allenatore: r.allenatore, foto_allenatore: r.foto_allenatore,
           utenza: r.utenza, password: r.password, abilitazione: r.abilitazione,
         })),
+        // Ignorato dal backend se per la stagione esistono già formazioni.
+        giornate: !formazionePresente && giornate !== '' ? Number(giornate) : undefined,
       }
       const res = await adminInizializzaStagione(Number(stagione), payload)
       setResult(res)
@@ -178,6 +198,22 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
 
       {caricata && (
         <>
+          {fonteStagione !== null && (
+            <div className="mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-300">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              Nessun dato per la stagione {stagione}: la tabella è stata precompilata con i dati della stagione {fonteStagione}.
+              Rivedi i valori e premi Salva per crearla.
+            </div>
+          )}
+
+          {formazionePresente && (
+            <div className="mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200">
+              <Lock className="w-4 h-4 flex-shrink-0" />
+              Per la stagione {stagione} sono già presenti formazioni: squadre, allenatori e calendario non sono più
+              modificabili da qui. Restano modificabili solo Utenza, Password e Abilitazione.
+            </div>
+          )}
+
           {erroriGenerali.length > 0 && (
             <div className="mb-4 px-4 py-3 rounded-lg text-xs bg-red-500/10 border border-red-500/20 text-red-300 space-y-1">
               {erroriGenerali.map((e, i) => <div key={i}><span className="font-medium">{e.campo}</span>: {e.messaggio}</div>)}
@@ -218,31 +254,32 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
               <tbody>
                 {righe.map((r, i) => {
                   const err = (k) => errorMap[`${i}:${k}`]
-                  const cls = (k) => `fanta-input w-full ${err(k) ? 'border-red-500/60' : ''}`
+                  const cls = (k) => `fanta-input w-full ${err(k) ? 'border-red-500/60' : ''} disabled:opacity-40 disabled:cursor-not-allowed`
+                  const bloccato = formazionePresente
                   return (
                     <tr key={i} className="border-t border-white/5 align-top">
                       <td className="py-2 pr-3">
-                        <input type="number" value={r.ordine} onChange={e => update(i, 'ordine', e.target.value)} className={cls('ordine')} />
+                        <input type="number" disabled={bloccato} value={r.ordine} onChange={e => update(i, 'ordine', e.target.value)} className={cls('ordine')} />
                         {err('ordine') && <p className="text-[10px] text-red-400 mt-1">{err('ordine')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.nome} onChange={e => update(i, 'nome', e.target.value)} className={cls('nome')} placeholder="Nome squadra" />
+                        <input disabled={bloccato} value={r.nome} onChange={e => update(i, 'nome', e.target.value)} className={cls('nome')} placeholder="Nome squadra" />
                         {err('nome') && <p className="text-[10px] text-red-400 mt-1">{err('nome')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.logo} onChange={e => update(i, 'logo', e.target.value)} className={cls('logo')} placeholder="logo.png" />
+                        <input disabled={bloccato} value={r.logo} onChange={e => update(i, 'logo', e.target.value)} className={cls('logo')} placeholder="logo.png" />
                         {err('logo') && <p className="text-[10px] text-red-400 mt-1">{err('logo')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.albo} onChange={e => update(i, 'albo', e.target.value)} className={`${cls('albo')} text-center`} maxLength={2} placeholder="—" />
+                        <input disabled={bloccato} value={r.albo} onChange={e => update(i, 'albo', e.target.value)} className={`${cls('albo')} text-center`} maxLength={2} placeholder="—" />
                         {err('albo') && <p className="text-[10px] text-red-400 mt-1">{err('albo')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.allenatore} onChange={e => update(i, 'allenatore', e.target.value)} className={cls('allenatore')} placeholder="Nome allenatore" />
+                        <input disabled={bloccato} value={r.allenatore} onChange={e => update(i, 'allenatore', e.target.value)} className={cls('allenatore')} placeholder="Nome allenatore" />
                         {err('allenatore') && <p className="text-[10px] text-red-400 mt-1">{err('allenatore')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.foto_allenatore} onChange={e => update(i, 'foto_allenatore', e.target.value)} className={cls('foto_allenatore')} placeholder="foto.png" />
+                        <input disabled={bloccato} value={r.foto_allenatore} onChange={e => update(i, 'foto_allenatore', e.target.value)} className={cls('foto_allenatore')} placeholder="foto.png" />
                         {err('foto_allenatore') && <p className="text-[10px] text-red-400 mt-1">{err('foto_allenatore')}</p>}
                       </td>
                       <td className="py-2 pr-3">
@@ -260,7 +297,9 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
                         </select>
                       </td>
                       <td className="py-2">
-                        <button onClick={() => removeRiga(i)} className="text-slate-600 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => removeRiga(i)} disabled={bloccato} className="text-slate-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   )
@@ -269,24 +308,63 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
             </table>
           </div>
 
-          <button onClick={addRiga} className="btn-ghost text-xs mt-3"><Plus className="w-3.5 h-3.5" /> Aggiungi riga</button>
+          <button onClick={addRiga} disabled={formazionePresente} className="btn-ghost text-xs mt-3 disabled:opacity-30 disabled:cursor-not-allowed">
+            <Plus className="w-3.5 h-3.5" /> Aggiungi riga
+          </button>
 
           <p className="text-[11px] text-slate-600 mt-4">
-            Lascia vuota la password di un'utenza già esistente per non modificarla. Confermando, i dati esistenti per
-            la stagione {stagione} in NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE verranno sostituiti con quelli qui sopra.
+            Lascia vuota la password di un'utenza già esistente per non modificarla.
+            {formazionePresente
+              ? ' Verranno aggiornate solo utenza, password e abilitazione delle squadre esistenti.'
+              : ` Confermando, i dati esistenti per la stagione ${stagione} in NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE verranno sostituiti con quelli qui sopra.`}
           </p>
 
-          <div className="flex items-center justify-end mt-4 pt-4 border-t border-white/5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 mt-4 pt-4 border-t border-white/5">
+            {!formazionePresente && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500 whitespace-nowrap" htmlFor="giornate-campionato">
+                  Giornate campionato
+                </label>
+                <input
+                  id="giornate-campionato"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={2}
+                  value={giornate}
+                  onChange={e => setGiornate(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  placeholder="es. 38"
+                  title="Numero di giornate del campionato: se indicato, rigenera calendario e calendario Champions"
+                  className="fanta-input w-20 text-center"
+                />
+              </div>
+            )}
             <button onClick={salva} disabled={saving} className="btn-primary text-sm disabled:opacity-40">
               {saving ? <><Spinner size="sm" /> Salvataggio in corso...</> : 'Salva'}
             </button>
           </div>
+
+          {!formazionePresente && giornate !== '' && (
+            <p className="text-[11px] text-slate-600 mt-2 text-right">
+              Con {giornate} giornate verranno rigenerati anche NEW_CALENDARIO (dal calendario modello, giornate 1-{giornate})
+              e NEW_CALENDARIO_CHAMP (a partire dalla struttura Champions della stagione {Number(stagione) - 1 || '—'}).
+            </p>
+          )}
 
           {result?.ok && (
             <div className="mt-5 px-4 py-3 rounded-lg text-sm bg-green-500/10 border border-green-500/20 text-green-300">
               <div className="flex items-center gap-2 font-medium">
                 <CheckCircle2 className="w-4 h-4" /> Stagione {result.stagione} salvata correttamente ({result.righe} righe)
               </div>
+              {result.modalita === 'completa' && (
+                <p className="text-xs text-green-400/80 mt-1">
+                  {result.calendario_aggiornato
+                    ? 'Calendario campionato e calendario Champions rigenerati.'
+                    : 'Calendario non modificato (nessun numero di giornate indicato).'}
+                </p>
+              )}
+              {result.modalita === 'solo_utenze' && (
+                <p className="text-xs text-green-400/80 mt-1">Aggiornate solo le utenze (squadre/calendario non toccati).</p>
+              )}
             </div>
           )}
         </>

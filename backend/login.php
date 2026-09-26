@@ -3,7 +3,7 @@
 // api/login.php  —  POST
 // Body: stagione, utenza, password
 //
-// Risposta: { id, utenza, descrizione, abilitazione, stagione }
+// Risposta: { id, utenza, descrizione, abilitazione, amministratore, stagione }
 // oppure 401 se credenziali errate
 //
 // NOTA SICUREZZA: le password nel DB sono attualmente in chiaro.
@@ -22,7 +22,7 @@ $pass     = post_str("password");
 
 // Recupera l'utente (non filtriamo per password in query per
 // evitare timing attack; il controllo avviene in PHP)
-$sql = "SELECT id, utenza, PASSWORD, descrizione, abilitazione
+$sql = "SELECT id, utenza, PASSWORD, descrizione, abilitazione, amministratore
         FROM NEW_UTENZE
         WHERE stagione = $stagione AND utenza = '$utenza'
         LIMIT 1";

@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Zap, Shield, MessageSquare, LogOut,
-  Settings, ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw
+  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw
 } from 'lucide-react'
 
 const NAV = [
@@ -17,12 +17,18 @@ const NAV = [
   { to: '/kulovic',      icon: Zap,          label: 'Kulovic'       },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
   { to: '/schedina',     icon: Medal,        label: 'Schedina'      },
-  { to: '/formazione',   icon: ClipboardList,label: 'Formazione'    },
   { to: '/messaggi',     icon: MessageSquare,label: 'Messaggi'      },
 ]
 
+// Menu "Gestione squadra": disponibile solo per gli utenti loggati,
+// per la gestione della propria squadra ("Formazione" è stata
+// spostata qui e rinominata in "Inserimento formazione").
+const TEAM_NAV = [
+  { to: '/formazione',   icon: ClipboardList,label: 'Inserimento formazione' },
+]
+
+// Menu Admin: voci attuali tranne "Pannello Admin".
 const ADMIN_NAV = [
-  { to: '/admin',                       icon: Settings,  label: 'Pannello Admin' },
   { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
   { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializzazione stagione' },
 ]
@@ -134,6 +140,34 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
             )}
           </NavLink>
         ))}
+
+        {utente && (
+          <>
+            <div className="pt-3 pb-1 px-2">
+              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">Gestione squadra</p>
+            </div>
+            {TEAM_NAV.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                    isActive
+                      ? 'bg-grass-500/10 text-grass-400 font-medium'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-grass-500' : ''}`} />
+                    {label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </>
+        )}
 
         {isAdmin && (
           <>

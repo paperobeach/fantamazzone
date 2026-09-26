@@ -3,11 +3,12 @@ import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react
 import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo } from '../lib/pitchLayout'
 
 // ── Gettone giocatore (in campo o in panchina) ─────────────────
-function PlayerChip({ player, selected, dragProps }) {
+function PlayerChip({ player, selected, highlight, dragProps }) {
   return (
     <div {...dragProps} className="flex flex-col items-center gap-1 select-none cursor-pointer w-16 sm:w-20">
       <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2 shadow-lg transition-all
         ${selected ? 'ring-2 ring-grass-400 ring-offset-2 ring-offset-pitch-950' : ''}
+        ${highlight && !selected ? 'ring-2 ring-gold-400/70 ring-offset-2 ring-offset-pitch-950' : ''}
         bg-grass-500/90 border-grass-300 text-pitch-950`}>
         {ROLE_LABEL[String(player.ruolo)] ?? '?'}
       </div>
@@ -19,29 +20,40 @@ function PlayerChip({ player, selected, dragProps }) {
 }
 
 // ── Slot vuoto/occupato in campo ────────────────────────────────
-function PitchSlot({ x, y, ruolo, player, onDrop, onClick, selected, dragOverActive, onDragOver, onDragLeave }) {
+function PitchSlot({
+  x, y, ruolo, player, onClick, selected,
+  compatible, dragOverActive, onDragOver, onDragLeave,
+  onPlayerDragStart, onPlayerDragEnd,
+}) {
   return (
     <div
       className="absolute -translate-x-1/2 -translate-y-1/2"
       style={{ left: `${x}%`, top: `${y}%` }}
       onDragOver={e => { e.preventDefault(); onDragOver?.() }}
       onDragLeave={onDragLeave}
-      onDrop={e => { e.preventDefault(); onDrop() }}
       onClick={onClick}
     >
       {player ? (
         <div className="relative group">
-          <PlayerChip player={player} selected={selected} dragProps={{
+          <PlayerChip player={player} selected={selected} highlight={compatible} dragProps={{
             draggable: true,
-            onDragStart: e => e.dataTransfer.setData('text/plain', String(player.id)),
+            onDragStart: e => {
+              e.dataTransfer.setData('text/plain', String(player.id))
+              onPlayerDragStart?.(player.id)
+            },
+            onDragEnd: () => onPlayerDragEnd?.(),
           }} />
           <span className="absolute -top-1 -right-1 hidden group-hover:flex w-4 h-4 rounded-full bg-red-500 items-center justify-center">
             <X className="w-2.5 h-2.5 text-white" />
           </span>
         </div>
       ) : (
-        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-dashed flex items-center justify-center text-[10px] font-mono
-          ${dragOverActive ? 'border-grass-300 bg-grass-500/20 text-grass-200' : 'border-white/25 text-white/40'}`}>
+        <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 flex items-center justify-center text-[10px] font-mono transition-colors
+          ${dragOverActive
+            ? 'border-solid border-grass-300 bg-grass-500/25 text-grass-100'
+            : compatible
+              ? 'border-dashed border-gold-400/70 bg-gold-500/10 text-gold-200/80'
+              : 'border-dashed border-white/25 text-white/40'}`}>
           {ROLE_LABEL[ruolo]}
         </div>
       )}
@@ -79,9 +91,14 @@ export function FormationBuilder({
   const [selectedId, setSelectedId] = useState(null)
   const [dragOverSlot, setDragOverSlot] = useState(null)
   const [draggedBenchIdx, setDraggedBenchIdx] = useState(null)
+  const [draggingId, setDraggingId] = useState(null) // id del giocatore attualmente trascinato (panchina o campo)
 
   const byId = useMemo(() => Object.fromEntries(rosa.map(p => [p.id, p])), [rosa])
   const slots = useMemo(() => getSlotsForModulo(modulo), [modulo])
+
+  // Giocatore "attivo" ai fini dell'evidenziazione delle posizioni compatibili:
+  // quello che si sta trascinando, oppure quello selezionato con un click in panchina.
+  const activePlayer = byId[draggingId] ?? byId[selectedId] ?? null
 
   // Assegna ogni titolare allo slot del proprio ruolo, nell'ordine in cui
   // compare in titolariIds (che è sempre mantenuto già ordinato per ruolo)
@@ -197,6 +214,8 @@ export function FormationBuilder({
               const id = Number(e.dataTransfer.getData('text/plain'))
               if (id && dragOverSlot !== null) placePlayer(id, dragOverSlot)
               setDragOverSlot(null)
+              setDraggingId(null)
+              setDraggedBenchIdx(null)
             }}
           >
             <div className="absolute inset-3 border border-white/25 rounded-sm" />
@@ -211,10 +230,12 @@ export function FormationBuilder({
                 x={slot.x} y={slot.y} ruolo={slot.ruolo}
                 player={slotPlayers[i] ? byId[slotPlayers[i]] : null}
                 selected={selectedId === slotPlayers[i]}
+                compatible={!!activePlayer && String(activePlayer.ruolo) === slot.ruolo}
                 dragOverActive={dragOverSlot === i}
                 onDragOver={() => setDragOverSlot(i)}
                 onDragLeave={() => setDragOverSlot(cur => (cur === i ? null : cur))}
-                onDrop={() => { if (selectedId) placePlayer(selectedId, i) }}
+                onPlayerDragStart={id => setDraggingId(id)}
+                onPlayerDragEnd={() => { setDraggingId(null); setDragOverSlot(null) }}
                 onClick={() => handleSlotClick(i)}
               />
             ))}
@@ -226,7 +247,7 @@ export function FormationBuilder({
           )}
           {selectedId && (
             <p className="text-[11px] text-grass-400 mt-2">
-              Giocatore selezionato: {byId[selectedId]?.descrizione}. Clicca uno slot compatibile per posizionarlo.
+              Giocatore selezionato: {byId[selectedId]?.descrizione}. Le posizioni compatibili sono evidenziate: clicca uno slot per posizionarlo.
             </p>
           )}
         </div>
@@ -245,7 +266,11 @@ export function FormationBuilder({
               <div
                 key={p.id}
                 draggable={!readOnly}
-                onDragStart={() => setDraggedBenchIdx(idx)}
+                onDragStart={e => {
+                  e.dataTransfer.setData('text/plain', String(p.id))
+                  setDraggedBenchIdx(idx)
+                  setDraggingId(p.id)
+                }}
                 onDragOver={e => {
                   e.preventDefault()
                   if (draggedBenchIdx === null || draggedBenchIdx === idx) return
@@ -256,7 +281,7 @@ export function FormationBuilder({
                   setDraggedBenchIdx(idx)
                 }}
                 onDrop={e => e.preventDefault()}
-                onDragEnd={() => setDraggedBenchIdx(null)}
+                onDragEnd={() => { setDraggedBenchIdx(null); setDraggingId(null) }}
                 onClick={() => handleBenchClick(p.id)}
                 className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors border
                   ${selectedId === p.id ? 'border-grass-500/50 bg-grass-500/10' : 'border-transparent hover:bg-white/[0.03]'}
@@ -295,7 +320,8 @@ export function FormationBuilder({
             ))}
           </div>
           <p className="text-[10px] text-slate-600 px-3 py-2 border-t border-white/5">
-            Trascina i giocatori (o usa le frecce) per riordinare la panchina.
+            Trascina un giocatore in campo (o selezionalo con un click) per vedere evidenziate le posizioni compatibili.
+            Trascina invece un giocatore su un altro per riordinare la panchina.
           </p>
         </div>
       </div>

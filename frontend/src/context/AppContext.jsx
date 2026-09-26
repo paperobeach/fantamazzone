@@ -53,7 +53,10 @@ export function AppProvider({ children }) {
     localStorage.removeItem('lfm_utente')
   }, [])
 
-  const isAdmin = utente?.abilitazione === 'Y'
+  // "amministratore" è un campo dedicato di NEW_UTENZE, distinto da
+  // "abilitazione" (che indica solo se l'utenza è attiva): permette
+  // di riconoscere gli utenti amministratori dell'applicazione.
+  const isAdmin = utente?.amministratore === 'Y'
 
   return (
     <AppContext.Provider value={{

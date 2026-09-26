@@ -20,13 +20,14 @@
 //
 // POST { stagione, giornate, righe: [{ ordine, nome, logo, albo,
 //                            allenatore, foto_allenatore,
-//                            utenza, password, abilitazione }] }
+//                            utenza, password, abilitazione,
+//                            amministratore }] }
 //
 //   Se NON esiste ancora nessuna formazione per la stagione:
 //     Consolida in un'unica chiamata le tre tabelle:
 //       - NEW_SQUADRE     (id, nome, logo, stagione, albo)
 //       - NEW_ALLENATORI  (id, descrizione, id_squadra, logo, stagione)
-//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione)
+//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
 //     con cancellazione preventiva per stagione + reinserimento
 //     (operazione ripetibile).
 //
@@ -52,8 +53,8 @@
 //   Se ESISTE già almeno una formazione per la stagione (controllo
 //   ripetuto anche qui lato server, non ci si fida del frontend):
 //     - vengono accettate in scrittura SOLO utenza/password/
-//       abilitazione delle righe già esistenti (aggiornate con
-//       UPDATE, non con cancellazione+reinserimento);
+//       abilitazione/amministratore delle righe già esistenti
+//       (aggiornate con UPDATE, non con cancellazione+reinserimento);
 //     - non è possibile aggiungere/rimuovere/rinominare squadre né
 //       cambiarne l'allenatore;
 //     - NON vengono toccati né NEW_CALENDARIO né NEW_CALENDARIO_CHAMP,
@@ -70,6 +71,9 @@
 //   utenza          → NEW_UTENZE.UTENZA
 //   password        → NEW_UTENZE.PASSWORD
 //   abilitazione    → NEW_UTENZE.ABILITAZIONE
+//   amministratore  → NEW_UTENZE.AMMINISTRATORE (flag Y/N: utente
+//                      riconosciuto come amministratore dell'app,
+//                      indipendentemente dall'abilitazione)
 //   ordine          → NEW_SQUADRE.ID, NEW_ALLENATORI.ID,
 //                      NEW_ALLENATORI.ID_SQUADRA, NEW_UTENZE.ID
 //                      (stesso valore su tutte e 4 le colonne)
@@ -122,7 +126,7 @@ function righe_per_stagione($conn, $stagione) {
     $righe = query_all("
         SELECT s.id AS ordine, s.nome, s.logo, s.albo,
                a.descrizione AS allenatore, a.logo AS foto_allenatore,
-               u.utenza, u.abilitazione
+               u.utenza, u.abilitazione, u.amministratore
         FROM NEW_SQUADRE s
         LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
         LEFT JOIN NEW_UTENZE     u ON u.id = s.id AND u.stagione = s.stagione
@@ -134,6 +138,7 @@ function righe_per_stagione($conn, $stagione) {
         $r["foto_allenatore"] = $r["foto_allenatore"] ?? "";
         $r["utenza"]          = $r["utenza"] ?? "";
         $r["abilitazione"]    = $r["abilitazione"] ?? "N";
+        $r["amministratore"]  = $r["amministratore"] ?? "N";
         $r["password"]        = ""; // mai restituita
     }
     unset($r);
@@ -220,6 +225,7 @@ foreach ($righe as $i => $r) {
     $utenza          = trim((string) ($r["utenza"] ?? ""));
     $password        = (string) ($r["password"] ?? "");
     $abilitazione    = trim((string) ($r["abilitazione"] ?? ""));
+    $amministratore  = trim((string) ($r["amministratore"] ?? ""));
 
     // ordine: sempre richiesto per individuare la riga; con
     // formazione già presente deve corrispondere a una squadra già
@@ -273,10 +279,17 @@ foreach ($righe as $i => $r) {
         $errors[] = err_field($i, "abilitazione", "Deve essere 'Y' o 'N'");
     }
 
+    if ($amministratore === "") {
+        $amministratore = "N";
+    } elseif (!in_array($amministratore, ["Y", "N"], true)) {
+        $errors[] = err_field($i, "amministratore", "Deve essere 'Y' o 'N'");
+    }
+
     $rigaData[] = [
         "ordine" => $ordine, "nome" => $nome, "logo" => $logo, "albo" => $albo,
         "allenatore" => $allenatore, "foto_allenatore" => $foto_allenatore,
         "utenza" => $utenza, "password" => $password, "abilitazione" => $abilitazione,
+        "amministratore" => $amministratore,
     ];
 }
 
@@ -312,9 +325,10 @@ try {
             $utenza_esc = mysqli_real_escape_string($conn, $r["utenza"]);
             $pass_esc   = mysqli_real_escape_string($conn, $r["password"]);
             $abil_esc   = mysqli_real_escape_string($conn, $r["abilitazione"]);
+            $admin_esc  = mysqli_real_escape_string($conn, $r["amministratore"]);
 
             mysqli_query($conn, "UPDATE NEW_UTENZE
-                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc'
+                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
                 WHERE id = {$r['ordine']} AND stagione = $stagione");
         }
 
@@ -343,6 +357,7 @@ try {
         $utenza_esc     = mysqli_real_escape_string($conn, $r["utenza"]);
         $pass_esc       = mysqli_real_escape_string($conn, $r["password"]);
         $abil_esc       = mysqli_real_escape_string($conn, $r["abilitazione"]);
+        $admin_esc      = mysqli_real_escape_string($conn, $r["amministratore"]);
 
         // NEW_UTENZE.descrizione non è tra i campi mappati esplicitamente:
         // di default usa il nome dell'allenatore, con fallback al nome
@@ -356,8 +371,8 @@ try {
         mysqli_query($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione)
             VALUES ({$r['ordine']}, '$allenatore_esc', {$r['ordine']}, '$foto_all_esc', $stagione)");
 
-        mysqli_query($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione)
-            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc')");
+        mysqli_query($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
+            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc')");
     }
 
     // ---- Calendario (solo se è stato indicato il numero di giornate) ----

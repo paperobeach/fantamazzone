@@ -15,8 +15,8 @@ import { Spinner } from './ui'
 //      quelli dell'ultima stagione disponibile (da rivedere e
 //      salvare come nuova stagione);
 //    - se la stagione ha già formazioni inserite, i campi restano
-//      visibili ma solo Utenza/Password/Abilitazione sono
-//      modificabili (le squadre/allenatori di una stagione già
+//      visibili ma solo Utenza/Password/Abilitazione/Amministratore
+//      sono modificabili (le squadre/allenatori di una stagione già
 //      giocata non si toccano più).
 // 3) Al salvataggio, un'unica chiamata aggiorna in blocco le tabelle
 //    coinvolte, con cancellazione preventiva per stagione così
@@ -35,6 +35,7 @@ import { Spinner } from './ui'
 //   Utenza            → NEW_UTENZE.UTENZA
 //   Password          → NEW_UTENZE.PASSWORD
 //   Abilitazione      → NEW_UTENZE.ABILITAZIONE
+//   Amministratore    → NEW_UTENZE.AMMINISTRATORE
 //   Ordine            → NEW_SQUADRE.ID, NEW_ALLENATORI.ID,
 //                        NEW_ALLENATORI.ID_SQUADRA, NEW_UTENZE.ID
 //                        (stesso valore su tutte e 4 le colonne)
@@ -48,7 +49,7 @@ const emptyRiga = (ordine = '') => ({
   ordine: String(ordine),
   nome: '', logo: '', albo: '',
   allenatore: '', foto_allenatore: '',
-  utenza: '', password: '', abilitazione: 'N',
+  utenza: '', password: '', abilitazione: 'N', amministratore: 'N',
 })
 
 export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
@@ -90,6 +91,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
             nome: r.nome ?? '', logo: r.logo ?? '', albo: r.albo ?? '',
             allenatore: r.allenatore ?? '', foto_allenatore: r.foto_allenatore ?? '',
             utenza: r.utenza ?? '', password: '', abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
+            amministratore: r.amministratore === 'Y' ? 'Y' : 'N',
           }))
         : [emptyRiga(1)])
       setFonteStagione(dati.fonte_stagione ?? null)
@@ -135,6 +137,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
           nome: r.nome, logo: r.logo, albo: r.albo,
           allenatore: r.allenatore, foto_allenatore: r.foto_allenatore,
           utenza: r.utenza, password: r.password, abilitazione: r.abilitazione,
+          amministratore: r.amministratore,
         })),
         // Ignorato dal backend se per la stagione esistono già formazioni.
         giornate: !formazionePresente && giornate !== '' ? Number(giornate) : undefined,
@@ -210,7 +213,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
             <div className="mb-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/20 text-yellow-200">
               <Lock className="w-4 h-4 flex-shrink-0" />
               Per la stagione {stagione} sono già presenti formazioni: squadre, allenatori e calendario non sono più
-              modificabili da qui. Restano modificabili solo Utenza, Password e Abilitazione.
+              modificabili da qui. Restano modificabili solo Utenza, Password, Abilitazione e Amministratore.
             </div>
           )}
 
@@ -224,7 +227,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
               scorre in orizzontale invece di schiacciare le colonne, così
               ogni campo resta leggibile per intero */}
           <div className="overflow-x-auto -mx-2 px-2">
-            <table className="text-sm border-separate" style={{ borderSpacing: 0, minWidth: '1360px', width: '100%', tableLayout: 'fixed' }}>
+            <table className="text-sm border-separate" style={{ borderSpacing: 0, minWidth: '1480px', width: '100%', tableLayout: 'fixed' }}>
               <colgroup>
                 <col style={{ width: '90px' }} />   {/* Ordine */}
                 <col style={{ width: '190px' }} />  {/* Nome squadra */}
@@ -235,6 +238,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
                 <col style={{ width: '160px' }} />  {/* Utenza */}
                 <col style={{ width: '150px' }} />  {/* Password */}
                 <col style={{ width: '110px' }} />  {/* Abilitata */}
+                <col style={{ width: '120px' }} />  {/* Amministratore */}
                 <col style={{ width: '44px' }} />   {/* Elimina */}
               </colgroup>
               <thead>
@@ -248,6 +252,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
                   <th className="pb-2 pr-3">Utenza</th>
                   <th className="pb-2 pr-3">Password</th>
                   <th className="pb-2 pr-3">Abilitata</th>
+                  <th className="pb-2 pr-3">Amministratore</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
@@ -296,6 +301,13 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
                           <option value="N">No</option>
                         </select>
                       </td>
+                      <td className="py-2 pr-3">
+                        <select value={r.amministratore} onChange={e => update(i, 'amministratore', e.target.value)} className={`${cls('amministratore')} cursor-pointer`}>
+                          <option value="Y">Sì</option>
+                          <option value="N">No</option>
+                        </select>
+                        {err('amministratore') && <p className="text-[10px] text-red-400 mt-1">{err('amministratore')}</p>}
+                      </td>
                       <td className="py-2">
                         <button onClick={() => removeRiga(i)} disabled={bloccato} className="text-slate-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed">
                           <Trash2 className="w-4 h-4" />
@@ -315,7 +327,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
           <p className="text-[11px] text-slate-600 mt-4">
             Lascia vuota la password di un'utenza già esistente per non modificarla.
             {formazionePresente
-              ? ' Verranno aggiornate solo utenza, password e abilitazione delle squadre esistenti.'
+              ? ' Verranno aggiornate solo utenza, password, abilitazione e amministratore delle squadre esistenti.'
               : ` Confermando, i dati esistenti per la stagione ${stagione} in NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE verranno sostituiti con quelli qui sopra.`}
           </p>
 

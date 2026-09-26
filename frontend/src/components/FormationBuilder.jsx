@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
-import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo } from '../lib/pitchLayout'
+import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso } from '../lib/pitchLayout'
 
 // ── Gettone giocatore (in campo o in panchina) ─────────────────
 function PlayerChip({ player, selected, highlight, dragProps }) {
@@ -27,7 +27,7 @@ function PitchSlot({
 }) {
   return (
     <div
-      className="absolute -translate-x-1/2 -translate-y-1/2"
+      className="absolute -translate-x-1/2 -translate-y-1/2 w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center cursor-pointer"
       style={{ left: `${x}%`, top: `${y}%` }}
       onDragOver={e => { e.preventDefault(); onDragOver?.() }}
       onDragLeave={onDragLeave}
@@ -92,6 +92,7 @@ export function FormationBuilder({
   const [dragOverSlot, setDragOverSlot] = useState(null)
   const [draggedBenchIdx, setDraggedBenchIdx] = useState(null)
   const [draggingId, setDraggingId] = useState(null) // id del giocatore attualmente trascinato (panchina o campo)
+  const [dropdownSlot, setDropdownSlot] = useState(null) // indice dello slot con il menu a tendina aperto
 
   const byId = useMemo(() => Object.fromEntries(rosa.map(p => [p.id, p])), [rosa])
   const slots = useMemo(() => getSlotsForModulo(modulo), [modulo])
@@ -159,14 +160,63 @@ export function FormationBuilder({
     if (readOnly) return
     if (selectedId) {
       placePlayer(selectedId, slotIndex)
-    } else if (slotPlayers[slotIndex]) {
-      removeFromSlot(slotIndex)
+      setDropdownSlot(null)
+      return
     }
+    if (slotPlayers[slotIndex]) {
+      removeFromSlot(slotIndex)
+      setDropdownSlot(null)
+      return
+    }
+    // Slot vuoto e nessun giocatore selezionato dalla panchina: apre/chiude
+    // il menu a tendina con i giocatori compatibili per ruolo e non ancora
+    // schierati, per poterlo scegliere anche senza drag&drop.
+    setDropdownSlot(cur => (cur === slotIndex ? null : slotIndex))
   }
 
   function handleBenchClick(id) {
     if (readOnly) return
+    setDropdownSlot(null)
     setSelectedId(cur => (cur === id ? null : id))
+  }
+
+  // ── Cambio modulo: riconcilia la formazione già impostata ──────
+  // Se il nuovo modulo prevede meno slot per un ruolo rispetto a prima
+  // (es. da difesa a 4 a difesa a 3), gli eventuali titolari in eccesso
+  // per quel ruolo (quelli oltre il numero di slot disponibili) vengono
+  // rimessi in panchina, così contatori e riepilogo restano coerenti:
+  // nessun giocatore resta "orfano" (titolare ma senza slot in campo).
+  function handleModuloChange(newModulo) {
+    if (readOnly || !newModulo || newModulo === modulo) return
+    const newAttesi = conteggioAtteso(newModulo)
+    if (!newAttesi) return
+
+    // Raggruppa i titolari attuali per ruolo, mantenendo l'ordine con cui
+    // compaiono in titolariIds (che riflette l'ordine di assegnazione agli
+    // slot: i primi N di ogni ruolo sono quelli effettivamente in campo).
+    const byRuolo = { '1': [], '2': [], '3': [], '4': [] }
+    titolariIds.forEach(id => {
+      const p = byId[id]
+      if (p) byRuolo[String(p.ruolo)]?.push(id)
+    })
+
+    const kept = []
+    const eccedenti = []
+    Object.keys(byRuolo).forEach(ruolo => {
+      const limite = newAttesi[ruolo] ?? 0
+      byRuolo[ruolo].forEach((id, idx) => {
+        if (idx < limite) kept.push(id)
+        else eccedenti.push(id)
+      })
+    })
+
+    setSelectedId(null)
+    setDropdownSlot(null)
+    if (eccedenti.length > 0) {
+      // I giocatori in eccesso tornano in cima alla panchina.
+      onChange?.(kept, [...eccedenti, ...panchinaIds])
+    }
+    onModuloChange?.(newModulo)
   }
 
   // ── Riordino panchina: sposta l'elemento fromIdx alla posizione toIdx ──
@@ -190,7 +240,7 @@ export function FormationBuilder({
             key={m}
             type="button"
             disabled={readOnly}
-            onClick={() => onModuloChange?.(m)}
+            onClick={() => handleModuloChange(m)}
             className={`px-3 py-1.5 rounded-lg text-sm font-mono font-semibold transition-all ${
               modulo === m
                 ? 'bg-grass-500 text-pitch-950'
@@ -202,11 +252,11 @@ export function FormationBuilder({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_300px] gap-6 lg:justify-center">
         {/* Campo */}
-        <div>
+        <div className="w-full lg:w-[380px] mx-auto lg:mx-0">
           <div
-            className="relative w-full aspect-[3/4] rounded-xl overflow-hidden border border-white/10"
+            className="relative w-full aspect-[3/4] lg:max-h-[500px] rounded-xl overflow-hidden border border-white/10"
             style={{ background: 'repeating-linear-gradient(0deg, #123822 0px, #123822 36px, #0e2e1c 36px, #0e2e1c 72px)' }}
             onDragOver={e => e.preventDefault()}
             onDrop={e => {
@@ -234,11 +284,53 @@ export function FormationBuilder({
                 dragOverActive={dragOverSlot === i}
                 onDragOver={() => setDragOverSlot(i)}
                 onDragLeave={() => setDragOverSlot(cur => (cur === i ? null : cur))}
-                onPlayerDragStart={id => setDraggingId(id)}
+                onPlayerDragStart={id => { setDraggingId(id); setDropdownSlot(null) }}
                 onPlayerDragEnd={() => { setDraggingId(null); setDragOverSlot(null) }}
                 onClick={() => handleSlotClick(i)}
               />
             ))}
+
+            {/* Menu a tendina: scelta rapida del giocatore per uno slot vuoto,
+                cliccato senza aver prima selezionato nessuno dalla panchina.
+                Elenca solo i giocatori in panchina compatibili per ruolo. */}
+            {dropdownSlot !== null && slots[dropdownSlot] && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setDropdownSlot(null)} />
+                <div
+                  className="absolute z-50 min-w-[170px] max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-pitch-900 shadow-2xl py-1"
+                  style={{
+                    left: `${slots[dropdownSlot].x}%`,
+                    top: `${slots[dropdownSlot].y}%`,
+                    transform: slots[dropdownSlot].y > 55 ? 'translate(-50%, -110%)' : 'translate(-50%, 30px)',
+                  }}
+                >
+                  {(() => {
+                    const ruoloSlot = slots[dropdownSlot].ruolo
+                    const disponibili = panchinaPlayers.filter(p => String(p.ruolo) === ruoloSlot)
+                    if (disponibili.length === 0) {
+                      return (
+                        <p className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
+                          Nessun {ROLE_LABEL[ruoloSlot]} disponibile in panchina
+                        </p>
+                      )
+                    }
+                    return disponibili.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { placePlayer(p.id, dropdownSlot); setDropdownSlot(null) }}
+                        className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors whitespace-nowrap"
+                      >
+                        <span className={`stat-pill ${
+                          p.ruolo == 1 ? 'badge-role-p' : p.ruolo == 2 ? 'badge-role-d' : p.ruolo == 3 ? 'badge-role-c' : 'badge-role-a'
+                        }`}>{ROLE_LABEL[String(p.ruolo)]}</span>
+                        {p.descrizione}
+                      </button>
+                    ))
+                  })()}
+                </div>
+              </>
+            )}
           </div>
           {!moduloAttesoOk && (
             <p className="text-[11px] text-gold-400 mt-2">
@@ -270,6 +362,7 @@ export function FormationBuilder({
                   e.dataTransfer.setData('text/plain', String(p.id))
                   setDraggedBenchIdx(idx)
                   setDraggingId(p.id)
+                  setDropdownSlot(null)
                 }}
                 onDragOver={e => {
                   e.preventDefault()
@@ -320,8 +413,9 @@ export function FormationBuilder({
             ))}
           </div>
           <p className="text-[10px] text-slate-600 px-3 py-2 border-t border-white/5">
-            Trascina un giocatore in campo (o selezionalo con un click) per vedere evidenziate le posizioni compatibili.
-            Trascina invece un giocatore su un altro per riordinare la panchina.
+            Trascina un giocatore in campo, selezionalo con un click, oppure clicca direttamente
+            su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo.
+            Trascina un giocatore su un altro per riordinare la panchina.
           </p>
         </div>
       </div>
@@ -329,7 +423,7 @@ export function FormationBuilder({
       {!readOnly && (
         <button
           type="button"
-          onClick={() => commit(slots.map(() => null), rosa.map(p => p.id))}
+          onClick={() => { commit(slots.map(() => null), rosa.map(p => p.id)); setDropdownSlot(null) }}
           className="btn-ghost text-xs"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Svuota il campo

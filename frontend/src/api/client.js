@@ -135,25 +135,6 @@ export const getFormazione = (stagione, giornata, id_squadra) =>
 export const saveFormazione = (stagione, giornata, id_squadra, giocatori) =>
   post('formazioni.php', { stagione, giornata, id_squadra, giocatori })
 
-// ── Schedina ─────────────────────────────────────────────────
-
-export const getSchedina = (stagione, giornata, id = null) =>
-  get('schedina.php', { stagione, giornata, ...(id ? { id } : {}) })
-
-export const getClassificaSchedina = (stagione) =>
-  get('schedina.php', { stagione, tipo: 'classifica' })
-
-export const saveSchedina = (stagione, giornata, id, pronostici) =>
-  post('schedina.php', { stagione, giornata, id, pronostici })
-
-// ── Messaggi ─────────────────────────────────────────────────
-
-export const getMessaggi = (stagione, id, tipo = 'ricevuti') =>
-  get('messaggi.php', { stagione, id, tipo })
-
-export const sendMessaggio = (stagione, mittente, destinatario, messaggio) =>
-  post('messaggi.php', { stagione, mittente, destinatario, messaggio })
-
 // ── Penalità ─────────────────────────────────────────────────
 
 export const getPenalita = (stagione) => get('penalita.php', { stagione })

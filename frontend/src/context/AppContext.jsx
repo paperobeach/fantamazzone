@@ -56,11 +56,21 @@ export function AppProvider({ children }) {
   // "amministratore" è un campo dedicato di NEW_UTENZE, distinto da
   // "abilitazione" (che indica solo se l'utenza è attiva): permette
   // di riconoscere gli utenti amministratori dell'applicazione.
-  const isAdmin = utente?.amministratore === 'Y'
+  // Il confronto è tollerante rispetto a maiuscole/minuscole e spazi,
+  // per non dipendere dal fatto che il valore sia stato scritto dalla
+  // UI (che usa sempre 'Y'/'N') oppure inserito a mano nel DB.
+  const isAdmin = String(utente?.amministratore ?? '').trim().toUpperCase() === 'Y'
+
+  // Stagione più recente tra quelle disponibili (stagioni è già ordinata
+  // DESC dal backend): serve per il login (che non fa più scegliere la
+  // stagione) e per la sezione "Gestione squadra", che deve sempre
+  // riferirsi all'ultima stagione indipendentemente da quella scelta
+  // per la navigazione generale (classifica, calendario, ecc.).
+  const ultimaStagione = stagioni[0] ?? null
 
   return (
     <AppContext.Provider value={{
-      stagioni, stagione, changeStagione,
+      stagioni, stagione, changeStagione, ultimaStagione,
       sistemaParams,
       utente, doLogin, doLogout, isAdmin,
       loading,

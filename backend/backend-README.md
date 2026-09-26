@@ -22,10 +22,8 @@
     ├── marcatori.php
     ├── login.php
     ├── kulovic.php
-    ├── messaggi.php
     ├── champions.php
     ├── formazioni.php
-    ├── schedina.php
     ├── sistema.php
     ├── penalita.php
     └── admin/
@@ -71,11 +69,8 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | `api/marcatori.php?stagione=&tipo=` | stagione, tipo=(marcatori\|assist\|migliori\|peggiori) | Classifiche individuali |
 | `api/top_flop.php?stagione=` | stagione, [tipo=top\|flop] | Top11 / Flop11 |
 | `api/kulovic.php?stagione=` | stagione, [id_squadra] | Stats fortuna/sfortuna |
-| `api/messaggi.php?stagione=&id=` | stagione, id, [tipo=inviati] | Messaggi utente |
 | `api/champions.php?stagione=&sezione=` | stagione, sezione=(classifica\|gironi\|note) | Coppa Champions |
 | `api/formazioni.php?stagione=&giornata=&id_squadra=` | stagione, giornata, id_squadra | Formazione inserita |
-| `api/schedina.php?stagione=&giornata=` | stagione, giornata, [id] | Pronostici |
-| `api/schedina.php?stagione=&tipo=classifica` | stagione | Classifica schedina |
 | `api/penalita.php?stagione=` | stagione | Penalità squadre |
 
 ### Autenticazione (POST)
@@ -89,8 +84,6 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | Endpoint | Body | Descrizione |
 |---|---|---|
 | `api/formazioni.php` | `stagione, giornata, id_squadra, giocatori[]` | Inserisce formazione |
-| `api/messaggi.php` | `stagione, mittente, destinatario, messaggio` | Invia messaggio |
-| `api/schedina.php` | `stagione, giornata, id, pronostici[]` | Inserisce pronostici |
 
 ### Admin — aggiornamenti (POST)
 

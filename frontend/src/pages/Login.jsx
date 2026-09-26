@@ -6,7 +6,7 @@ import { Spinner } from '../components/ui'
 import { Trophy } from 'lucide-react'
 
 export default function Login() {
-  const { stagioni, stagione, changeStagione, doLogin } = useApp()
+  const { ultimaStagione, doLogin } = useApp()
   const navigate = useNavigate()
 
   const [utenza,   setUtenza]   = useState('')
@@ -19,7 +19,7 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const utente = await login(stagione, utenza, password)
+      const utente = await login(ultimaStagione, utenza, password)
       doLogin(utente)
       navigate('/')
     } catch (e) {
@@ -47,17 +47,6 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleSubmit} className="card p-6 space-y-4">
-          <div>
-            <label className="text-xs font-mono tracking-widest uppercase text-slate-600 block mb-1.5">Stagione</label>
-            <select
-              value={stagione ?? ''}
-              onChange={e => changeStagione(Number(e.target.value))}
-              className="fanta-input cursor-pointer"
-            >
-              {stagioni.map(s => <option key={s} value={s}>{s} / {s+1}</option>)}
-            </select>
-          </div>
-
           <div>
             <label className="text-xs font-mono tracking-widest uppercase text-slate-600 block mb-1.5">Username</label>
             <input
@@ -91,12 +80,18 @@ export default function Login() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !ultimaStagione}
             className="btn-primary w-full justify-center py-3 disabled:opacity-50"
           >
             {loading ? <Spinner size="sm" /> : 'Accedi'}
           </button>
         </form>
+
+        {ultimaStagione && (
+          <p className="text-center text-[11px] text-slate-700 mt-3">
+            Stagione {ultimaStagione} / {ultimaStagione + 1}
+          </p>
+        )}
       </div>
     </div>
   )

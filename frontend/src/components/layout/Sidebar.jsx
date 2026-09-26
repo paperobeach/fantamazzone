@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
-  Star, Zap, Shield, MessageSquare, LogOut,
+  Star, Zap, Shield, LogOut,
   ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw
 } from 'lucide-react'
 
@@ -16,8 +16,6 @@ const NAV = [
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },
   { to: '/kulovic',      icon: Zap,          label: 'Kulovic'       },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
-  { to: '/schedina',     icon: Medal,        label: 'Schedina'      },
-  { to: '/messaggi',     icon: MessageSquare,label: 'Messaggi'      },
 ]
 
 // Menu "Gestione squadra": disponibile solo per gli utenti loggati,

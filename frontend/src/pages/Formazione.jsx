@@ -24,18 +24,28 @@ const MODULO_DEFAULT = '4-4-2'
  * "ordine" usato in Inizializzazione stagione per NEW_SQUADRE e
  * NEW_UTENZE) — quindi non serve alcun selettore di squadra.
  *
+ * IMPORTANTE: la sezione "Gestione squadra" deve sempre riferirsi
+ * all'ULTIMA stagione disponibile (quella corrente), indipendentemente
+ * dalla stagione "in navigazione" scelta nella sidebar per il resto
+ * dell'app (classifica, calendario, ecc.), che l'utente può cambiare
+ * in qualsiasi momento per consultare stagioni passate. Si usa quindi
+ * sempre `ultimaStagione` dal context (mai `stagione`, né la stagione
+ * salvata nell'utente al momento del login) per caricare la propria
+ * rosa: la corrispondenza id-squadra ↔ id-utente, infatti, è garantita
+ * solo all'interno della stessa stagione.
+ *
  * Quando backend e DB saranno pronti, basterà collegare il pulsante
  * "Salva" alla API di persistenza: la UI è già predisposta.
  */
 export default function Formazione() {
-  const { stagione, utente } = useApp()
+  const { utente, ultimaStagione } = useApp()
 
   const idSquadra = utente?.id ?? null
 
-  // ── Rosa della squadra dell'utente loggato ──
+  // ── Rosa della squadra dell'utente loggato (sempre nell'ultima stagione) ──
   const { data: squadra, loading: loadingRosa, error: errorRosa } = useFetch(
-    idSquadra !== null ? () => getSquadra(stagione, idSquadra) : null,
-    [stagione, idSquadra]
+    idSquadra !== null && ultimaStagione !== null ? () => getSquadra(ultimaStagione, idSquadra) : null,
+    [ultimaStagione, idSquadra]
   )
 
   const rosa = squadra?.rosa ?? []
@@ -62,7 +72,7 @@ export default function Formazione() {
   const formazioneCompleta = titolari.length === 11 &&
     JSON.stringify(conteggio) === JSON.stringify(attesi)
 
-  if (idSquadra === null) return <LoadingState label="Caricamento..." />
+  if (idSquadra === null || ultimaStagione === null) return <LoadingState label="Caricamento..." />
 
   return (
     <div className="animate-fade-up">
@@ -71,7 +81,7 @@ export default function Formazione() {
         title="Formazione"
         subtitle={
           squadra?.nome
-            ? `${squadra.nome} — scegli il modulo e trascina i giocatori della rosa in campo per provare l'interazione. Il salvataggio sul server sarà attivato in una fase successiva.`
+            ? `${squadra.nome} · stagione ${ultimaStagione}/${ultimaStagione + 1} — scegli il modulo e trascina i giocatori della rosa in campo per provare l'interazione. Il salvataggio sul server sarà attivato in una fase successiva.`
             : "Scegli il modulo e trascina i giocatori della rosa in campo per provare l'interazione. Il salvataggio sul server sarà attivato in una fase successiva."
         }
       />

@@ -261,8 +261,15 @@ export function FormationBuilder({
             onDragOver={e => e.preventDefault()}
             onDrop={e => {
               e.preventDefault()
-              const id = Number(e.dataTransfer.getData('text/plain'))
-              if (id && dragOverSlot !== null) placePlayer(id, dragOverSlot)
+              const draggedRaw = e.dataTransfer.getData('text/plain')
+              // Risale al giocatore trascinato confrontando le stringhe (e non
+              // forzando l'id a Number): nella rosa l'id può essere un numero
+              // o una stringa numerica a seconda di come lo restituisce l'API.
+              // Convertirlo sempre a Number rompeva i confronti === usati per
+              // toglierlo dalla panchina quando i due tipi non coincidevano,
+              // lasciando il giocatore duplicato sia in campo sia in panchina.
+              const player = rosa.find(p => String(p.id) === draggedRaw)
+              if (player && dragOverSlot !== null) placePlayer(player.id, dragOverSlot)
               setDragOverSlot(null)
               setDraggingId(null)
               setDraggedBenchIdx(null)

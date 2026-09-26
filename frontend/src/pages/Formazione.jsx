@@ -53,13 +53,15 @@ export default function Formazione() {
   const [modulo, setModulo]     = useState(MODULO_DEFAULT)
   const [titolari, setTitolari] = useState([])
   const [panchina, setPanchina] = useState([])
+  const [tribuna, setTribuna]   = useState([])
 
   // Ogni volta che cambia la squadra selezionata (o la sua rosa arriva),
-  // si riparte da capo: tutti i giocatori in panchina, campo vuoto.
+  // si riparte da capo: tutti i giocatori in panchina, campo e tribuna vuoti.
   useEffect(() => {
     setModulo(MODULO_DEFAULT)
     setTitolari([])
     setPanchina(rosa.map(p => p.id))
+    setTribuna([])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idSquadra, rosa.length])
 
@@ -106,7 +108,8 @@ export default function Formazione() {
             onModuloChange={setModulo}
             titolariIds={titolari}
             panchinaIds={panchina}
-            onChange={(t, p) => { setTitolari(t); setPanchina(p) }}
+            tribunaIds={tribuna}
+            onChange={(t, p, tr) => { setTitolari(t); setPanchina(p); setTribuna(tr) }}
           />
 
           {/* Riepilogo locale, utile per verificare l'interazione senza backend */}
@@ -131,6 +134,11 @@ export default function Formazione() {
                 </div>
               ))}
             </div>
+            {tribuna.length > 0 && (
+              <p className="text-[11px] text-slate-600 mt-3">
+                {tribuna.length} giocator{tribuna.length === 1 ? 'e' : 'i'} in tribuna (esclus{tribuna.length === 1 ? 'o' : 'i'} da campo e panchina).
+              </p>
+            )}
           </div>
         </>
       )}

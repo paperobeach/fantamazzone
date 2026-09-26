@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react'
-import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown } from 'lucide-react'
+import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown, Armchair, ArrowRight, ArrowLeft } from 'lucide-react'
 import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso } from '../lib/pitchLayout'
 
-// ── Gettone giocatore (in campo o in panchina) ─────────────────
+const ROLE_PILL_CLASS = {
+  1: 'badge-role-p', 2: 'badge-role-d', 3: 'badge-role-c', 4: 'badge-role-a',
+}
+
+// ── Gettone giocatore (in campo, in panchina o in tribuna) ──────
 function PlayerChip({ player, selected, highlight, dragProps }) {
   return (
     <div {...dragProps} className="flex flex-col items-center gap-1 select-none cursor-pointer w-16 sm:w-20">
@@ -61,22 +65,89 @@ function PitchSlot({
   )
 }
 
+// ── Riga di un elenco riordinabile (panchina o tribuna) ─────────
+// Componente condiviso: entrambi gli elenchi sono liste di giocatori
+// trascinabili/riordinabili con lo stesso comportamento; cambia solo la
+// provenienza dei dati e l'azione rapida per spostarsi nell'altro elenco.
+function RosterRow({
+  player, index, total, selected, dragged, readOnly,
+  onDragStart, onDragOverSwap, onDragEnd, onClick,
+  onMoveUp, onMoveDown, onMoveOther, moveOtherIcon: MoveOtherIcon, moveOtherTitle,
+}) {
+  return (
+    <div
+      draggable={!readOnly}
+      onDragStart={onDragStart}
+      onDragOver={onDragOverSwap}
+      onDrop={e => e.preventDefault()}
+      onDragEnd={onDragEnd}
+      onClick={onClick}
+      className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors border
+        ${selected ? 'border-grass-500/50 bg-grass-500/10' : 'border-transparent hover:bg-white/[0.03]'}
+        ${dragged ? 'opacity-50' : ''}`}
+    >
+      {!readOnly && <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />}
+      <span className="text-[9px] font-mono w-4 text-slate-600 flex-shrink-0">{index + 1}</span>
+      <span className={`stat-pill ${ROLE_PILL_CLASS[player.ruolo] ?? ''}`}>{ROLE_LABEL[String(player.ruolo)]}</span>
+      <span className="text-sm text-slate-300 truncate flex-1">{player.descrizione}</span>
+
+      {!readOnly && (
+        <div className="flex items-center flex-shrink-0">
+          {onMoveOther && (
+            <button
+              type="button"
+              title={moveOtherTitle}
+              onClick={e => { e.stopPropagation(); onMoveOther() }}
+              className="text-slate-600 hover:text-gold-300 p-0.5"
+            >
+              <MoveOtherIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <div className="flex flex-col -my-1">
+            <button
+              type="button"
+              title="Sposta su"
+              disabled={index === 0}
+              onClick={e => { e.stopPropagation(); onMoveUp() }}
+              className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
+            >
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              title="Sposta giù"
+              disabled={index === total - 1}
+              onClick={e => { e.stopPropagation(); onMoveDown() }}
+              className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
- * Editor formazione: modulo + campo (drag&drop / click) + panchina riordinabile.
+ * Editor formazione: modulo + campo (drag&drop / click) + panchina e
+ * tribuna riordinabili.
  *
  * Modello dati interno: gli slot in campo sono un array a posizione FISSA
  * (allineato 1:1 a `getSlotsForModulo(modulo)`); ogni slot contiene
  * `null` oppure l'id di un giocatore. Un giocatore esiste sempre in uno
- * ed un solo posto: o in uno slot di `slotPlayers`, o nell'array
- * `panchinaIds`. Ogni operazione (posiziona / rimuovi / riordina) rimuove
+ * ed un solo posto tra questi tre: uno slot di `slotPlayers`, l'array
+ * `panchinaIds`, oppure l'array `tribunaIds` (i giocatori che l'utente
+ * non vuole schierare né tenere in panchina per la giornata). Ogni
+ * operazione (posiziona / rimuovi / riordina / sposta) rimuove
  * esplicitamente l'id dalla sua posizione precedente prima di inserirlo
- * nella nuova, così le due liste non possono mai sovrapporsi.
+ * nella nuova, così le tre liste non possono mai sovrapporsi.
  *
  * props:
  *  - rosa: [{ id, descrizione, ruolo }]  rosa completa della squadra
  *  - modulo, onModuloChange
- *  - titolariIds, panchinaIds: array di id (stato controllato dal parent)
- *  - onChange(titolariIds, panchinaIds): chiamato ad ogni modifica
+ *  - titolariIds, panchinaIds, tribunaIds: array di id (stato controllato dal parent)
+ *  - onChange(titolariIds, panchinaIds, tribunaIds): chiamato ad ogni modifica
  *  - readOnly: disabilita ogni interazione (es. giornata già chiusa)
  */
 export function FormationBuilder({
@@ -85,20 +156,23 @@ export function FormationBuilder({
   onModuloChange,
   titolariIds = [],
   panchinaIds = [],
+  tribunaIds = [],
   onChange,
   readOnly = false,
 }) {
   const [selectedId, setSelectedId] = useState(null)
   const [dragOverSlot, setDragOverSlot] = useState(null)
   const [draggedBenchIdx, setDraggedBenchIdx] = useState(null)
-  const [draggingId, setDraggingId] = useState(null) // id del giocatore attualmente trascinato (panchina o campo)
+  const [draggedTribunaIdx, setDraggedTribunaIdx] = useState(null)
+  const [draggingId, setDraggingId] = useState(null) // id del giocatore attualmente trascinato (campo, panchina o tribuna)
   const [dropdownSlot, setDropdownSlot] = useState(null) // indice dello slot con il menu a tendina aperto
 
   const byId = useMemo(() => Object.fromEntries(rosa.map(p => [p.id, p])), [rosa])
   const slots = useMemo(() => getSlotsForModulo(modulo), [modulo])
 
   // Giocatore "attivo" ai fini dell'evidenziazione delle posizioni compatibili:
-  // quello che si sta trascinando, oppure quello selezionato con un click in panchina.
+  // quello che si sta trascinando, oppure quello selezionato con un click
+  // in panchina o in tribuna.
   const activePlayer = byId[draggingId] ?? byId[selectedId] ?? null
 
   // Assegna ogni titolare allo slot del proprio ruolo, nell'ordine in cui
@@ -114,12 +188,24 @@ export function FormationBuilder({
   }, [slots, titolariIds, byId])
 
   const panchinaPlayers = panchinaIds.map(id => byId[id]).filter(Boolean)
+  const tribunaPlayers = tribunaIds.map(id => byId[id]).filter(Boolean)
 
-  function commit(nextSlotPlayers, nextPanchina) {
-    onChange?.(nextSlotPlayers.filter(Boolean), nextPanchina)
+  function commit(nextSlotPlayers, nextPanchina, nextTribuna) {
+    onChange?.(nextSlotPlayers.filter(Boolean), nextPanchina, nextTribuna)
   }
 
-  // ── Posiziona un giocatore (dalla panchina o da un altro slot) ──
+  // Risale al giocatore trascinato confrontando le stringhe (e non
+  // forzando l'id a Number): nella rosa l'id può essere un numero o una
+  // stringa numerica a seconda di come lo restituisce l'API. Convertirlo
+  // sempre a Number romperebbe i confronti === usati per toglierlo dalla
+  // lista di provenienza quando i due tipi non coincidono, lasciando il
+  // giocatore duplicato in più elenchi.
+  function resolveDraggedPlayer(e) {
+    const raw = e.dataTransfer.getData('text/plain')
+    return rosa.find(p => String(p.id) === raw) ?? null
+  }
+
+  // ── Posiziona un giocatore (da panchina, tribuna o da un altro slot) ──
   function placePlayer(playerId, slotIndex) {
     if (readOnly) return
     const player = byId[playerId]
@@ -137,12 +223,14 @@ export function FormationBuilder({
 
     nextSlots[slotIndex] = playerId
 
-    // Rimuove il giocatore in arrivo dalla panchina (se ci si trovava) e,
-    // se lo slot era occupato, rimanda l'occupante precedente in panchina
+    // Rimuove il giocatore in arrivo da panchina e tribuna (da qualunque
+    // delle due provenisse) e, se lo slot era occupato, rimanda
+    // l'occupante precedente in panchina.
     let nextPanchina = panchinaIds.filter(id => id !== playerId)
+    const nextTribuna = tribunaIds.filter(id => id !== playerId)
     if (outgoingId) nextPanchina = [outgoingId, ...nextPanchina]
 
-    commit(nextSlots, nextPanchina)
+    commit(nextSlots, nextPanchina, nextTribuna)
     setSelectedId(null)
   }
 
@@ -152,7 +240,7 @@ export function FormationBuilder({
     if (!playerId) return
     const nextSlots = [...slotPlayers]
     nextSlots[slotIndex] = null
-    commit(nextSlots, [playerId, ...panchinaIds])
+    commit(nextSlots, [playerId, ...panchinaIds], tribunaIds)
     setSelectedId(null)
   }
 
@@ -168,16 +256,42 @@ export function FormationBuilder({
       setDropdownSlot(null)
       return
     }
-    // Slot vuoto e nessun giocatore selezionato dalla panchina: apre/chiude
-    // il menu a tendina con i giocatori compatibili per ruolo e non ancora
-    // schierati, per poterlo scegliere anche senza drag&drop.
+    // Slot vuoto e nessun giocatore selezionato: apre/chiude il menu a
+    // tendina con i giocatori compatibili per ruolo e ancora in panchina,
+    // per poterlo scegliere anche senza drag&drop.
     setDropdownSlot(cur => (cur === slotIndex ? null : slotIndex))
   }
 
-  function handleBenchClick(id) {
+  function handleListClick(id) {
     if (readOnly) return
     setDropdownSlot(null)
     setSelectedId(cur => (cur === id ? null : id))
+  }
+
+  // ── Sposta un giocatore (da campo, panchina o tribuna) nell'elenco
+  //    "panchina" o "tribuna", in testa all'elenco di destinazione ──
+  function moveToList(playerId, target) {
+    if (readOnly) return
+    const player = byId[playerId]
+    if (!player) return
+    const alreadyThere = target === 'panchina'
+      ? panchinaIds.includes(playerId)
+      : tribunaIds.includes(playerId)
+    if (alreadyThere) { setSelectedId(null); return }
+
+    const nextSlots = [...slotPlayers]
+    const fromSlotIdx = nextSlots.indexOf(playerId)
+    if (fromSlotIdx !== -1) nextSlots[fromSlotIdx] = null
+
+    const restPanchina = panchinaIds.filter(id => id !== playerId)
+    const restTribuna = tribunaIds.filter(id => id !== playerId)
+
+    const nextPanchina = target === 'panchina' ? [playerId, ...restPanchina] : restPanchina
+    const nextTribuna  = target === 'tribuna'  ? [playerId, ...restTribuna]  : restTribuna
+
+    commit(nextSlots, nextPanchina, nextTribuna)
+    setSelectedId(null)
+    setDropdownSlot(null)
   }
 
   // ── Cambio modulo: riconcilia la formazione già impostata ──────
@@ -214,18 +328,26 @@ export function FormationBuilder({
     setDropdownSlot(null)
     if (eccedenti.length > 0) {
       // I giocatori in eccesso tornano in cima alla panchina.
-      onChange?.(kept, [...eccedenti, ...panchinaIds])
+      onChange?.(kept, [...eccedenti, ...panchinaIds], tribunaIds)
     }
     onModuloChange?.(newModulo)
   }
 
-  // ── Riordino panchina: sposta l'elemento fromIdx alla posizione toIdx ──
+  // ── Riordino panchina/tribuna: sposta l'elemento fromIdx a toIdx ──
   function movePanchina(fromIdx, toIdx) {
     if (readOnly || fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
     const arr = [...panchinaIds]
     const [moved] = arr.splice(fromIdx, 1)
     arr.splice(toIdx, 0, moved)
-    onChange?.(titolariIds, arr)
+    onChange?.(titolariIds, arr, tribunaIds)
+  }
+
+  function moveTribuna(fromIdx, toIdx) {
+    if (readOnly || fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return
+    const arr = [...tribunaIds]
+    const [moved] = arr.splice(fromIdx, 1)
+    arr.splice(toIdx, 0, moved)
+    onChange?.(titolariIds, panchinaIds, arr)
   }
 
   const moduloAttesoOk = slotPlayers.every(Boolean)
@@ -252,7 +374,7 @@ export function FormationBuilder({
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_300px] gap-6 lg:justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_260px_260px] gap-6 lg:justify-center">
         {/* Campo */}
         <div className="w-full lg:w-[380px] mx-auto lg:mx-0">
           <div
@@ -261,18 +383,12 @@ export function FormationBuilder({
             onDragOver={e => e.preventDefault()}
             onDrop={e => {
               e.preventDefault()
-              const draggedRaw = e.dataTransfer.getData('text/plain')
-              // Risale al giocatore trascinato confrontando le stringhe (e non
-              // forzando l'id a Number): nella rosa l'id può essere un numero
-              // o una stringa numerica a seconda di come lo restituisce l'API.
-              // Convertirlo sempre a Number rompeva i confronti === usati per
-              // toglierlo dalla panchina quando i due tipi non coincidevano,
-              // lasciando il giocatore duplicato sia in campo sia in panchina.
-              const player = rosa.find(p => String(p.id) === draggedRaw)
+              const player = resolveDraggedPlayer(e)
               if (player && dragOverSlot !== null) placePlayer(player.id, dragOverSlot)
               setDragOverSlot(null)
               setDraggingId(null)
               setDraggedBenchIdx(null)
+              setDraggedTribunaIdx(null)
             }}
           >
             <div className="absolute inset-3 border border-white/25 rounded-sm" />
@@ -298,8 +414,9 @@ export function FormationBuilder({
             ))}
 
             {/* Menu a tendina: scelta rapida del giocatore per uno slot vuoto,
-                cliccato senza aver prima selezionato nessuno dalla panchina.
-                Elenca solo i giocatori in panchina compatibili per ruolo. */}
+                cliccato senza aver prima selezionato nessuno. Elenca i
+                giocatori compatibili per ruolo sia dalla panchina sia dalla
+                tribuna (questi ultimi contrassegnati da un'icona). */}
             {dropdownSlot !== null && slots[dropdownSlot] && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownSlot(null)} />
@@ -313,25 +430,29 @@ export function FormationBuilder({
                 >
                   {(() => {
                     const ruoloSlot = slots[dropdownSlot].ruolo
-                    const disponibili = panchinaPlayers.filter(p => String(p.ruolo) === ruoloSlot)
+                    const disponibili = [
+                      ...panchinaPlayers.filter(p => String(p.ruolo) === ruoloSlot).map(p => ({ p, fromTribuna: false })),
+                      ...tribunaPlayers.filter(p => String(p.ruolo) === ruoloSlot).map(p => ({ p, fromTribuna: true })),
+                    ]
                     if (disponibili.length === 0) {
                       return (
                         <p className="px-3 py-2 text-xs text-slate-500 whitespace-nowrap">
-                          Nessun {ROLE_LABEL[ruoloSlot]} disponibile in panchina
+                          Nessun {ROLE_LABEL[ruoloSlot]} disponibile
                         </p>
                       )
                     }
-                    return disponibili.map(p => (
+                    return disponibili.map(({ p, fromTribuna }) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => { placePlayer(p.id, dropdownSlot); setDropdownSlot(null) }}
                         className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors whitespace-nowrap"
                       >
-                        <span className={`stat-pill ${
-                          p.ruolo == 1 ? 'badge-role-p' : p.ruolo == 2 ? 'badge-role-d' : p.ruolo == 3 ? 'badge-role-c' : 'badge-role-a'
-                        }`}>{ROLE_LABEL[String(p.ruolo)]}</span>
-                        {p.descrizione}
+                        <span className={`stat-pill ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
+                        <span className="flex-1 truncate">{p.descrizione}</span>
+                        {fromTribuna && (
+                          <Armchair className="w-3 h-3 text-slate-500 flex-shrink-0" aria-label="In tribuna" />
+                        )}
                       </button>
                     ))
                   })()}
@@ -357,21 +478,37 @@ export function FormationBuilder({
             <h3 className="text-sm font-semibold text-slate-300">Panchina</h3>
             <span className="text-[10px] text-slate-600 font-mono">{panchinaPlayers.length} giocatori</span>
           </div>
-          <div className="p-2 space-y-1 overflow-y-auto max-h-[520px]">
+          <div
+            className="p-2 space-y-1 overflow-y-auto max-h-[420px] lg:max-h-[500px]"
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault()
+              const player = resolveDraggedPlayer(e)
+              if (player) moveToList(player.id, 'panchina')
+              setDraggedBenchIdx(null)
+              setDraggedTribunaIdx(null)
+              setDraggingId(null)
+            }}
+          >
             {panchinaPlayers.length === 0 && (
               <p className="text-xs text-slate-600 px-2 py-4 text-center">Nessun giocatore in panchina</p>
             )}
             {panchinaPlayers.map((p, idx) => (
-              <div
+              <RosterRow
                 key={p.id}
-                draggable={!readOnly}
+                player={p}
+                index={idx}
+                total={panchinaPlayers.length}
+                selected={selectedId === p.id}
+                dragged={draggedBenchIdx === idx}
+                readOnly={readOnly}
                 onDragStart={e => {
                   e.dataTransfer.setData('text/plain', String(p.id))
                   setDraggedBenchIdx(idx)
                   setDraggingId(p.id)
                   setDropdownSlot(null)
                 }}
-                onDragOver={e => {
+                onDragOverSwap={e => {
                   e.preventDefault()
                   if (draggedBenchIdx === null || draggedBenchIdx === idx) return
                   // Riordino "live": mentre trascino sopra un elemento, lo
@@ -380,49 +517,82 @@ export function FormationBuilder({
                   movePanchina(draggedBenchIdx, idx)
                   setDraggedBenchIdx(idx)
                 }}
-                onDrop={e => e.preventDefault()}
                 onDragEnd={() => { setDraggedBenchIdx(null); setDraggingId(null) }}
-                onClick={() => handleBenchClick(p.id)}
-                className={`flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors border
-                  ${selectedId === p.id ? 'border-grass-500/50 bg-grass-500/10' : 'border-transparent hover:bg-white/[0.03]'}
-                  ${draggedBenchIdx === idx ? 'opacity-50' : ''}`}
-              >
-                {!readOnly && <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />}
-                <span className="text-[9px] font-mono w-4 text-slate-600 flex-shrink-0">{idx + 1}</span>
-                <span className={`stat-pill ${
-                  p.ruolo == 1 ? 'badge-role-p' : p.ruolo == 2 ? 'badge-role-d' : p.ruolo == 3 ? 'badge-role-c' : 'badge-role-a'
-                }`}>{ROLE_LABEL[String(p.ruolo)]}</span>
-                <span className="text-sm text-slate-300 truncate flex-1">{p.descrizione}</span>
-
-                {!readOnly && (
-                  <div className="flex flex-col -my-1 flex-shrink-0">
-                    <button
-                      type="button"
-                      title="Sposta su"
-                      disabled={idx === 0}
-                      onClick={e => { e.stopPropagation(); movePanchina(idx, idx - 1) }}
-                      className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
-                    >
-                      <ChevronUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Sposta giù"
-                      disabled={idx === panchinaPlayers.length - 1}
-                      onClick={e => { e.stopPropagation(); movePanchina(idx, idx + 1) }}
-                      className="text-slate-600 hover:text-slate-300 disabled:opacity-20 disabled:hover:text-slate-600"
-                    >
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+                onClick={() => handleListClick(p.id)}
+                onMoveUp={() => movePanchina(idx, idx - 1)}
+                onMoveDown={() => movePanchina(idx, idx + 1)}
+                onMoveOther={() => moveToList(p.id, 'tribuna')}
+                moveOtherIcon={ArrowRight}
+                moveOtherTitle="Sposta in tribuna"
+              />
             ))}
           </div>
           <p className="text-[10px] text-slate-600 px-3 py-2 border-t border-white/5">
             Trascina un giocatore in campo, selezionalo con un click, oppure clicca direttamente
-            su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo.
-            Trascina un giocatore su un altro per riordinare la panchina.
+            su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo (anche dalla tribuna).
+            Trascina un giocatore su un altro per riordinare la panchina, o sulla tribuna per escluderlo.
+          </p>
+        </div>
+
+        {/* Tribuna: giocatori esclusi sia dal campo sia dalla panchina */}
+        <div className="card overflow-hidden flex flex-col">
+          <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-1.5">
+              <Armchair className="w-3.5 h-3.5 text-slate-500" /> Tribuna
+            </h3>
+            <span className="text-[10px] text-slate-600 font-mono">{tribunaPlayers.length} giocatori</span>
+          </div>
+          <div
+            className="p-2 space-y-1 overflow-y-auto max-h-[420px] lg:max-h-[500px]"
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault()
+              const player = resolveDraggedPlayer(e)
+              if (player) moveToList(player.id, 'tribuna')
+              setDraggedBenchIdx(null)
+              setDraggedTribunaIdx(null)
+              setDraggingId(null)
+            }}
+          >
+            {tribunaPlayers.length === 0 && (
+              <p className="text-xs text-slate-600 px-2 py-4 text-center">
+                Nessun giocatore in tribuna. Trascina qui chi non vuoi schierare né tenere in panchina.
+              </p>
+            )}
+            {tribunaPlayers.map((p, idx) => (
+              <RosterRow
+                key={p.id}
+                player={p}
+                index={idx}
+                total={tribunaPlayers.length}
+                selected={selectedId === p.id}
+                dragged={draggedTribunaIdx === idx}
+                readOnly={readOnly}
+                onDragStart={e => {
+                  e.dataTransfer.setData('text/plain', String(p.id))
+                  setDraggedTribunaIdx(idx)
+                  setDraggingId(p.id)
+                  setDropdownSlot(null)
+                }}
+                onDragOverSwap={e => {
+                  e.preventDefault()
+                  if (draggedTribunaIdx === null || draggedTribunaIdx === idx) return
+                  moveTribuna(draggedTribunaIdx, idx)
+                  setDraggedTribunaIdx(idx)
+                }}
+                onDragEnd={() => { setDraggedTribunaIdx(null); setDraggingId(null) }}
+                onClick={() => handleListClick(p.id)}
+                onMoveUp={() => moveTribuna(idx, idx - 1)}
+                onMoveDown={() => moveTribuna(idx, idx + 1)}
+                onMoveOther={() => moveToList(p.id, 'panchina')}
+                moveOtherIcon={ArrowLeft}
+                moveOtherTitle="Richiama in panchina"
+              />
+            ))}
+          </div>
+          <p className="text-[10px] text-slate-600 px-3 py-2 border-t border-white/5">
+            I giocatori qui non sono considerati né titolari né disponibili in panchina.
+            Trascinali (o usa la freccia) per richiamarli in panchina quando vuoi.
           </p>
         </div>
       </div>
@@ -430,7 +600,12 @@ export function FormationBuilder({
       {!readOnly && (
         <button
           type="button"
-          onClick={() => { commit(slots.map(() => null), rosa.map(p => p.id)); setDropdownSlot(null) }}
+          onClick={() => {
+            // Rimanda in panchina solo chi era in campo: la tribuna non
+            // viene toccata, resta esclusa come l'utente l'ha impostata.
+            commit(slots.map(() => null), [...titolariIds, ...panchinaIds], tribunaIds)
+            setDropdownSlot(null)
+          }}
           className="btn-ghost text-xs"
         >
           <RotateCcw className="w-3.5 h-3.5" /> Svuota il campo

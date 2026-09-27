@@ -70,7 +70,7 @@ function PitchSlot({
 // trascinabili/riordinabili con lo stesso comportamento; cambia solo la
 // provenienza dei dati e l'azione rapida per spostarsi nell'altro elenco.
 function RosterRow({
-  player, index, total, selected, dragged, readOnly,
+  player, index, total, displayNumber, selected, dragged, readOnly,
   onDragStart, onDragOverSwap, onDragEnd, onClick,
   onMoveUp, onMoveDown, onMoveOther, moveOtherIcon: MoveOtherIcon, moveOtherTitle,
 }) {
@@ -87,7 +87,7 @@ function RosterRow({
         ${dragged ? 'opacity-50' : ''}`}
     >
       {!readOnly && <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />}
-      <span className="text-[9px] font-mono w-4 text-slate-600 flex-shrink-0">{index + 1}</span>
+      <span className="text-[9px] font-mono w-5 text-slate-600 flex-shrink-0">{displayNumber}</span>
       <span className={`stat-pill ${ROLE_PILL_CLASS[player.ruolo] ?? ''}`}>{ROLE_LABEL[String(player.ruolo)]}</span>
       <span className="text-sm text-slate-300 truncate flex-1">{player.descrizione}</span>
 
@@ -540,6 +540,7 @@ export function FormationBuilder({
                 player={p}
                 index={idx}
                 total={panchinaPlayers.length}
+                displayNumber={12 + idx}
                 selected={selectedId === p.id}
                 dragged={draggedBenchIdx === idx}
                 readOnly={readOnly}
@@ -607,6 +608,7 @@ export function FormationBuilder({
                 player={p}
                 index={idx}
                 total={tribunaPlayers.length}
+                displayNumber={12 + panchinaPlayers.length + idx}
                 selected={selectedId === p.id}
                 dragged={draggedTribunaIdx === idx}
                 readOnly={readOnly}

@@ -89,6 +89,10 @@ export const getGenerale = (stagione) => get('generale.php', { stagione })
 
 export const getCalendario = (stagione) => get('calendario.php', { stagione })
 
+// Giornata di riferimento per l'inserimento delle formazioni: la prima
+// giornata successiva all'ultima giornata già chiusa della stagione.
+export const getGiornataCorrente = (stagione) => get('giornata_corrente.php', { stagione })
+
 // ── Squadre ──────────────────────────────────────────────────
 
 export const getSquadre = (stagione)      => get('squadre.php', { stagione })

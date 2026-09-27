@@ -265,7 +265,47 @@ export function FormationBuilder({
   function handleListClick(id) {
     if (readOnly) return
     setDropdownSlot(null)
-    setSelectedId(cur => (cur === id ? null : id))
+
+    if (!selectedId) {
+      setSelectedId(id)
+      return
+    }
+    if (selectedId === id) {
+      setSelectedId(null)
+      return
+    }
+
+    // Se il giocatore selezionato e quello appena cliccato si trovano
+    // nello stesso elenco (entrambi in panchina, o entrambi in tribuna),
+    // un secondo click li scambia di posizione invece di limitarsi a
+    // spostare la selezione: è il modo per scambiare due giocatori in
+    // panchina (o in tribuna) con un semplice click, senza drag&drop.
+    if (panchinaIds.includes(selectedId) && panchinaIds.includes(id)) {
+      swapInList(panchinaIds, selectedId, id, arr => onChange?.(titolariIds, arr, tribunaIds))
+      setSelectedId(null)
+      return
+    }
+    if (tribunaIds.includes(selectedId) && tribunaIds.includes(id)) {
+      swapInList(tribunaIds, selectedId, id, arr => onChange?.(titolariIds, panchinaIds, arr))
+      setSelectedId(null)
+      return
+    }
+
+    // Provenienze diverse (es. campo/panchina/tribuna miste): nessuno
+    // scambio univoco possibile, la selezione passa semplicemente al
+    // giocatore appena cliccato.
+    setSelectedId(id)
+  }
+
+  // Scambia di posizione due elementi di uno stesso elenco (per id) e ne
+  // notifica il nuovo ordine tramite `apply`.
+  function swapInList(list, idA, idB, apply) {
+    const arr = [...list]
+    const iA = arr.indexOf(idA)
+    const iB = arr.indexOf(idB)
+    if (iA === -1 || iB === -1) return
+    ;[arr[iA], arr[iB]] = [arr[iB], arr[iA]]
+    apply(arr)
   }
 
   // ── Sposta un giocatore (da campo, panchina o tribuna) nell'elenco
@@ -467,7 +507,8 @@ export function FormationBuilder({
           )}
           {selectedId && (
             <p className="text-[11px] text-grass-400 mt-2">
-              Giocatore selezionato: {byId[selectedId]?.descrizione}. Le posizioni compatibili sono evidenziate: clicca uno slot per posizionarlo.
+              Giocatore selezionato: {byId[selectedId]?.descrizione}. Le posizioni compatibili in campo sono evidenziate:
+              clicca uno slot per posizionarlo, oppure un altro giocatore nello stesso elenco per scambiarli di posto.
             </p>
           )}
         </div>
@@ -531,6 +572,7 @@ export function FormationBuilder({
             Trascina un giocatore in campo, selezionalo con un click, oppure clicca direttamente
             su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo (anche dalla tribuna).
             Trascina un giocatore su un altro per riordinare la panchina, o sulla tribuna per escluderlo.
+            Puoi anche selezionarne uno con un click e poi cliccarne un altro in panchina per scambiarli.
           </p>
         </div>
 

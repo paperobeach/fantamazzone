@@ -92,9 +92,10 @@ export default function Formazione() {
   const [panchina, setPanchina] = useState([])
   const [tribuna, setTribuna]   = useState([])
 
-  const [saving, setSaving]         = useState(false)
-  const [saveError, setSaveError]   = useState(null)
-  const [justSaved, setJustSaved]   = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [saveError, setSaveError]       = useState(null)
+  const [justSaved, setJustSaved]       = useState(false)
+  const [emailInviata, setEmailInviata] = useState(false)
 
   // ── Inizializza/ricarica lo stato locale quando arrivano rosa e
   //    formazione salvata (per la giornata di riferimento corrente) ──
@@ -105,6 +106,7 @@ export default function Formazione() {
     setSaving(false)
     setSaveError(null)
     setJustSaved(false)
+    setEmailInviata(false)
 
     if (!Array.isArray(formazioneSalvata) || formazioneSalvata.length === 0) {
       // Nessuna formazione salvata per questa giornata: si riparte da zero.
@@ -157,11 +159,11 @@ export default function Formazione() {
   // "salvata" e l'eventuale errore precedente.
   function handleFormationChange(t, p, tr) {
     setTitolari(t); setPanchina(p); setTribuna(tr)
-    setJustSaved(false); setSaveError(null)
+    setJustSaved(false); setEmailInviata(false); setSaveError(null)
   }
   function handleModuloChange(m) {
     setModulo(m)
-    setJustSaved(false); setSaveError(null)
+    setJustSaved(false); setEmailInviata(false); setSaveError(null)
   }
 
   // Costruisce il payload per formazioni.php, un elemento per ciascun
@@ -195,7 +197,8 @@ export default function Formazione() {
     setSaving(true)
     setSaveError(null)
     try {
-      await saveFormazione(ultimaStagione, giornata, idSquadra, buildGiocatoriPayload())
+      const res = await saveFormazione(ultimaStagione, giornata, idSquadra, buildGiocatoriPayload())
+      setEmailInviata(!!res?.email_inviata)
       setJustSaved(true)
     } catch (e) {
       setSaveError(e.message ?? 'Errore durante il salvataggio')
@@ -292,6 +295,9 @@ export default function Formazione() {
             {justSaved && (
               <p className="flex items-center gap-1.5 text-xs text-grass-400 mb-3">
                 <CheckCircle2 className="w-3.5 h-3.5" /> Formazione salvata per la giornata {giornata}.
+                {emailInviata
+                  ? ' Email di conferma inviata.'
+                  : ' (nessuna email di conferma inviata: indirizzo non configurato)'}
               </p>
             )}
             {saveError && (

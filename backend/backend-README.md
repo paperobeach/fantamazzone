@@ -24,6 +24,7 @@
     ├── kulovic.php
     ├── champions.php
     ├── formazioni.php
+    ├── mailer.php
     ├── sistema.php
     ├── penalita.php
     └── admin/
@@ -83,7 +84,7 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 
 | Endpoint | Body | Descrizione |
 |---|---|---|
-| `api/formazioni.php` | `stagione, giornata, id_squadra, giocatori[]` | Inserisce formazione |
+| `api/formazioni.php` | `stagione, giornata, id_squadra, giocatori[]` | Inserisce formazione. Se la formazione salvata è completa (11 titolari), invia una email di conferma alla squadra (destinatario letto da `NEW_ALLENATORI.email`) e risponde con `{ ok, email_inviata }` |
 
 ### Admin — aggiornamenti (POST)
 
@@ -150,3 +151,22 @@ $ok = ($utente["PASSWORD"] === $pass);
 // con:
 $ok = password_verify($pass, $utente["PASSWORD"]);
 ```
+
+---
+
+## Email di conferma formazione
+
+Quando una squadra salva una formazione completa (11 titolari), `api/formazioni.php`
+invia una email di conferma tramite `api/mailer.php` (usa la funzione nativa
+`mail()` di PHP, nessuna libreria esterna).
+
+Prima di usarlo in produzione:
+
+1. Eseguire la migrazione `migrazione_email_allenatori.sql` (aggiunge la colonna
+   `email` a `NEW_ALLENATORI`) e valorizzare l'email di ciascun allenatore dalla
+   pagina "Inizializzazione stagione" (colonna "Email allenatore", sempre
+   modificabile, anche a formazioni già presenti).
+2. Verificare che l'hosting consenta l'invio con `mail()` (su Altervista può
+   richiedere l'attivazione/verifica del dominio); se il destinatario è
+   assente o non valido, o se `mail()` fallisce, l'invio viene semplicemente
+   saltato — il salvataggio della formazione non viene mai bloccato da questo.

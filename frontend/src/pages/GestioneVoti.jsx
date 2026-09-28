@@ -1,0 +1,296 @@
+import { useState, useRef, useEffect } from 'react'
+import { useApp } from '../context/AppContext'
+import { useFetch } from '../hooks/useFetch'
+import { getVotiSerieAInfo, adminCaricaVotiSerieA } from '../api/client'
+import { PageHeader, Spinner, ErrorState } from '../components/ui'
+import {
+  UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Lock, CalendarCheck,
+} from 'lucide-react'
+
+const RUOLI = [
+  { key: 'P',   label: 'Portieri' },
+  { key: 'D',   label: 'Difensori' },
+  { key: 'C',   label: 'Centrocampisti' },
+  { key: 'A',   label: 'Attaccanti' },
+  { key: 'ALL', label: 'Allenatori' },
+]
+
+export default function GestioneVoti() {
+  const { stagione } = useApp()
+
+  const { data: info, loading: loadingInfo, error: errorInfo, refetch } = useFetch(
+    stagione ? () => getVotiSerieAInfo(stagione) : null,
+    [stagione],
+  )
+
+  // Giornata su cui caricare i voti: di default la giornata corrente
+  // (ultima non chiusa), modificabile dall'utente.
+  const [giornata, setGiornata] = useState(null)
+  useEffect(() => {
+    if (info?.giornata_corrente) setGiornata(info.giornata_corrente)
+  }, [info?.stagione, info?.giornata_corrente])
+
+  const [file,     setFile]     = useState(null)
+  const [loading,  setLoading]  = useState(false)
+  const [errors,   setErrors]   = useState([])
+  const [mismatch, setMismatch] = useState(null)   // giornata indicata nel file
+  const [result,   setResult]   = useState(null)
+  const fileInputRef = useRef(null)
+
+  const resetFile = () => {
+    setFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const resetFeedback = () => { setErrors([]); setMismatch(null); setResult(null) }
+
+  const handleFileChange = (e) => {
+    resetFeedback()
+    setFile(e.target.files?.[0] ?? null)
+  }
+
+  const handleGiornataChange = (e) => {
+    resetFeedback()
+    setGiornata(Number(e.target.value))
+  }
+
+  const upload = async (forza = false) => {
+    resetFeedback()
+    if (!file) {
+      setErrors([{ riga: 0, campo: 'file', messaggio: 'Seleziona un file Excel (.xlsx)' }])
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await adminCaricaVotiSerieA(Number(stagione), giornata, file, forza)
+      setResult(res)
+      resetFile()
+      refetch()
+    } catch (err) {
+      if (err.code === 'GIORNATA_MISMATCH') {
+        setMismatch(err.details?.giornata_file ?? '?')
+      } else {
+        // err.details = elenco { riga, campo, messaggio } in caso di VALIDATION_ERROR
+        setErrors(Array.isArray(err.details) ? err.details : [{ riga: 0, campo: '', messaggio: err.message }])
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubmit = (e) => { e.preventDefault(); upload(false) }
+
+  const giornate       = info?.giornate ?? []
+  const giornataInfo   = giornate.find(g => g.giornata === giornata)
+  const isCorrente     = giornata !== null && giornata === info?.giornata_corrente
+  const giaChiusa      = !!giornataInfo?.chiusa
+  const votiPresenti   = giornataInfo?.voti_caricati ?? 0
+
+  return (
+    <div className="animate-fade-up">
+      <PageHeader
+        label="Gestione"
+        title="Gestione voti"
+        subtitle="Carica i voti della Serie A di una giornata e calcola i voti fantacalcio."
+      />
+
+      {/* Fasi del flusso */}
+      <div className="flex flex-wrap gap-3 max-w-2xl mb-6">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gold-500/10 text-gold-400 text-sm font-medium">
+          <span className="w-5 h-5 rounded-full bg-gold-500/20 text-xs flex items-center justify-center">1</span>
+          Caricamento voti Serie A
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] text-slate-600 text-sm">
+          <span className="w-5 h-5 rounded-full bg-white/5 text-xs flex items-center justify-center">2</span>
+          Calcolo voti fantacalcio
+          <span className="text-[10px] text-mono uppercase tracking-widest text-slate-700">a seguire</span>
+        </div>
+      </div>
+
+      {errorInfo ? (
+        <ErrorState message={errorInfo} onRetry={refetch} />
+      ) : loadingInfo || !info ? (
+        <div className="flex justify-center py-16"><Spinner size="lg" /></div>
+      ) : (
+        <>
+          <div className="card p-6 max-w-2xl">
+            <form onSubmit={handleSubmit}>
+              {/* Giornata di riferimento */}
+              <div className="mb-5">
+                <label className="text-xs text-slate-600 mb-1 block">Giornata di riferimento</label>
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={giornata ?? ''}
+                    onChange={handleGiornataChange}
+                    className="fanta-input sm:w-auto"
+                  >
+                    {giornate.map(g => (
+                      <option key={g.giornata} value={g.giornata}>
+                        Giornata {g.giornata}
+                        {g.giornata === info.giornata_corrente ? ' (corrente)' : ''}
+                        {g.chiusa ? ' · chiusa' : ''}
+                        {g.voti_caricati > 0 ? ` · ${g.voti_caricati} voti` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {isCorrente ? (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-grass-400">
+                      <CalendarCheck className="w-3.5 h-3.5" /> Giornata corrente (ultima non chiusa)
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { resetFeedback(); setGiornata(info.giornata_corrente) }}
+                      className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2"
+                    >
+                      Torna alla giornata corrente ({info.giornata_corrente})
+                    </button>
+                  )}
+                </div>
+
+                {giaChiusa && (
+                  <p className="flex items-center gap-1.5 text-xs text-gold-400 mt-2">
+                    <Lock className="w-3.5 h-3.5" /> La giornata {giornata} risulta già chiusa.
+                  </p>
+                )}
+                {votiPresenti > 0 && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Per questa giornata sono già presenti {votiPresenti} voti: un nuovo caricamento li sostituirà.
+                  </p>
+                )}
+              </div>
+
+              {/* File */}
+              <div className="mb-5">
+                <label className="text-xs text-slate-600 mb-1 block">File Excel (sheet "Italia")</label>
+                {!file ? (
+                  <label
+                    htmlFor="file-voti"
+                    className="flex flex-col items-center justify-center gap-2 px-4 py-8 rounded-lg
+                               border border-dashed border-white/15 text-slate-500
+                               hover:border-grass-500/40 hover:text-slate-300 cursor-pointer transition-colors"
+                  >
+                    <UploadCloud className="w-6 h-6" />
+                    <span className="text-sm">Trascina qui il file o clicca per selezionarlo</span>
+                    <span className="text-[10px] text-mono uppercase tracking-widest text-slate-700">Solo .xlsx</span>
+                    <input
+                      id="file-voti"
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-pitch-900 border border-white/10">
+                    <FileSpreadsheet className="w-4 h-4 text-grass-400 flex-shrink-0" />
+                    <span className="text-sm text-slate-300 truncate flex-1">{file.name}</span>
+                    <button type="button" onClick={resetFile} className="p-1 rounded text-slate-600 hover:text-red-400 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button type="submit" disabled={loading || giornata === null} className="btn-primary disabled:opacity-40">
+                {loading
+                  ? <><Spinner size="sm" /> Caricamento in corso...</>
+                  : `Carica voti giornata ${giornata ?? ''}`}
+              </button>
+            </form>
+          </div>
+
+          {/* Giornata nel file diversa da quella selezionata */}
+          {mismatch !== null && (
+            <div className="card p-6 max-w-2xl mt-6">
+              <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">
+                <AlertTriangle className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  Il file si riferisce alla <strong>giornata {mismatch}</strong>, ma hai selezionato la{' '}
+                  <strong>giornata {giornata}</strong>. Nessun dato è stato salvato.
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => upload(true)}
+                  className="btn-primary disabled:opacity-40"
+                >
+                  Carica comunque sulla giornata {giornata}
+                </button>
+                <button type="button" onClick={() => setMismatch(null)} className="text-sm text-slate-500 hover:text-slate-300">
+                  Annulla
+                </button>
+              </div>
+            </div>
+          )}
+
+          {errors.length > 0 && (
+            <div className="card p-6 max-w-2xl mt-6">
+              <div className="mb-4 rounded-lg px-4 py-3 flex gap-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm">
+                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <span>
+                  {errors.length === 1 && !errors[0].riga
+                    ? errors[0].messaggio
+                    : `Il file contiene ${errors.length} errore/i. Nessun dato è stato salvato: correggi il file e ricarica.`}
+                </span>
+              </div>
+              {!(errors.length === 1 && !errors[0].riga) && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
+                        <th className="py-2 pr-4">Riga</th>
+                        <th className="py-2 pr-4">Campo</th>
+                        <th className="py-2">Messaggio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {errors.map((er, idx) => (
+                        <tr key={idx} className="border-t border-white/[0.03]">
+                          <td className="py-2 pr-4 text-slate-500">{er.riga || '-'}</td>
+                          <td className="py-2 pr-4 text-slate-400">{er.campo || '-'}</td>
+                          <td className="py-2 text-slate-300">{er.messaggio}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {result && (
+            <div className="card p-6 max-w-2xl mt-6">
+              <div className="flex items-center gap-2 mb-4 text-green-300">
+                <CheckCircle2 className="w-4 h-4" />
+                <span className="font-medium">
+                  Voti della giornata {result.giornata} caricati ({result.squadre} squadre)
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 text-center">
+                <div>
+                  <p className="text-display text-2xl font-bold text-white">{result.totale}</p>
+                  <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Totale</p>
+                </div>
+                {RUOLI.map(r => (
+                  <div key={r.key}>
+                    <p className="text-display text-2xl font-bold text-grass-400">{result.per_ruolo?.[r.key] ?? 0}</p>
+                    <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">{r.label}</p>
+                  </div>
+                ))}
+              </div>
+              {result.politici > 0 && (
+                <p className="text-xs text-slate-500 mt-4">
+                  {result.politici} voti erano marcati con asterisco (es. 6*): salvati come voto numerico con flag «politico».
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

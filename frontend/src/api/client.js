@@ -203,6 +203,27 @@ export const adminInserimentoRose = (stagione, file) => {
   return postFile('admin/inserimento_rose.php', formData)
 }
 
+// ── Gestione voti (pagina admin) ─────────────────────────────
+// GET  → giornata di riferimento (ultima non chiusa), elenco giornate
+//        del calendario con stato di chiusura e n. di voti Serie A
+//        già caricati.
+// POST → Fase 1: upload del file Excel (sheet "Italia") con i voti
+//        della Serie A per la giornata indicata (tabella
+//        NEW_VOTI_SERIE_A). Con forza=true si carica anche se la
+//        giornata nel titolo del file differisce da quella scelta
+//        (altrimenti errore GIORNATA_MISMATCH).
+export const getVotiSerieAInfo = (stagione) =>
+  get('admin/voti_serie_a.php', { stagione })
+
+export const adminCaricaVotiSerieA = (stagione, giornata, file, forza = false) => {
+  const formData = new FormData()
+  formData.append('stagione', stagione)
+  formData.append('giornata', giornata)
+  if (forza) formData.append('forza', '1')
+  formData.append('file', file)
+  return postFile('admin/voti_serie_a.php', formData)
+}
+
 /**
  * Chiude una giornata ed esegue in sequenza tutti gli aggiornamenti admin.
  * Restituisce un array di { step, ok, error? }

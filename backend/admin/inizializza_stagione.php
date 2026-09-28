@@ -19,14 +19,14 @@
 //     utenza/password/abilitazione (vedi POST).
 //
 // POST { stagione, giornate, righe: [{ ordine, nome, logo, albo,
-//                            allenatore, foto_allenatore,
+//                            allenatore, foto_allenatore, email,
 //                            utenza, password, abilitazione,
 //                            amministratore }] }
 //
 //   Se NON esiste ancora nessuna formazione per la stagione:
 //     Consolida in un'unica chiamata le tre tabelle:
 //       - NEW_SQUADRE     (id, nome, logo, stagione, albo)
-//       - NEW_ALLENATORI  (id, descrizione, id_squadra, logo, stagione)
+//       - NEW_ALLENATORI  (id, descrizione, id_squadra, logo, stagione, email)
 //       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
 //     con cancellazione preventiva per stagione + reinserimento
 //     (operazione ripetibile).
@@ -53,8 +53,10 @@
 //   Se ESISTE già almeno una formazione per la stagione (controllo
 //   ripetuto anche qui lato server, non ci si fida del frontend):
 //     - vengono accettate in scrittura SOLO utenza/password/
-//       abilitazione/amministratore delle righe già esistenti
-//       (aggiornate con UPDATE, non con cancellazione+reinserimento);
+//       abilitazione/amministratore e l'email dell'allenatore delle
+//       righe già esistenti (aggiornate con UPDATE, non con
+//       cancellazione+reinserimento). L'email è infatti SEMPRE
+//       modificabile, in qualsiasi momento della stagione;
 //     - non è possibile aggiungere/rimuovere/rinominare squadre né
 //       cambiarne l'allenatore;
 //     - NON vengono toccati né NEW_CALENDARIO né NEW_CALENDARIO_CHAMP,
@@ -68,6 +70,8 @@
 //   albo            → NEW_SQUADRE.ALBO
 //   allenatore      → NEW_ALLENATORI.DESCRIZIONE
 //   foto_allenatore → NEW_ALLENATORI.LOGO
+//   email           → NEW_ALLENATORI.EMAIL (destinatario della mail di
+//                      conferma formazione; sempre modificabile)
 //   utenza          → NEW_UTENZE.UTENZA
 //   password        → NEW_UTENZE.PASSWORD
 //   abilitazione    → NEW_UTENZE.ABILITAZIONE
@@ -119,13 +123,39 @@ function validation_error(array $errors) {
     exit;
 }
 
+// La colonna NEW_ALLENATORI.email è aggiunta da una migrazione
+// (migrazione_email_allenatori.sql): finché non è stata eseguita, le
+// scritture che la coinvolgono fallirebbero. Si controlla PRIMA di
+// toccare qualsiasi dato, per non cancellare le righe di
+// NEW_ALLENATORI senza poterle poi reinserire (tabelle MyISAM: nessun
+// rollback possibile).
+function colonna_email_presente($conn) {
+    $r = mysqli_query($conn, "SHOW COLUMNS FROM NEW_ALLENATORI LIKE 'email'");
+    return $r && mysqli_num_rows($r) > 0;
+}
+
+// Esegue una query di scrittura e, se fallisce, solleva un'eccezione
+// (gestita dal try/catch del POST) invece di proseguire in silenzio
+// rispondendo "ok" con dati non realmente salvati.
+function esegui($conn, $sql) {
+    $ok = mysqli_query($conn, $sql);
+    if ($ok === false) {
+        throw new RuntimeException(mysqli_error($conn));
+    }
+    return $ok;
+}
+
 // Righe (una per squadra) per una data stagione, con join su
 // allenatori e utenze. Usata sia per la stagione richiesta sia,
 // come fallback, per l'ultima stagione disponibile.
 function righe_per_stagione($conn, $stagione) {
+    // Se la migrazione non è ancora stata eseguita la pagina resta
+    // utilizzabile in lettura (email vuote); è il salvataggio a
+    // segnalare esplicitamente il problema.
+    $colEmail = colonna_email_presente($conn) ? "a.email" : "'' AS email";
     $righe = query_all("
         SELECT s.id AS ordine, s.nome, s.logo, s.albo,
-               a.descrizione AS allenatore, a.logo AS foto_allenatore,
+               a.descrizione AS allenatore, a.logo AS foto_allenatore, $colEmail,
                u.utenza, u.abilitazione, u.amministratore
         FROM NEW_SQUADRE s
         LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
@@ -136,6 +166,7 @@ function righe_per_stagione($conn, $stagione) {
     foreach ($righe as &$r) {
         $r["allenatore"]      = $r["allenatore"] ?? "";
         $r["foto_allenatore"] = $r["foto_allenatore"] ?? "";
+        $r["email"]           = $r["email"] ?? "";
         $r["utenza"]          = $r["utenza"] ?? "";
         $r["abilitazione"]    = $r["abilitazione"] ?? "N";
         $r["amministratore"]  = $r["amministratore"] ?? "N";
@@ -222,6 +253,7 @@ foreach ($righe as $i => $r) {
     $albo            = trim((string) ($r["albo"] ?? ""));
     $allenatore      = trim((string) ($r["allenatore"] ?? ""));
     $foto_allenatore = trim((string) ($r["foto_allenatore"] ?? ""));
+    $email           = trim((string) ($r["email"] ?? ""));
     $utenza          = trim((string) ($r["utenza"] ?? ""));
     $password        = (string) ($r["password"] ?? "");
     $abilitazione    = trim((string) ($r["abilitazione"] ?? ""));
@@ -260,6 +292,17 @@ foreach ($righe as $i => $r) {
         if (mb_strlen($foto_allenatore) > 20) $errors[] = err_field($i, "foto_allenatore", "Massimo 20 caratteri");
     }
 
+    // email allenatore: facoltativa, ma se indicata deve essere valida.
+    // Sempre validata (e sempre modificabile), anche in modalità
+    // "solo utenze".
+    if ($email !== "") {
+        if (mb_strlen($email) > 120) {
+            $errors[] = err_field($i, "email", "Massimo 120 caratteri");
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = err_field($i, "email", "Indirizzo email non valido");
+        }
+    }
+
     // utenza / password / abilitazione: sempre validati, anche in
     // modalità "solo utenze".
     if ($utenza !== "") {
@@ -288,6 +331,7 @@ foreach ($righe as $i => $r) {
     $rigaData[] = [
         "ordine" => $ordine, "nome" => $nome, "logo" => $logo, "albo" => $albo,
         "allenatore" => $allenatore, "foto_allenatore" => $foto_allenatore,
+        "email" => $email,
         "utenza" => $utenza, "password" => $password, "abilitazione" => $abilitazione,
         "amministratore" => $amministratore,
     ];
@@ -317,19 +361,33 @@ if (!empty($errors)) {
     validation_error($errors);
 }
 
+if (!colonna_email_presente($conn)) {
+    api_error("La colonna 'email' non esiste ancora su NEW_ALLENATORI: eseguire prima la migrazione migrazione_email_allenatori.sql. Nessun dato è stato modificato.", 500);
+}
+
 mysqli_begin_transaction($conn);
 try {
     if ($formazionePresente) {
-        // ---- Modalità limitata: solo utenza/password/abilitazione ----
+        // ---- Modalità limitata: solo utenza/password/abilitazione/
+        //      amministratore + email allenatore ----
         foreach ($rigaData as $r) {
             $utenza_esc = mysqli_real_escape_string($conn, $r["utenza"]);
             $pass_esc   = mysqli_real_escape_string($conn, $r["password"]);
             $abil_esc   = mysqli_real_escape_string($conn, $r["abilitazione"]);
             $admin_esc  = mysqli_real_escape_string($conn, $r["amministratore"]);
+            $email_esc  = mysqli_real_escape_string($conn, $r["email"]);
 
-            mysqli_query($conn, "UPDATE NEW_UTENZE
+            esegui($conn, "UPDATE NEW_UTENZE
                 SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
                 WHERE id = {$r['ordine']} AND stagione = $stagione");
+
+            // L'email dell'allenatore è modificabile anche a formazioni
+            // già presenti (non altera squadra/allenatore).
+            // Upsert: se per la squadra non esiste ancora la riga
+            // allenatore, viene creata (vuota) così l'email non va persa.
+            esegui($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione, email)
+                VALUES ({$r['ordine']}, '', {$r['ordine']}, '', $stagione, '$email_esc')
+                ON DUPLICATE KEY UPDATE email = VALUES(email)");
         }
 
         mysqli_commit($conn);
@@ -344,9 +402,9 @@ try {
     }
 
     // ---- Modalità completa: squadre + allenatori + utenze ----
-    mysqli_query($conn, "DELETE FROM NEW_SQUADRE    WHERE stagione = $stagione");
-    mysqli_query($conn, "DELETE FROM NEW_ALLENATORI WHERE stagione = $stagione");
-    mysqli_query($conn, "DELETE FROM NEW_UTENZE     WHERE stagione = $stagione");
+    esegui($conn, "DELETE FROM NEW_SQUADRE    WHERE stagione = $stagione");
+    esegui($conn, "DELETE FROM NEW_ALLENATORI WHERE stagione = $stagione");
+    esegui($conn, "DELETE FROM NEW_UTENZE     WHERE stagione = $stagione");
 
     foreach ($rigaData as $r) {
         $nome_esc       = mysqli_real_escape_string($conn, $r["nome"]);
@@ -354,6 +412,7 @@ try {
         $albo_esc       = mysqli_real_escape_string($conn, $r["albo"]);
         $allenatore_esc = mysqli_real_escape_string($conn, $r["allenatore"]);
         $foto_all_esc   = mysqli_real_escape_string($conn, $r["foto_allenatore"]);
+        $email_esc      = mysqli_real_escape_string($conn, $r["email"]);
         $utenza_esc     = mysqli_real_escape_string($conn, $r["utenza"]);
         $pass_esc       = mysqli_real_escape_string($conn, $r["password"]);
         $abil_esc       = mysqli_real_escape_string($conn, $r["abilitazione"]);
@@ -365,13 +424,13 @@ try {
         $utenza_descrizione     = $r["allenatore"] !== "" ? $r["allenatore"] : $r["nome"];
         $utenza_descrizione_esc = mysqli_real_escape_string($conn, $utenza_descrizione);
 
-        mysqli_query($conn, "INSERT INTO NEW_SQUADRE (id, nome, logo, stagione, albo)
+        esegui($conn, "INSERT INTO NEW_SQUADRE (id, nome, logo, stagione, albo)
             VALUES ({$r['ordine']}, '$nome_esc', '$logo_esc', $stagione, '$albo_esc')");
 
-        mysqli_query($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione)
-            VALUES ({$r['ordine']}, '$allenatore_esc', {$r['ordine']}, '$foto_all_esc', $stagione)");
+        esegui($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione, email)
+            VALUES ({$r['ordine']}, '$allenatore_esc', {$r['ordine']}, '$foto_all_esc', $stagione, '$email_esc')");
 
-        mysqli_query($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
+        esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
             VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc')");
     }
 
@@ -380,14 +439,14 @@ try {
     if ($giornate !== null) {
         $stagionePrecedente = $stagione - 1;
 
-        mysqli_query($conn, "DELETE FROM NEW_CALENDARIO WHERE stagione = $stagione");
-        mysqli_query($conn, "INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
+        esegui($conn, "DELETE FROM NEW_CALENDARIO WHERE stagione = $stagione");
+        esegui($conn, "INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
             SELECT giornata, posizione, squadra, $stagione
             FROM NEW_CALENDARIO
             WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
 
-        mysqli_query($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
-        mysqli_query($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
+        esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
+        esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
             SELECT $stagione, giornata, giornata_camp, posizione, squadra, girone
             FROM NEW_CALENDARIO_CHAMP
             WHERE stagione = $stagionePrecedente");

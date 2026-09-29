@@ -203,6 +203,20 @@ export const adminInserimentoRose = (stagione, file) => {
   return postFile('admin/inserimento_rose.php', formData)
 }
 
+// ── Gestisci regole di calcolo (pagina admin) ────────────────
+// Configurazione usata dal motore di calcolo dei voti fantacalcio
+// (bonus/malus del giocatore + parametri degli algoritmi di
+// modificatore difesa/centrocampo/attacco). Se la stagione non ha
+// ancora una configurazione, il GET la crea da solo (ereditandola
+// dalla stagione precedente o usando i valori di default) e la
+// restituisce già pronta.
+export const getRegoleCalcolo = (stagione) =>
+  get('admin/regole_calcolo.php', { stagione })
+
+// payload: { bonus?: [{codice, etichetta, valore, ordine, attivo}], algoritmi?: { DIFESA|CENTROCAMPO|ATTACCO: {algoritmo, parametri, descrizione} } }
+export const adminSalvaRegoleCalcolo = (stagione, payload) =>
+  post('admin/regole_calcolo.php', { stagione, ...payload })
+
 // ── Gestione voti (pagina admin) ─────────────────────────────
 // GET  → giornata di riferimento (ultima non chiusa), elenco giornate
 //        del calendario con stato di chiusura e n. di voti Serie A

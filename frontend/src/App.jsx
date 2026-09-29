@@ -23,6 +23,7 @@ const Admin       = lazy(() => import('./pages/Admin'))
 const InserimentoRose = lazy(() => import('./pages/InserimentoRose'))
 const InizializzazioneStagione = lazy(() => import('./pages/InizializzazioneStagione'))
 const GestioneVoti = lazy(() => import('./pages/GestioneVoti'))
+const GestisciRegoleCalcolo = lazy(() => import('./pages/GestisciRegoleCalcolo'))
 
 function PageLoader() {
   return (
@@ -109,6 +110,9 @@ function AppShell() {
                   } />
                   <Route path="/gestione-voti" element={
                     <AdminRoute><GestioneVoti /></AdminRoute>
+                  } />
+                  <Route path="/regole-calcolo" element={
+                    <AdminRoute><GestisciRegoleCalcolo /></AdminRoute>
                   } />
                   <Route path="*"            element={<Navigate to="/" replace />} />
                 </Routes>

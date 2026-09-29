@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Zap, Shield, LogOut,
-  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck
+  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal
 } from 'lucide-react'
 
 const NAV = [
@@ -30,6 +30,7 @@ const ADMIN_NAV = [
   { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
   { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializzazione stagione' },
   { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
+  { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
 ]
 
 export default function Sidebar({ open = false, onClose = () => {} }) {

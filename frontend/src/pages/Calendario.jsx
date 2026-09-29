@@ -137,16 +137,23 @@ export default function Calendario() {
 
   if (loading) return <LoadingState label="Caricamento calendario..." />
   if (error)   return <ErrorState message={error} onRetry={refetch} />
+  // Difesa: se l'API risponde con qualcosa che non è un array di giornate
+  // (es. stringa/oggetto per un errore lato PHP) mostriamo un errore
+  // leggibile invece di mandare in crash il rendering.
+  if (data && !Array.isArray(data)) {
+    console.error('calendario.php: risposta inattesa', data)
+    return <ErrorState message="Risposta non valida dal server (calendario.php)" onRetry={refetch} />
+  }
   if (!data?.length) return <EmptyState label="Nessun dato per questa stagione" />
 
   // Inizializza sull'ultima giornata giocata
   const lastPlayed = data.reduce((acc, g, i) =>
-    g.partite.some(p => p.risultato !== null) ? i : acc, 0)
+    (g.partite ?? []).some(p => p.risultato !== null) ? i : acc, 0)
 
   const idx     = giornataIdx === 0 ? lastPlayed : giornataIdx - 1
   const cur     = data[idx]
   const total   = data.length
-  const played  = data.filter(g => g.partite.every(p => p.risultato !== null)).length
+  const played  = data.filter(g => (g.partite ?? []).every(p => p.risultato !== null)).length
 
   const prev = () => setGiornataIdx(i => Math.max(1, (i === 0 ? lastPlayed + 1 : i) - 1))
   const next = () => setGiornataIdx(i => Math.min(total, (i === 0 ? lastPlayed + 1 : i) + 1))
@@ -189,7 +196,7 @@ export default function Calendario() {
       {/* Giornate rapide */}
       <div className="flex flex-wrap gap-1.5 mb-6">
         {data.map((g, i) => {
-          const done = g.partite.every(p => p.risultato !== null)
+          const done = (g.partite ?? []).every(p => p.risultato !== null)
           const active = i === idx
           return (
             <button

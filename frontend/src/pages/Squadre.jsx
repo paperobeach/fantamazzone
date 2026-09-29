@@ -16,6 +16,11 @@ export default function Squadre() {
 
   if (loading) return <LoadingState label="Caricamento squadre..." />
   if (error)   return <ErrorState message={error} onRetry={refetch} />
+  // Difesa: risposta non-array (errore lato PHP) -> messaggio leggibile
+  if (data && !Array.isArray(data)) {
+    console.error('squadre.php: risposta inattesa', data)
+    return <ErrorState message="Risposta non valida dal server (squadre.php)" onRetry={refetch} />
+  }
   if (!data?.length) return <EmptyState label="Nessuna squadra trovata" />
 
   return (
@@ -41,7 +46,7 @@ export default function Squadre() {
                 <h3 className="font-semibold text-slate-200 group-hover:text-grass-400 transition-colors">
                   {sq.nome}
                 </h3>
-                <p className="text-xs text-slate-600">{sq.allenatore}</p>
+                <p className="text-xs text-slate-600">{typeof sq.allenatore === 'string' ? sq.allenatore : ''}</p>
               </div>
             </div>
 

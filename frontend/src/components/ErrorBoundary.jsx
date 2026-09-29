@@ -20,11 +20,11 @@ import { AlertTriangle, RefreshCw } from 'lucide-react'
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, error: null }
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
   }
 
   componentDidCatch(error, info) {
@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false })
+    this.setState({ hasError: false, error: null })
     this.props.onReset?.()
   }
 
@@ -50,6 +50,11 @@ export class ErrorBoundary extends Component {
               <p className="text-sm text-slate-600 mt-1">
                 Prova a ricaricare la pagina. Se il problema persiste, segnalalo all'amministratore.
               </p>
+              {this.state.error?.message && (
+                <p className="text-xs font-mono text-red-400/70 mt-3 max-w-xl break-words">
+                  Dettaglio tecnico: {String(this.state.error.message)}
+                </p>
+              )}
             </div>
             <button onClick={this.handleReset} className="btn-ghost text-xs">
               <RefreshCw className="w-3.5 h-3.5" /> Riprova

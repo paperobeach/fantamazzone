@@ -78,9 +78,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
           AND f.GIORNATA    = $giornata
         ORDER BY f.MAGLIA");
 
-    $email_inviata = invia_mail_formazione_se_completa($stagione, $giornata, $id_squadra, $salvata);
+    $esito_email = invia_mail_formazione_se_completa($stagione, $giornata, $id_squadra, $salvata);
 
-    api_success(["ok" => true, "email_inviata" => $email_inviata]);
+    api_success([
+        "ok"            => true,
+        "email_inviata" => $esito_email["ok"],
+        "motivo_email"  => $esito_email["motivo"], // null se inviata; altrimenti spiega il perché
+    ]);
 
 } else {
 
@@ -103,8 +107,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 
 // ── Invio email di conferma ─────────────────────────────────────
-// Restituisce true/false (mai un errore): un fallimento dell'invio non
-// deve mai far fallire il salvataggio della formazione che lo precede.
+// Restituisce ["ok" => bool, "motivo" => null|stringa] (mai un errore):
+// un fallimento dell'invio non deve mai far fallire il salvataggio
+// della formazione che lo precede, ma il motivo va sempre riportato
+// esplicitamente (vedi mailer.php per l'elenco dei motivi possibili).
 function invia_mail_formazione_se_completa($stagione, $giornata, $id_squadra, $righe) {
     $ruolo_label = [1 => "Portiere", 2 => "Difensore", 3 => "Centrocampista", 4 => "Attaccante"];
 
@@ -115,7 +121,7 @@ function invia_mail_formazione_se_completa($stagione, $giornata, $id_squadra, $r
     $maglie_titolari = array_map(fn($r) => (int)$r["maglia"], $titolari);
     sort($maglie_titolari);
     if ($maglie_titolari !== range(1, 11)) {
-        return false; // formazione ancora incompleta: nessuna mail
+        return ["ok" => false, "motivo" => "formazione_incompleta"];
     }
 
     // Nome dalla squadra, email dall'allenatore associato (stesso join
@@ -124,7 +130,9 @@ function invia_mail_formazione_se_completa($stagione, $giornata, $id_squadra, $r
                           FROM NEW_SQUADRE s
                           LEFT JOIN NEW_ALLENATORI a ON a.id_squadra = s.id AND a.stagione = s.stagione
                           WHERE s.id = $id_squadra AND s.stagione = $stagione");
-    if (!$squadra) return false;
+    if (!$squadra) {
+        return ["ok" => false, "motivo" => "squadra_non_trovata"];
+    }
 
     $nome_squadra = $squadra["nome"] ?? "";
 

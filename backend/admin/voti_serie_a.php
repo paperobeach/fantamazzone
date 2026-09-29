@@ -335,15 +335,16 @@ foreach ($rows as [$nr, $r]) {
         $errors[] = err_row($nr, 'nome', 'Campo obbligatorio');
     }
 
-    // Voto: numerico; un asterisco finale (es. "6*") viene tolto e segnalato
-    $politico = 0;
+    // Voto: un asterisco (es. "6*") indica un giocatore entrato ma senza
+    // voto: viene salvato con voto NULL e SV = 'Y' (il numero è ignorato).
+    // Altrimenti il voto deve essere numerico da 0 a 10.
+    $sv       = 'N';
     $votoNorm = str_replace(',', '.', $votoRaw);
-    if (substr($votoNorm, -1) === '*') {
-        $politico = 1;
-        $votoNorm = rtrim($votoNorm, '*');
-    }
-    if ($votoNorm === '' || !is_numeric($votoNorm) || (float) $votoNorm < 0 || (float) $votoNorm > 10) {
-        $errors[] = err_row($nr, 'voto', "Valore non valido: \"$votoRaw\" (atteso numero da 0 a 10)");
+    if (strpos($votoNorm, '*') !== false) {
+        $sv       = 'Y';
+        $votoNorm = null;
+    } elseif ($votoNorm === '' || !is_numeric($votoNorm) || (float) $votoNorm < 0 || (float) $votoNorm > 10) {
+        $errors[] = err_row($nr, 'voto', "Valore non valido: \"$votoRaw\" (atteso numero da 0 a 10, oppure con asterisco per SV)");
         $votoNorm = 0;
     }
 
@@ -364,8 +365,8 @@ foreach ($rows as [$nr, $r]) {
         'squadra'      => $squadra,
         'ruolo'        => $ruolo,
         'nome'         => $nome,
-        'voto'         => (float) $votoNorm,
-        'politico'     => $politico,
+        'voto'         => $votoNorm === null ? null : (float) $votoNorm,
+        'sv'           => $sv,
     ] + $stat;
 }
 
@@ -386,24 +387,24 @@ try {
     }
 
     $stmt = mysqli_prepare($conn, "INSERT INTO NEW_VOTI_SERIE_A
-        (stagione, giornata, id_giocatore, squadra, ruolo, nome, voto, politico,
+        (stagione, giornata, id_giocatore, squadra, ruolo, nome, voto, sv,
          gf, gs, rp, rs, rf, au, amm, esp, ass)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     if (!$stmt) throw new Exception(mysqli_error($conn));
 
     $perRuolo = ['P' => 0, 'D' => 0, 'C' => 0, 'A' => 0, 'ALL' => 0];
-    $politici = 0;
+    $senzaVoto = 0;
 
     foreach ($data as $d) {
         mysqli_stmt_bind_param(
-            $stmt, "iiisssd" . str_repeat("i", 10),
+            $stmt, "iiisssds" . str_repeat("i", 9),
             $stagione, $giornata, $d['id_giocatore'], $d['squadra'], $d['ruolo'], $d['nome'],
-            $d['voto'], $d['politico'],
+            $d['voto'], $d['sv'],
             $d['gf'], $d['gs'], $d['rp'], $d['rs'], $d['rf'], $d['au'], $d['amm'], $d['esp'], $d['ass']
         );
         if (!mysqli_stmt_execute($stmt)) throw new Exception(mysqli_stmt_error($stmt));
         $perRuolo[$d['ruolo']]++;
-        $politici += $d['politico'];
+        if ($d['sv'] === 'Y') $senzaVoto++;
     }
     mysqli_stmt_close($stmt);
     mysqli_commit($conn);
@@ -416,7 +417,7 @@ try {
         "totale"        => count($data),
         "squadre"       => count($squadreViste),
         "per_ruolo"     => $perRuolo,
-        "politici"      => $politici,
+        "senza_voto"    => $senzaVoto,
     ]);
 } catch (Throwable $e) {
     mysqli_rollback($conn);

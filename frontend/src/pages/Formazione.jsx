@@ -9,6 +9,16 @@ import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock } from '
 
 const MODULO_DEFAULT = '4-4-2'
 
+// Spiega perché l'email di conferma non è stata inviata (vedi
+// backend/mailer.php per l'elenco completo dei motivi restituiti).
+const MOTIVO_EMAIL_LABEL = {
+  email_non_configurata: "l'allenatore non ha un indirizzo email configurato",
+  email_non_valida: "l'indirizzo email configurato non è valido",
+  invio_fallito: 'il server non è riuscito a inviarla (probabile limitazione lato hosting)',
+  formazione_incompleta: 'la formazione non risulta completa',
+  squadra_non_trovata: 'squadra non trovata',
+}
+
 /**
  * Pagina "Formazione".
  *
@@ -96,6 +106,7 @@ export default function Formazione() {
   const [saveError, setSaveError]       = useState(null)
   const [justSaved, setJustSaved]       = useState(false)
   const [emailInviata, setEmailInviata] = useState(false)
+  const [motivoEmail, setMotivoEmail]   = useState(null)
 
   // ── Inizializza/ricarica lo stato locale quando arrivano rosa e
   //    formazione salvata (per la giornata di riferimento corrente) ──
@@ -107,6 +118,7 @@ export default function Formazione() {
     setSaveError(null)
     setJustSaved(false)
     setEmailInviata(false)
+    setMotivoEmail(null)
 
     if (!Array.isArray(formazioneSalvata) || formazioneSalvata.length === 0) {
       // Nessuna formazione salvata per questa giornata: si riparte da zero.
@@ -159,11 +171,11 @@ export default function Formazione() {
   // "salvata" e l'eventuale errore precedente.
   function handleFormationChange(t, p, tr) {
     setTitolari(t); setPanchina(p); setTribuna(tr)
-    setJustSaved(false); setEmailInviata(false); setSaveError(null)
+    setJustSaved(false); setEmailInviata(false); setMotivoEmail(null); setSaveError(null)
   }
   function handleModuloChange(m) {
     setModulo(m)
-    setJustSaved(false); setEmailInviata(false); setSaveError(null)
+    setJustSaved(false); setEmailInviata(false); setMotivoEmail(null); setSaveError(null)
   }
 
   // Costruisce il payload per formazioni.php, un elemento per ciascun
@@ -199,6 +211,7 @@ export default function Formazione() {
     try {
       const res = await saveFormazione(ultimaStagione, giornata, idSquadra, buildGiocatoriPayload())
       setEmailInviata(!!res?.email_inviata)
+      setMotivoEmail(res?.motivo_email ?? null)
       setJustSaved(true)
     } catch (e) {
       setSaveError(e.message ?? 'Errore durante il salvataggio')
@@ -297,7 +310,7 @@ export default function Formazione() {
                 <CheckCircle2 className="w-3.5 h-3.5" /> Formazione salvata per la giornata {giornata}.
                 {emailInviata
                   ? ' Email di conferma inviata.'
-                  : ' (nessuna email di conferma inviata: indirizzo non configurato)'}
+                  : ` (email di conferma non inviata: ${MOTIVO_EMAIL_LABEL[motivoEmail] ?? 'motivo sconosciuto'})`}
               </p>
             )}
             {saveError && (

@@ -282,9 +282,9 @@ export default function GestioneVoti() {
                   </div>
                 ))}
               </div>
-              {result.politici > 0 && (
+              {result.senza_voto > 0 && (
                 <p className="text-xs text-slate-500 mt-4">
-                  {result.politici} voti erano marcati con asterisco (es. 6*): salvati come voto numerico con flag «politico».
+                  {result.senza_voto} giocatori entrati ma senza voto (asterisco nel file, es. 6*): salvati con voto vuoto e SV = Y.
                 </p>
               )}
             </div>

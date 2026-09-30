@@ -148,16 +148,38 @@ final class CalcolatoreVoti
     // 4) Modificatore ATTACCO
     // ------------------------------------------------------------
     //
-    // Si applica al singolo attaccante titolare che NON ha già un
-    // bonus da gol fatto: aggiunge un bonus in funzione del voto
-    // "netto" (voto + bonus/malus già maturati, gol fatto escluso,
-    // dato che qui per definizione non ce n'è).
+    // A differenza di come inizialmente impostato, questo modificatore
+    // NON viene sommato al punteggio del singolo attaccante: resta una
+    // voce separata a livello di SQUADRA (come difesa e centrocampo),
+    // ottenuta sommando il contributo di ciascun attaccante idoneo. Il
+    // punteggio del singolo giocatore (vedi puntiGiocatore()) resta
+    // quindi "puro", senza alcuna quota di modificatore attacco.
+    //
+    // Il contributo del singolo attaccante si applica solo a chi NON ha
+    // già un bonus da gol fatto, in funzione del suo voto "netto" (voto
+    // + bonus/malus già maturati, gol fatto escluso, dato che qui per
+    // definizione non ce n'è).
     //
     // $votoNetto: risultato di puntiGiocatore() per quell'attaccante
     //   (già comprensivo di eventuali assist/ammonizioni/ecc.)
     public static function bonusAttaccoSenzaGol(float $votoNetto, array $parametri): float
     {
         return round(self::valoreFasciaPerSoglia($votoNetto, $parametri['fasce'] ?? []), 2);
+    }
+
+    // Somma, per l'intera squadra, i contributi bonusAttaccoSenzaGol()
+    // di tutti gli attaccanti titolari idonei (con voto, senza gol
+    // fatto). È questo il valore che diventa la voce "attacco" dei
+    // modificatori di squadra in calcolaPartita()/calcolaSquadra().
+    public static function modificatoreAttacco(array $attaccanti, array $bonusConfig, array $parametri): float
+    {
+        $totale = 0.0;
+        foreach ($attaccanti as $stat) {
+            $punti = self::puntiGiocatore($stat, $bonusConfig);
+            if ($punti === null || self::haBonusGolFatto($stat)) continue;
+            $totale += self::bonusAttaccoSenzaGol($punti, $parametri);
+        }
+        return round($totale, 2);
     }
 
     // ------------------------------------------------------------
@@ -206,8 +228,11 @@ final class CalcolatoreVoti
     //     'attacco'    => [...],  // idem ATTACCO
     //   ]
     //
-    // Ritorna una struttura con il dettaglio giocatore-per-giocatore, i
-    // tre modificatori per squadra e il totale di squadra.
+    // Ritorna una struttura con il dettaglio giocatore-per-giocatore (con
+    // punti "puri", bonus/malus fissi esclusi i modificatori di squadra),
+    // i tre modificatori di squadra (difesa, centrocampo, attacco — tutti
+    // e tre voci separate, nessuno incorporato nel punteggio di un
+    // singolo giocatore) e il totale di squadra che li somma.
     public static function calcolaPartita(array $formazioneCasa, array $formazioneOspite, array $config): array
     {
         $casa   = self::calcolaSquadra($formazioneCasa, $config);
@@ -233,11 +258,24 @@ final class CalcolatoreVoti
             $config['centrocampo'] ?? []
         );
 
-        $casa['modificatori']   = ['difesa' => $modDifesaSuCasa,   'centrocampo' => $modCentrocampo['casa']];
-        $ospite['modificatori'] = ['difesa' => $modDifesaSuOspite, 'centrocampo' => $modCentrocampo['ospite']];
+        // Attacco: voce di squadra a sé stante (vedi modificatoreAttacco),
+        // già calcolata da calcolaSquadra() per ciascuna delle due squadre.
+        $modAttaccoCasa   = $casa['modificatore_attacco'];
+        $modAttaccoOspite = $ospite['modificatore_attacco'];
 
-        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaSuCasa   + $modCentrocampo['casa'],   2);
-        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaSuOspite + $modCentrocampo['ospite'], 2);
+        $casa['modificatori']   = [
+            'difesa'      => $modDifesaSuCasa,
+            'centrocampo' => $modCentrocampo['casa'],
+            'attacco'     => $modAttaccoCasa,
+        ];
+        $ospite['modificatori'] = [
+            'difesa'      => $modDifesaSuOspite,
+            'centrocampo' => $modCentrocampo['ospite'],
+            'attacco'     => $modAttaccoOspite,
+        ];
+
+        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaSuCasa   + $modCentrocampo['casa']   + $modAttaccoCasa,   2);
+        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaSuOspite + $modCentrocampo['ospite'] + $modAttaccoOspite, 2);
 
         return ['casa' => $casa, 'ospite' => $ospite];
     }
@@ -263,10 +301,12 @@ final class CalcolatoreVoti
         }
         $mediaDifensori = $votiPuriDifensori ? array_sum($votiPuriDifensori) / count($votiPuriDifensori) : 0.0;
 
-        $sommaCentrocampisti = 0.0;
+        $sommaCentrocampisti  = 0.0;
+        $numeroCentrocampisti = 0;
         foreach ($formazione['centrocampisti'] ?? [] as $stat) {
             if (!empty($stat['sv']) || $stat['voto'] === null) continue;
             $sommaCentrocampisti += (float) $stat['voto'];
+            $numeroCentrocampisti++;
         }
 
         $ruoli = [
@@ -276,16 +316,12 @@ final class CalcolatoreVoti
             'attaccanti'     => $formazione['attaccanti'] ?? [],
         ];
 
+        // I punti dei singoli giocatori restano "puri": il modificatore
+        // attacco NON viene sommato qui (vedi modificatoreAttacco), resta
+        // una voce separata calcolata subito sotto.
         foreach ($ruoli as $reparto => $lista) {
             foreach ($lista as $stat) {
                 $punti = self::puntiGiocatore($stat, $bonusConfig);
-
-                // Modificatore attacco: solo attaccanti titolari senza
-                // gol fatto e con un voto (i "senza voto" non prendono
-                // bonus/malus di alcun tipo).
-                if ($reparto === 'attaccanti' && $punti !== null && !self::haBonusGolFatto($stat)) {
-                    $punti = round($punti + self::bonusAttaccoSenzaGol($punti, $parametriAttacco), 2);
-                }
 
                 $giocatori[] = [
                     'id_giocatore' => $stat['id_giocatore'] ?? null,
@@ -297,11 +333,15 @@ final class CalcolatoreVoti
             }
         }
 
+        $modificatoreAttacco = self::modificatoreAttacco($formazione['attaccanti'] ?? [], $bonusConfig, $parametriAttacco);
+
         return [
-            'giocatori'            => $giocatori,
-            'totale_giocatori'     => round($totaleGiocatori, 2),
-            'media_difensori'      => round($mediaDifensori, 2),
-            'somma_centrocampisti' => round($sommaCentrocampisti, 2),
+            'giocatori'              => $giocatori,
+            'totale_giocatori'       => round($totaleGiocatori, 2),
+            'media_difensori'        => round($mediaDifensori, 2),
+            'somma_centrocampisti'   => round($sommaCentrocampisti, 2),
+            'numero_centrocampisti'  => $numeroCentrocampisti,
+            'modificatore_attacco'   => $modificatoreAttacco,
         ];
     }
 }

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getVotiSerieAInfo, adminCaricaVotiSerieA } from '../api/client'
+import { getVotiSerieAInfo, adminCaricaVotiSerieA, adminCalcolaGiornata } from '../api/client'
 import { PageHeader, Spinner, ErrorState } from '../components/ui'
 import {
-  UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Lock, CalendarCheck,
+  UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Lock, CalendarCheck, Calculator,
 } from 'lucide-react'
 
 const RUOLI = [
@@ -37,12 +37,18 @@ export default function GestioneVoti() {
   const [result,   setResult]   = useState(null)
   const fileInputRef = useRef(null)
 
+  // Fase 2: calcolo voti fantacalcio
+  const [calcolando,  setCalcolando]  = useState(false)
+  const [calcErrore,  setCalcErrore]  = useState(null)
+  const [calcRisultato, setCalcRisultato] = useState(null)
+
   const resetFile = () => {
     setFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const resetFeedback = () => { setErrors([]); setMismatch(null); setResult(null) }
+  const resetFeedbackCalcolo = () => { setCalcErrore(null); setCalcRisultato(null) }
 
   const handleFileChange = (e) => {
     resetFeedback()
@@ -51,6 +57,7 @@ export default function GestioneVoti() {
 
   const handleGiornataChange = (e) => {
     resetFeedback()
+    resetFeedbackCalcolo()
     setGiornata(Number(e.target.value))
   }
 
@@ -80,6 +87,20 @@ export default function GestioneVoti() {
 
   const handleSubmit = (e) => { e.preventDefault(); upload(false) }
 
+  const calcolaVoti = async () => {
+    resetFeedbackCalcolo()
+    setCalcolando(true)
+    try {
+      const res = await adminCalcolaGiornata(Number(stagione), giornata)
+      setCalcRisultato(res)
+      refetch()
+    } catch (err) {
+      setCalcErrore(err.message)
+    } finally {
+      setCalcolando(false)
+    }
+  }
+
   const giornate       = info?.giornate ?? []
   const giornataInfo   = giornate.find(g => g.giornata === giornata)
   const isCorrente     = giornata !== null && giornata === info?.giornata_corrente
@@ -100,10 +121,9 @@ export default function GestioneVoti() {
           <span className="w-5 h-5 rounded-full bg-gold-500/20 text-xs flex items-center justify-center">1</span>
           Caricamento voti Serie A
         </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.03] text-slate-600 text-sm">
-          <span className="w-5 h-5 rounded-full bg-white/5 text-xs flex items-center justify-center">2</span>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gold-500/10 text-gold-400 text-sm font-medium">
+          <span className="w-5 h-5 rounded-full bg-gold-500/20 text-xs flex items-center justify-center">2</span>
           Calcolo voti fantacalcio
-          <span className="text-[10px] text-mono uppercase tracking-widest text-slate-700">a seguire</span>
         </div>
       </div>
 
@@ -289,6 +309,68 @@ export default function GestioneVoti() {
               )}
             </div>
           )}
+
+          {/* Fase 2: calcolo voti fantacalcio */}
+          <div className="card p-6 max-w-2xl mt-8">
+            <h3 className="text-sm font-semibold text-slate-300 mb-1">Fase 2 — Calcolo voti fantacalcio</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Calcola il punteggio di ogni titolare e il risultato di ogni partita della giornata {giornata ?? ''},
+              usando i voti Serie A caricati sopra e le regole configurate in "Gestisci regole di calcolo".
+              Ripetibile finché la giornata non è chiusa.
+            </p>
+
+            {votiPresenti === 0 ? (
+              <p className="text-xs text-gold-400">
+                Carica prima i voti Serie A della giornata {giornata ?? ''} (fase 1) per poter calcolare i voti fantacalcio.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={calcolaVoti}
+                disabled={calcolando || giaChiusa}
+                className="btn-primary disabled:opacity-40"
+              >
+                {calcolando
+                  ? <><Spinner size="sm" /> Calcolo in corso...</>
+                  : <><Calculator className="w-4 h-4" /> Calcola voti fantacalcio</>}
+              </button>
+            )}
+
+            {calcErrore && (
+              <div className="rounded-lg px-4 py-3 flex gap-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm mt-4">
+                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" /> {calcErrore}
+              </div>
+            )}
+
+            {calcRisultato && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 text-green-300 mb-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="font-medium text-sm">
+                    {calcRisultato.partite_elaborate} partite calcolate per la giornata {calcRisultato.giornata}
+                  </span>
+                </div>
+
+                {calcRisultato.partite_saltate?.length > 0 && (
+                  <div className="rounded-lg px-4 py-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm mb-2">
+                    <p className="font-medium mb-1">Partite non calcolate:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {calcRisultato.partite_saltate.map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {calcRisultato.warning?.length > 0 && (
+                  <div className="rounded-lg px-4 py-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm">
+                    <p className="font-medium mb-1">Avvisi:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {calcRisultato.warning.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

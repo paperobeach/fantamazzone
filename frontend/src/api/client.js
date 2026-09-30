@@ -238,6 +238,13 @@ export const adminCaricaVotiSerieA = (stagione, giornata, file, forza = false) =
   return postFile('admin/voti_serie_a.php', formData)
 }
 
+// Fase 2: calcola i voti fantacalcio della giornata (NEW_VOTI + NEW_RISULTATI)
+// a partire dai voti Serie A caricati in fase 1, con CalcolatoreVoti.php e
+// le regole di NEW_REGOLE_BONUS / NEW_REGOLE_ALGORITMI. Ripetibile finché
+// la giornata non è chiusa.
+export const adminCalcolaGiornata = (stagione, giornata) =>
+  post('admin/calcolo_giornata.php', { stagione, giornata })
+
 /**
  * Chiude una giornata ed esegue in sequenza tutti gli aggiornamenti admin.
  * Restituisce un array di { step, ok, error? }

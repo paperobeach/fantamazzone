@@ -11,6 +11,7 @@
 // Calcola automaticamente punti e segno (W/N/L) in base ai gol.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
+require_once __DIR__ . "/../lib/RisultatoPartita.php";
 
 $stagione = param_int("stagione");
 
@@ -35,52 +36,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         api_error("Parametri obbligatori: giornata, id_squadra, id_squadra_a");
     }
 
-    // Calcolo punti e segno
-    if ($golf > $gols) {
-        $punti_casa   = 3; $punti_osp = 0;
-        $segno_casa   = "W"; $segno_osp = "L";
-        $fc = 1; // fattore campo (vittoria in casa)
-    } elseif ($golf === $gols) {
-        $punti_casa = 1; $punti_osp = 1;
-        $segno_casa = "N"; $segno_osp = "N";
-        $fc = 0;
-    } else {
-        $punti_casa   = 0; $punti_osp = 3;
-        $segno_casa   = "L"; $segno_osp = "W";
-        $fc = 0;
-    }
+    // Calcolo punti/segno/fattore_campo e upsert: vedi backend/lib/RisultatoPartita.php
+    // (usata anche da calcolo_giornata.php per la fase 2 di "Gestione voti")
+    $esito = salvaRigaRisultato(
+        $conn, $stagione, $giornata, $id_sq, $id_sq_a,
+        $ftotale, $ftotale_a, $golf, $gols,
+        $mod, $mod_a, $mod_att, $num_cc, $tot_cc, $mod_cc
+    );
 
-    // Upsert risultato squadra di casa
-    $exists = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI
-                         WHERE stagione = $stagione AND giornata = $giornata
-                           AND id_squadra = $id_sq");
-    if ((int)$exists["n"] > 0) {
-        mysqli_query($conn, "UPDATE NEW_RISULTATI SET
-            id_squadra_a = $id_sq_a,
-            ftotale = $ftotale, ftotale_a = $ftotale_a,
-            golf = $golf, gols = $gols,
-            modificatore = $mod, modificatore_a = $mod_a,
-            punti = $punti_casa, fattore_campo = $fc, segno = '$segno_casa',
-            mod_att = $mod_att, num_cc = $num_cc, tot_cc = $tot_cc, mod_cc = $mod_cc
-            WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $id_sq");
-    } else {
-        mysqli_query($conn, "INSERT INTO NEW_RISULTATI
-            (giornata, stagione, id_squadra, id_squadra_a,
-             ftotale, ftotale_a, golf, gols,
-             modificatore, modificatore_a, punti, fattore_campo, segno,
-             mod_att, num_cc, tot_cc, mod_cc)
-            VALUES ($giornata, $stagione, $id_sq, $id_sq_a,
-                    $ftotale, $ftotale_a, $golf, $gols,
-                    $mod, $mod_a, $punti_casa, $fc, '$segno_casa',
-                    $mod_att, $num_cc, $tot_cc, $mod_cc)");
-    }
+    $segnoOpposto = ["W" => "L", "N" => "N", "L" => "W"];
+    $puntiOspite  = $esito["punti"] === 1 ? 1 : (3 - $esito["punti"]);
 
     api_success([
         "ok"          => true,
-        "punti_casa"  => $punti_casa,
-        "punti_ospite"=> $punti_osp,
-        "segno_casa"  => $segno_casa,
-        "segno_ospite"=> $segno_osp,
+        "punti_casa"  => $esito["punti"],
+        "punti_ospite"=> $puntiOspite,
+        "segno_casa"  => $esito["segno"],
+        "segno_ospite"=> $segnoOpposto[$esito["segno"]],
     ]);
 
 } else {

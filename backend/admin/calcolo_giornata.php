@@ -33,6 +33,14 @@
 //   - giocatore "senza voto" (sv) → NEW_VOTI: voto = 0, giocata = 0,
 //     totale = 0 (stesso trattamento già riservato dalla tabella
 //     esistente ai giocatori non entrati in campo)
+//   - SOSTITUZIONI: un titolare senza voto viene sostituito dal primo
+//     giocatore in panchina (MAGLIA > 11, in ordine di maglia) dello
+//     STESSO ruolo che abbia un voto valido, nel rispetto del limite di
+//     5 sostituzioni "di movimento" più una per il portiere (vedi
+//     MAX_SOSTITUZIONI_MOVIMENTO e carica_formazione()). Il titolare
+//     sostituito, o rimasto senza voto e senza sostituto disponibile,
+//     resta comunque tracciato in NEW_VOTI con una riga a zero
+//     (nessun contributo al punteggio), tramite salva_non_giocanti().
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
@@ -72,19 +80,68 @@ try {
     api_error($e->getMessage(), 400);
 }
 
+// Limiti di sostituzione: massimo 5 cambi "di movimento" (portiere
+// escluso, che ha un cambio a parte e non intacca questo contatore),
+// consentiti solo a parità di ruolo.
+const MAX_SOSTITUZIONI_MOVIMENTO = 5;
+
 // ------------------------------------------------------------
-// Helper: carica la formazione titolare (maglie 1-11) di una squadra,
-// nel formato richiesto da CalcolatoreVoti, risolvendo le statistiche
-// dal voto Serie A del giocatore corrispondente.
+// Helper: statistiche di un giocatore dal voto Serie A della giornata,
+// normalizzate nel formato richiesto da CalcolatoreVoti. Se il
+// giocatore non ha alcun voto caricato per quella giornata, viene
+// trattato come "senza voto" (sv = true) allo stesso modo di un vero
+// SV segnalato nel file.
 // ------------------------------------------------------------
-function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning): array
+function carica_stat_giocatore($conn, int $stagione, int $giornata, int $idGiocatore): array
 {
-    $titolari = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
-                           FROM NEW_FORMAZIONI f
-                           JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
-                           WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra
-                             AND f.GIORNATA = $giornata AND f.MAGLIA BETWEEN 1 AND 11
-                           ORDER BY f.MAGLIA");
+    $voto = query_one("SELECT voto, sv, gf, gs, rp, rs, rf, au, amm, esp, ass
+                       FROM NEW_VOTI_SERIE_A
+                       WHERE stagione = $stagione AND giornata = $giornata
+                         AND id_giocatore = $idGiocatore");
+
+    if ($voto === null) {
+        return ['id_giocatore' => $idGiocatore, 'voto' => null, 'sv' => true, 'trovato' => false,
+                'gf' => 0, 'gs' => 0, 'rp' => 0, 'rf' => 0, 'rs' => 0, 'au' => 0, 'amm' => 0, 'esp' => 0, 'ass' => 0];
+    }
+    return [
+        'id_giocatore' => $idGiocatore,
+        'voto'    => $voto['voto'] !== null ? (float) $voto['voto'] : null,
+        'sv'      => $voto['sv'] === 'Y' || $voto['voto'] === null,
+        'trovato' => true,
+        'gf'   => (int) $voto['gf'], 'gs' => (int) $voto['gs'],
+        'rp'   => (int) $voto['rp'], 'rf' => (int) $voto['rf'], 'rs' => (int) $voto['rs'],
+        'au'   => (int) $voto['au'], 'amm' => (int) $voto['amm'], 'esp' => (int) $voto['esp'],
+        'ass'  => (int) $voto['ass'],
+    ];
+}
+
+// ------------------------------------------------------------
+// Helper: carica la formazione EFFETTIVA (dopo le sostituzioni) di una
+// squadra, nel formato richiesto da CalcolatoreVoti.
+//
+// Un titolare (MAGLIA 1-11) privo di voto viene sostituito, se
+// possibile, dal primo giocatore in panchina (MAGLIA > 11, in ordine di
+// maglia = ordine di priorità) dello STESSO ruolo che abbia un voto
+// valido, nel rispetto del limite di 5 sostituzioni di movimento più
+// una per il portiere (vedi MAX_SOSTITUZIONI_MOVIMENTO). Se non è
+// possibile sostituirlo (limite raggiunto o nessun panchinaro idoneo
+// dello stesso ruolo con un voto), il titolare resta "senza voto".
+//
+// $nonGiocanti in uscita elenca i titolari che NON hanno contribuito al
+// calcolo (sostituiti, o senza voto senza sostituto disponibile): a
+// loro va comunque scritta una riga a zero in NEW_VOTI per completezza
+// storica (il contributo al punteggio squadra arriva dal sostituto).
+// ------------------------------------------------------------
+function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti): array
+{
+    $tutti = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
+                        FROM NEW_FORMAZIONI f
+                        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+                        WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra AND f.GIORNATA = $giornata
+                        ORDER BY f.MAGLIA");
+
+    $titolari = array_values(array_filter($tutti, fn($r) => (int) $r['maglia'] >= 1 && (int) $r['maglia'] <= 11));
+    $panchina = array_values(array_filter($tutti, fn($r) => (int) $r['maglia'] > 11));
 
     if (count($titolari) === 0) {
         throw new Exception("Formazione titolare assente per la squadra $idSquadra alla giornata $giornata");
@@ -93,36 +150,59 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
         $warning[] = "La squadra $idSquadra ha solo " . count($titolari) . " titolari su 11 (si procede comunque)";
     }
 
+    // Panchina raggruppata per ruolo, in ordine di maglia (= priorità di sostituzione)
+    $panchinaPerRuolo = [];
+    foreach ($panchina as $p) $panchinaPerRuolo[(int) $p['ruolo']][] = $p;
+    $panchinariProvati = []; // id_giocatore già tentati (con o senza successo), per non ririproporli
+
     $formazione = ['portiere' => null, 'difensori' => [], 'centrocampisti' => [], 'attaccanti' => []];
     $mappaRuolo = [1 => 'portiere', 2 => 'difensori', 3 => 'centrocampisti', 4 => 'attaccanti'];
 
+    $sostituzioniMovimento = 0;
+    $portiereSostituito     = false;
+
     foreach ($titolari as $t) {
-        $ruoloKey = $mappaRuolo[(int) $t['ruolo']] ?? null;
+        $ruoloInt = (int) $t['ruolo'];
+        $ruoloKey = $mappaRuolo[$ruoloInt] ?? null;
         if ($ruoloKey === null) {
             $warning[] = "Giocatore {$t['descrizione']} (id {$t['id_giocatore']}): ruolo non riconosciuto, escluso dal calcolo";
             continue;
         }
 
         $idGiocatore = (int) $t['id_giocatore'];
-        $voto = query_one("SELECT voto, sv, gf, gs, rp, rs, rf, au, amm, esp, ass
-                           FROM NEW_VOTI_SERIE_A
-                           WHERE stagione = $stagione AND giornata = $giornata
-                             AND id_giocatore = $idGiocatore");
+        $stat = carica_stat_giocatore($conn, $stagione, $giornata, $idGiocatore);
+        if (!$stat['trovato']) {
+            $warning[] = "Giocatore {$t['descrizione']} (id $idGiocatore): nessun voto Serie A trovato";
+        }
 
-        if ($voto === null) {
-            $warning[] = "Giocatore {$t['descrizione']} (id {$t['id_giocatore']}): nessun voto Serie A trovato, trattato come senza voto";
-            $stat = ['id_giocatore' => (int) $t['id_giocatore'], 'voto' => null, 'sv' => true,
-                     'gf' => 0, 'gs' => 0, 'rp' => 0, 'rf' => 0, 'rs' => 0, 'au' => 0, 'amm' => 0, 'esp' => 0, 'ass' => 0];
-        } else {
-            $stat = [
-                'id_giocatore' => (int) $t['id_giocatore'],
-                'voto' => $voto['voto'] !== null ? (float) $voto['voto'] : null,
-                'sv'   => $voto['sv'] === 'Y',
-                'gf'   => (int) $voto['gf'], 'gs' => (int) $voto['gs'],
-                'rp'   => (int) $voto['rp'], 'rf' => (int) $voto['rf'], 'rs' => (int) $voto['rs'],
-                'au'   => (int) $voto['au'], 'amm' => (int) $voto['amm'], 'esp' => (int) $voto['esp'],
-                'ass'  => (int) $voto['ass'],
-            ];
+        if ($stat['sv']) {
+            $limiteRaggiunto = $ruoloInt === 1 ? $portiereSostituito : $sostituzioniMovimento >= MAX_SOSTITUZIONI_MOVIMENTO;
+            $sostituto = null;
+
+            if (!$limiteRaggiunto) {
+                foreach ($panchinaPerRuolo[$ruoloInt] ?? [] as $candidato) {
+                    $idCandidato = (int) $candidato['id_giocatore'];
+                    if (isset($panchinariProvati[$idCandidato])) continue;
+                    $panchinariProvati[$idCandidato] = true;
+
+                    $statCandidato = carica_stat_giocatore($conn, $stagione, $giornata, $idCandidato);
+                    if (!$statCandidato['sv']) {
+                        $sostituto = $statCandidato;
+                        $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}";
+                        if ($ruoloInt === 1) $portiereSostituito = true; else $sostituzioniMovimento++;
+                        break;
+                    }
+                }
+            }
+
+            if ($sostituto !== null) {
+                $stat = $sostituto;
+            } else {
+                $motivo = $limiteRaggiunto ? 'limite sostituzioni raggiunto' : 'nessun sostituto con voto disponibile nello stesso ruolo';
+                $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, non sostituito ($motivo)";
+                $nonGiocanti[] = ['id_giocatore' => $idGiocatore];
+                continue; // resta fuori dalla formazione effettiva: nessun contributo al punteggio
+            }
         }
 
         if ($ruoloKey === 'portiere') {
@@ -176,6 +256,22 @@ function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra,
     }
 }
 
+// Righe a zero per i titolari rimasti senza voto e senza sostituto
+// idoneo (vedi carica_formazione): non contribuiscono al punteggio, ma
+// restano tracciati in NEW_VOTI per completezza storica.
+function salva_non_giocanti($conn, int $stagione, int $giornata, int $idSquadra, array $nonGiocanti): void
+{
+    foreach ($nonGiocanti as $ng) {
+        $idGiocatore = (int) $ng['id_giocatore'];
+        mysqli_query($conn, "INSERT INTO NEW_VOTI
+            (id_squadra, id_giocatore, stagione, voto, giornata,
+             reti, ammonizioni, espulsioni, autogol, retis,
+             rigores, rigorep, rufficio, giocata, totale, assist)
+            VALUES ($idSquadra, $idGiocatore, $stagione, 0, $giornata,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)");
+    }
+}
+
 // ------------------------------------------------------------
 // Partite della giornata: stesso accoppiamento (posizione dispari =
 // casa, pari = ospite) usato da calendario.php
@@ -210,8 +306,10 @@ try {
         if (!$idCasa || !$idOspite) continue;
 
         try {
-            $formazioneCasa   = carica_formazione($conn, $stagione, $giornata, $idCasa, $warning);
-            $formazioneOspite = carica_formazione($conn, $stagione, $giornata, $idOspite, $warning);
+            $nonGiocantiCasa   = [];
+            $nonGiocantiOspite = [];
+            $formazioneCasa   = carica_formazione($conn, $stagione, $giornata, $idCasa,   $warning, $nonGiocantiCasa);
+            $formazioneOspite = carica_formazione($conn, $stagione, $giornata, $idOspite, $warning, $nonGiocantiOspite);
         } catch (Throwable $e) {
             $partiteSaltate[] = $e->getMessage();
             continue;
@@ -221,6 +319,8 @@ try {
 
         salva_voti_squadra($conn, $stagione, $giornata, $idCasa,   $formazioneCasa,   $risultato['casa']);
         salva_voti_squadra($conn, $stagione, $giornata, $idOspite, $formazioneOspite, $risultato['ospite']);
+        salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $nonGiocantiCasa);
+        salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $nonGiocantiOspite);
 
         // golf/gols: gols = golf della squadra avversaria (punto E confermato)
         $golfCasa = 0; $golfOspite = 0;

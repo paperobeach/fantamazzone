@@ -19,7 +19,8 @@
 // Ripetibile: un nuovo calcolo sulla stessa giornata sovrascrive quanto
 // già presente, finché la giornata non è chiusa.
 //
-// Convenzioni concordate (vedi documento di proposta validato):
+// Convenzioni concordate (vedi documento di proposta validato e
+// correzioni successive):
 //   - titolari = NEW_FORMAZIONI.MAGLIA fra 1 e 11; modulo_difensori =
 //     conteggio dei titolari con ruolo Difensore (NEW_GIOCATORI.ruolo=2)
 //   - corrispondenza giocatore fantacalcio ↔ Serie A: NEW_GIOCATORI.id
@@ -28,19 +29,38 @@
 //     NEW_VOTI.rigorep = Rs (rigori sbagliati) — mapping richiesto
 //   - modificatore attacco: voce di squadra separata (NEW_RISULTATI.mod_att),
 //     NON sommata al voto del singolo giocatore in NEW_VOTI.totale
-//   - NEW_RISULTATI.gols (gol subiti) = golf (gol fatti) della squadra
-//     avversaria
+//   - modificatore difesa: si applica alla STESSA squadra (non
+//     all'avversaria), vedi CalcolatoreVoti::modificatoreDifesa()
+//   - modificatore centrocampo: confronto a parità di numero di
+//     centrocampisti, pareggiato con un voto fittizio parametrizzabile
+//     (algoritmo CENTROCAMPO, parametro "voto_fittizio")
+//   - FATTORE_CASA (bonus/malus, valore di default 2): si somma UNA
+//     volta al punteggio finale della squadra che gioca in casa,
+//     applicato qui (non in CalcolatoreVoti, che non conosce il
+//     concetto di "casa/ospite reale"), fino alla giornata indicata dal
+//     parametro di stagione ULTIMA_GIORNATA_FATTORE_CASA (vuoto=sempre)
+//   - golf (gol fatti) di NEW_RISULTATI: derivato dal punteggio totale
+//     finale della squadra (fattore casa incluso) tramite le fasce del
+//     parametro di stagione FASCE_GOL_PUNTEGGIO; gols (gol subiti) =
+//     golf della squadra avversaria
 //   - giocatore "senza voto" (sv) → NEW_VOTI: voto = 0, giocata = 0,
 //     totale = 0 (stesso trattamento già riservato dalla tabella
 //     esistente ai giocatori non entrati in campo)
 //   - SOSTITUZIONI: un titolare senza voto viene sostituito dal primo
 //     giocatore in panchina (MAGLIA > 11, in ordine di maglia) dello
-//     STESSO ruolo che abbia un voto valido, nel rispetto del limite di
-//     5 sostituzioni "di movimento" più una per il portiere (vedi
-//     MAX_SOSTITUZIONI_MOVIMENTO e carica_formazione()). Il titolare
-//     sostituito, o rimasto senza voto e senza sostituto disponibile,
-//     resta comunque tracciato in NEW_VOTI con una riga a zero
-//     (nessun contributo al punteggio), tramite salva_non_giocanti().
+//     STESSO ruolo che abbia un voto valido, nel rispetto dei limiti di
+//     sostituzione della stagione (parametri SOSTITUZIONI_MAX_MOVIMENTO
+//     e SOSTITUZIONI_MAX_PORTIERE, di default 5 + 1, modificabili da
+//     "Gestisci regole di calcolo"). Il titolare sostituito, o rimasto
+//     senza voto e senza sostituto disponibile, resta comunque
+//     tracciato in NEW_VOTI con una riga a zero (nessun contributo al
+//     punteggio), tramite salva_non_giocanti().
+//
+// Tutti i parametri di stagione non riconducibili a bonus/malus o
+// modificatori (sostituzioni, fattore casa, fasce gol) vivono in
+// NEW_PARAMETRI_STAGIONE, generica (codice => valore testuale): questo
+// file legge il singolo codice che le serve con un default di riserva
+// se il parametro non è stato configurato (vedi $config['parametri']).
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
@@ -80,10 +100,34 @@ try {
     api_error($e->getMessage(), 400);
 }
 
-// Limiti di sostituzione: massimo 5 cambi "di movimento" (portiere
-// escluso, che ha un cambio a parte e non intacca questo contatore),
-// consentiti solo a parità di ruolo.
-const MAX_SOSTITUZIONI_MOVIMENTO = 5;
+// I limiti di sostituzione, la soglia del fattore casa e le fasce
+// gol-da-punteggio sono parametri di stagione generici (vedi
+// NEW_PARAMETRI_STAGIONE, $config['parametri']): si leggono qui con un
+// default di riserva, così un calcolo non si blocca se l'admin non ha
+// ancora toccato "Gestisci regole di calcolo" dopo l'introduzione di
+// un nuovo parametro.
+$maxSostituzioniMovimento    = (int) ($config['parametri']['SOSTITUZIONI_MAX_MOVIMENTO'] ?? 5);
+$maxSostituzioniPortiere     = (int) ($config['parametri']['SOSTITUZIONI_MAX_PORTIERE'] ?? 1);
+$ultimaGiornataFattoreCasa   = trim((string) ($config['parametri']['ULTIMA_GIORNATA_FATTORE_CASA'] ?? ''));
+$fasceGolPunteggio           = json_decode($config['parametri']['FASCE_GOL_PUNTEGGIO'] ?? '', true) ?: [
+    ['da' => null, 'a' => null, 'gol' => 0], // nessuna fascia configurata: 0 gol per tutti, per non bloccare il calcolo
+];
+$fattoreCasaValore = (float) ($config['bonus']['FATTORE_CASA'] ?? 0);
+
+// Ricava i gol fatti di una squadra dal suo punteggio totale finale,
+// secondo le fasce configurate (vedi FASCE_GOL_PUNTEGGIO in
+// backend/admin/regole_calcolo.php per i valori di default).
+function gol_da_punteggio(float $punteggio, array $fasce): int
+{
+    foreach ($fasce as $f) {
+        $da = $f['da'] ?? null;
+        $a  = $f['a']  ?? null;
+        if ($da !== null && $punteggio < (float) $da) continue;
+        if ($a  !== null && $punteggio > (float) $a)  continue;
+        return (int) ($f['gol'] ?? 0);
+    }
+    return 0;
+}
 
 // ------------------------------------------------------------
 // Helper: statistiche di un giocatore dal voto Serie A della giornata,
@@ -122,17 +166,19 @@ function carica_stat_giocatore($conn, int $stagione, int $giornata, int $idGioca
 // Un titolare (MAGLIA 1-11) privo di voto viene sostituito, se
 // possibile, dal primo giocatore in panchina (MAGLIA > 11, in ordine di
 // maglia = ordine di priorità) dello STESSO ruolo che abbia un voto
-// valido, nel rispetto del limite di 5 sostituzioni di movimento più
-// una per il portiere (vedi MAX_SOSTITUZIONI_MOVIMENTO). Se non è
-// possibile sostituirlo (limite raggiunto o nessun panchinaro idoneo
-// dello stesso ruolo con un voto), il titolare resta "senza voto".
+// valido, nel rispetto dei limiti di sostituzione della stagione
+// ($maxSostituzioniMovimento per i ruoli diversi dal portiere,
+// $maxSostituzioniPortiere per il portiere — vedi NEW_REGOLE_SOSTITUZIONI
+// e "Gestisci regole di calcolo"). Se non è possibile sostituirlo
+// (limite raggiunto o nessun panchinaro idoneo dello stesso ruolo con
+// un voto), il titolare resta "senza voto".
 //
 // $nonGiocanti in uscita elenca i titolari che NON hanno contribuito al
 // calcolo (sostituiti, o senza voto senza sostituto disponibile): a
 // loro va comunque scritta una riga a zero in NEW_VOTI per completezza
 // storica (il contributo al punteggio squadra arriva dal sostituto).
 // ------------------------------------------------------------
-function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti): array
+function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti, int $maxSostituzioniMovimento, int $maxSostituzioniPortiere): array
 {
     $tutti = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
                         FROM NEW_FORMAZIONI f
@@ -159,7 +205,7 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
     $mappaRuolo = [1 => 'portiere', 2 => 'difensori', 3 => 'centrocampisti', 4 => 'attaccanti'];
 
     $sostituzioniMovimento = 0;
-    $portiereSostituito     = false;
+    $sostituzioniPortiere  = 0;
 
     foreach ($titolari as $t) {
         $ruoloInt = (int) $t['ruolo'];
@@ -176,7 +222,9 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
         }
 
         if ($stat['sv']) {
-            $limiteRaggiunto = $ruoloInt === 1 ? $portiereSostituito : $sostituzioniMovimento >= MAX_SOSTITUZIONI_MOVIMENTO;
+            $limiteRaggiunto = $ruoloInt === 1
+                ? $sostituzioniPortiere >= $maxSostituzioniPortiere
+                : $sostituzioniMovimento >= $maxSostituzioniMovimento;
             $sostituto = null;
 
             if (!$limiteRaggiunto) {
@@ -189,7 +237,7 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
                     if (!$statCandidato['sv']) {
                         $sostituto = $statCandidato;
                         $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}";
-                        if ($ruoloInt === 1) $portiereSostituito = true; else $sostituzioniMovimento++;
+                        if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
                         break;
                     }
                 }
@@ -308,8 +356,14 @@ try {
         try {
             $nonGiocantiCasa   = [];
             $nonGiocantiOspite = [];
-            $formazioneCasa   = carica_formazione($conn, $stagione, $giornata, $idCasa,   $warning, $nonGiocantiCasa);
-            $formazioneOspite = carica_formazione($conn, $stagione, $giornata, $idOspite, $warning, $nonGiocantiOspite);
+            $formazioneCasa   = carica_formazione(
+                $conn, $stagione, $giornata, $idCasa, $warning, $nonGiocantiCasa,
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere
+            );
+            $formazioneOspite = carica_formazione(
+                $conn, $stagione, $giornata, $idOspite, $warning, $nonGiocantiOspite,
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere
+            );
         } catch (Throwable $e) {
             $partiteSaltate[] = $e->getMessage();
             continue;
@@ -322,10 +376,20 @@ try {
         salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $nonGiocantiCasa);
         salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $nonGiocantiOspite);
 
-        // golf/gols: gols = golf della squadra avversaria (punto E confermato)
-        $golfCasa = 0; $golfOspite = 0;
-        foreach (array_merge($formazioneCasa['portiere'] ? [$formazioneCasa['portiere']] : [], $formazioneCasa['difensori'], $formazioneCasa['centrocampisti'], $formazioneCasa['attaccanti']) as $s) $golfCasa += (int) $s['gf'];
-        foreach (array_merge($formazioneOspite['portiere'] ? [$formazioneOspite['portiere']] : [], $formazioneOspite['difensori'], $formazioneOspite['centrocampisti'], $formazioneOspite['attaccanti']) as $s) $golfOspite += (int) $s['gf'];
+        // Fattore casa: si applica UNA volta al punteggio finale della
+        // squadra di CASA (mai all'ospite), se la giornata rientra nel
+        // limite configurato (vuoto = sempre applicato).
+        $applicaFattoreCasa = $ultimaGiornataFattoreCasa === '' || $giornata <= (int) $ultimaGiornataFattoreCasa;
+        if ($applicaFattoreCasa && $fattoreCasaValore != 0) {
+            $risultato['casa']['totale_squadra'] = round($risultato['casa']['totale_squadra'] + $fattoreCasaValore, 2);
+            $warning[] = "Squadra $idCasa: fattore casa (+$fattoreCasaValore) applicato alla giornata $giornata";
+        }
+
+        // golf/gols: golf derivato dal punteggio totale finale (fattore
+        // casa incluso) tramite le fasce configurate; gols = golf della
+        // squadra avversaria (punto E confermato)
+        $golfCasa   = gol_da_punteggio($risultato['casa']['totale_squadra'], $fasceGolPunteggio);
+        $golfOspite = gol_da_punteggio($risultato['ospite']['totale_squadra'], $fasceGolPunteggio);
 
         salvaRigaRisultato(
             $conn, $stagione, $giornata, $idCasa, $idOspite,

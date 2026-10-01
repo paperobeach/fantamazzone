@@ -4,21 +4,26 @@
 //
 // Gestione della configurazione usata da CalcolatoreVoti (fase 2 di
 // "Gestione voti" e, in futuro, da un'ipotetica simulazione): voci di
-// bonus/malus del giocatore e parametri degli algoritmi di
-// modificatore (difesa, centrocampo, attacco). Vedi backend/lib/CalcolatoreVoti.php.
+// bonus/malus del giocatore, parametri degli algoritmi di modificatore
+// (difesa, centrocampo, attacco) e parametri di stagione non
+// riconducibili a bonus/malus o modificatori (limiti di sostituzione,
+// ultima giornata con fattore casa, fasce gol-da-punteggio, ecc.). Vedi
+// backend/lib/CalcolatoreVoti.php e backend/admin/calcolo_giornata.php.
 //
 // GET  ?stagione=2026
-//      → { stagione, bonus:[...], algoritmi:{ DIFESA:{...}, CENTROCAMPO:{...}, ATTACCO:{...} } }
+//      → { stagione, bonus:[...], algoritmi:{ DIFESA:{...}, CENTROCAMPO:{...}, ATTACCO:{...} },
+//          parametri:[{codice, etichetta, valore}, ...] }
 //      Se la stagione non ha ancora configurazione, viene copiata
 //      automaticamente dalla stagione più recente che ne ha una,
 //      oppure (se è la prima in assoluto) dai valori di default
 //      codificati in questo file.
 //
 // POST { stagione, bonus: [{codice, etichetta, valore, ordine, attivo}, ...],
-//        algoritmi: { DIFESA: {algoritmo, parametri, descrizione}, ... } }
+//        algoritmi: { DIFESA: {algoritmo, parametri, descrizione}, ... },
+//        parametri: [{codice, etichetta, valore}, ...] }
 //      Sostituisce integralmente la configurazione della stagione.
-//      Si può inviare solo "bonus" o solo "algoritmi": la parte non
-//      inviata resta invariata.
+//      Si può inviare solo una parte (bonus / algoritmi / parametri):
+//      quelle non inviate restano invariate.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
@@ -35,12 +40,16 @@ const CODICI_BONUS_DEFAULT = [
     ['codice' => 'AMMONIZIONE',        'etichetta' => 'Ammonizione',        'valore' => -0.50, 'ordine' => 7],
     ['codice' => 'ESPULSIONE',         'etichetta' => 'Espulsione',         'valore' => -1.00, 'ordine' => 8],
     ['codice' => 'AUTOGOL',            'etichetta' => 'Autogol',            'valore' => -3.00, 'ordine' => 9],
+    // Non è un bonus per-occorrenza come gli altri: si applica UNA
+    // volta alla squadra che gioca in casa (vedi calcolo_giornata.php),
+    // fino alla giornata indicata dal parametro ULTIMA_GIORNATA_FATTORE_CASA.
+    ['codice' => 'FATTORE_CASA',       'etichetta' => 'Fattore casa',       'valore' =>  2.00, 'ordine' => 10],
 ];
 
 const ALGORITMI_DEFAULT = [
     'DIFESA' => [
         'algoritmo' => 'fasce_media_v1',
-        'descrizione' => 'Bonus/malus alla squadra avversaria in base alla media dei difensori, corretto dal modulo schierato',
+        'descrizione' => 'Bonus/malus alla squadra in base alla media dei propri difensori, corretto dal modulo schierato',
         'parametri' => [
             'fasce' => [
                 ['da' => 6.5,  'a' => null, 'bonus' => 3],
@@ -54,13 +63,14 @@ const ALGORITMI_DEFAULT = [
     ],
     'CENTROCAMPO' => [
         'algoritmo' => 'fasce_differenza_v1',
-        'descrizione' => 'Bonus/malus incrociato in base alla differenza fra le somme dei voti dei centrocampisti',
+        'descrizione' => 'Bonus/malus incrociato in base alla differenza fra le somme dei voti dei centrocampisti, a parità di numero (i mancanti si equiparano con un voto fittizio)',
         'parametri' => [
             'fasce' => [
                 ['da' => 0,   'a' => 0.99, 'bonus' => 0],
                 ['da' => 1.0, 'a' => 1.99, 'bonus' => 1],
                 ['da' => 2.0, 'a' => null, 'bonus' => 2],
             ],
+            'voto_fittizio' => 5,
         ],
     ],
     'ATTACCO' => [
@@ -74,6 +84,33 @@ const ALGORITMI_DEFAULT = [
             ],
         ],
     ],
+];
+
+// Fasce di default per derivare i gol fatti di una squadra dal suo
+// punteggio totale (NEW_RISULTATI.golf). "da"/"a" null = illimitato.
+const FASCE_GOL_PUNTEGGIO_DEFAULT = [
+    ['da' => null, 'a' => 65.999,  'gol' => 0],
+    ['da' => 66,   'a' => 71.999,  'gol' => 1],
+    ['da' => 72,   'a' => 76.999,  'gol' => 2],
+    ['da' => 77,   'a' => 80.999,  'gol' => 3],
+    ['da' => 81,   'a' => 84.999,  'gol' => 4],
+    ['da' => 85,   'a' => 88.999,  'gol' => 5],
+    ['da' => 89,   'a' => 92.999,  'gol' => 6],
+    ['da' => 93,   'a' => 96.999,  'gol' => 7],
+    ['da' => 97,   'a' => 100.999, 'gol' => 8],
+    ['da' => 101,  'a' => 104.999, 'gol' => 9],
+    ['da' => 105,  'a' => 108.999, 'gol' => 10],
+    ['da' => 109,  'a' => null,    'gol' => 11],
+];
+
+// Parametri di stagione non riconducibili a bonus/malus o modificatori.
+const PARAMETRI_DEFAULT = [
+    ['codice' => 'SOSTITUZIONI_MAX_MOVIMENTO',   'etichetta' => 'Sostituzioni di movimento (portiere escluso)', 'valore' => '5'],
+    ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
+    ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
+    ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
+    ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
+        'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
 ];
 
 function carica_bonus(int $stagione, $conn): array
@@ -100,7 +137,33 @@ function carica_algoritmi(int $stagione, $conn): array
     return $out;
 }
 
-// Copia bonus/algoritmi dalla stagione sorgente a quella nuova.
+function carica_parametri(int $stagione, $conn): array
+{
+    return query_all("SELECT codice, etichetta, valore
+                       FROM NEW_PARAMETRI_STAGIONE
+                       WHERE stagione = $stagione
+                       ORDER BY codice");
+}
+
+function salva_parametro(int $stagione, string $codice, string $etichetta, string $valore, $conn): void
+{
+    $codiceEsc    = mysqli_real_escape_string($conn, $codice);
+    $etichettaEsc = mysqli_real_escape_string($conn, $etichetta);
+    $valoreEsc    = mysqli_real_escape_string($conn, $valore);
+
+    $exists = query_one("SELECT COUNT(*) AS n FROM NEW_PARAMETRI_STAGIONE
+                         WHERE stagione = $stagione AND codice = '$codiceEsc'");
+    if ((int) $exists['n'] > 0) {
+        mysqli_query($conn, "UPDATE NEW_PARAMETRI_STAGIONE
+            SET etichetta = '$etichettaEsc', valore = '$valoreEsc'
+            WHERE stagione = $stagione AND codice = '$codiceEsc'");
+    } else {
+        mysqli_query($conn, "INSERT INTO NEW_PARAMETRI_STAGIONE (stagione, codice, etichetta, valore)
+            VALUES ($stagione, '$codiceEsc', '$etichettaEsc', '$valoreEsc')");
+    }
+}
+
+// Copia bonus/algoritmi/parametri dalla stagione sorgente a quella nuova.
 function copia_configurazione(int $stagioneOrigine, int $stagioneNuova, $conn): void
 {
     $bonus = carica_bonus($stagioneOrigine, $conn);
@@ -115,6 +178,10 @@ function copia_configurazione(int $stagioneOrigine, int $stagioneNuova, $conn): 
     foreach ($algoritmi as $tipo => $a) {
         salva_algoritmo($stagioneNuova, $tipo, $a['algoritmo'], $a['parametri'], $a['descrizione'], $conn);
     }
+    $parametri = carica_parametri($stagioneOrigine, $conn);
+    foreach ($parametri as $p) {
+        salva_parametro($stagioneNuova, $p['codice'], $p['etichetta'], $p['valore'], $conn);
+    }
 }
 
 function semina_default(int $stagione, $conn): void
@@ -126,6 +193,9 @@ function semina_default(int $stagione, $conn): void
     }
     foreach (ALGORITMI_DEFAULT as $tipo => $a) {
         salva_algoritmo($stagione, $tipo, $a['algoritmo'], $a['parametri'], $a['descrizione'], $conn);
+    }
+    foreach (PARAMETRI_DEFAULT as $p) {
+        salva_parametro($stagione, $p['codice'], $p['etichetta'], $p['valore'], $conn);
     }
 }
 
@@ -209,8 +279,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     api_error("Fascia non valida in \"$tipo\": \"bonus\" deve essere numerico", 400);
                 }
             }
+            if ($tipo === 'CENTROCAMPO' && isset($parametri['voto_fittizio']) && !is_numeric($parametri['voto_fittizio'])) {
+                api_error("\"voto_fittizio\" del centrocampo deve essere numerico", 400);
+            }
 
             salva_algoritmo($stagione, $tipo, $algoritmo, $parametri, $a['descrizione'] ?? null, $conn);
+        }
+    }
+
+    if (isset($input['parametri']) && is_array($input['parametri'])) {
+        foreach ($input['parametri'] as $p) {
+            $codice = trim((string) ($p['codice'] ?? ''));
+            if ($codice === '') continue;
+            if (!preg_match('/^[A-Z0-9_]{2,50}$/', $codice)) {
+                api_error("Codice parametro non valido: \"$codice\" (solo lettere maiuscole, cifre e underscore)", 400);
+            }
+            $etichetta = trim((string) ($p['etichetta'] ?? $codice));
+            $valore    = (string) ($p['valore'] ?? '');
+            salva_parametro($stagione, $codice, $etichetta, $valore, $conn);
         }
     }
 
@@ -227,11 +313,12 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
 $stagione = param_int("stagione");
 if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
 
-$bonus     = carica_bonus($stagione, $conn);
-$algoritmi = carica_algoritmi($stagione, $conn);
+$bonus        = carica_bonus($stagione, $conn);
+$algoritmi    = carica_algoritmi($stagione, $conn);
+$parametri    = carica_parametri($stagione, $conn);
 $ereditata_da = null;
 
-if (empty($bonus) && empty($algoritmi)) {
+if (empty($bonus) && empty($algoritmi) && empty($parametri)) {
     // Prima configurazione per questa stagione: eredita dalla stagione
     // configurata più recente, se esiste, altrimenti semina i default.
     $altra = query_one("SELECT MAX(stagione) AS s FROM NEW_REGOLE_BONUS WHERE stagione <> $stagione");
@@ -245,6 +332,7 @@ if (empty($bonus) && empty($algoritmi)) {
     }
     $bonus     = carica_bonus($stagione, $conn);
     $algoritmi = carica_algoritmi($stagione, $conn);
+    $parametri = carica_parametri($stagione, $conn);
 }
 
 api_success([
@@ -252,4 +340,5 @@ api_success([
     "ereditata_da"  => $ereditata_da,
     "bonus"         => $bonus,
     "algoritmi"     => $algoritmi,
+    "parametri"     => $parametri,
 ]);

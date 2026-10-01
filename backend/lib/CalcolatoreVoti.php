@@ -94,19 +94,20 @@ final class CalcolatoreVoti
     // 2) Modificatore DIFESA
     // ------------------------------------------------------------
     //
-    // Applicato alla squadra AVVERSARIA in funzione della media voto
-    // dei difensori titolari della squadra che difende, corretto da un
-    // aggiustamento in base al modulo schierato da chi difende.
+    // Si applica alla STESSA squadra che schiera questi difensori (non
+    // all'avversaria): la media voto dei difensori titolari, corretta
+    // da un aggiustamento in base al modulo schierato, determina il
+    // bonus/malus che quella squadra aggiunge al proprio punteggio.
     //
     // $mediaVotoDifensori: media dei voti (bonus/malus esclusi, cioè i
-    //   voti "puri") dei difensori titolari della squadra che difende
+    //   voti "puri") dei difensori titolari della squadra
     // $numeroDifensoriModulo: numero di difensori del modulo schierato
-    //   dalla squadra che difende (es. 3, 4, 5)
+    //   dalla squadra (es. 3, 4, 5)
     // $parametri: dalla riga NEW_REGOLE_ALGORITMI (tipo=DIFESA), campo
     //   "parametri" già decodificato da JSON
     //
     // Ritorna il modificatore (intero o decimale) da sommare al
-    // punteggio della squadra AVVERSARIA (non di chi difende).
+    // punteggio della squadra stessa.
     public static function modificatoreDifesa(
         float $mediaVotoDifensori,
         int $numeroDifensoriModulo,
@@ -122,24 +123,40 @@ final class CalcolatoreVoti
     // ------------------------------------------------------------
     //
     // Confronta la somma dei voti (puri) dei centrocampisti titolari
-    // delle due squadre. In base a fasce sulla differenza assoluta,
-    // assegna un bonus alla squadra con centrocampo migliore e un
-    // malus di pari entità all'altra.
+    // delle due squadre, A PARITÀ DI NUMERO: se una squadra ne schiera
+    // meno dell'altra, ai soli fini di questo calcolo le si aggiungono
+    // centrocampisti "fittizi" con un voto convenzionale
+    // ($parametri['voto_fittizio'], parametrizzabile) fino a pareggiare
+    // il numero della squadra con più centrocampisti. In base a fasce
+    // sulla differenza assoluta fra le due somme (dopo l'eventuale
+    // pareggio), assegna un bonus alla squadra con centrocampo migliore
+    // e un malus di pari entità all'altra.
+    //
+    // $numCasa / $numOspite: numero di centrocampisti titolari con voto
+    //   effettivamente considerati in $sommaVotiCasa / $sommaVotiOspite
+    //   (vedi calcolaSquadra() → numero_centrocampisti)
     //
     // Ritorna ['casa' => modCasa, 'ospite' => modOspite], dove uno dei
     // due è sempre >= 0 e l'altro <= 0 (0/0 in caso di parità).
     public static function modificatoreCentrocampo(
         float $sommaVotiCasa,
+        int $numCasa,
         float $sommaVotiOspite,
+        int $numOspite,
         array $parametri
     ): array {
-        $differenza = abs($sommaVotiCasa - $sommaVotiOspite);
+        $votoFittizio = (float) ($parametri['voto_fittizio'] ?? 5);
+        $numeroTarget = max($numCasa, $numOspite);
+        $sommaCasaEq   = $sommaVotiCasa   + max(0, $numeroTarget - $numCasa)   * $votoFittizio;
+        $sommaOspiteEq = $sommaVotiOspite + max(0, $numeroTarget - $numOspite) * $votoFittizio;
+
+        $differenza = abs($sommaCasaEq - $sommaOspiteEq);
         $bonus = self::valoreFasciaPerSoglia($differenza, $parametri['fasce'] ?? []);
 
-        if ($sommaVotiCasa === $sommaVotiOspite) {
+        if ($sommaCasaEq === $sommaOspiteEq) {
             return ['casa' => 0.0, 'ospite' => 0.0];
         }
-        return $sommaVotiCasa > $sommaVotiOspite
+        return $sommaCasaEq > $sommaOspiteEq
             ? ['casa' => round($bonus, 2), 'ospite' => round(-$bonus, 2)]
             : ['casa' => round(-$bonus, 2), 'ospite' => round($bonus, 2)];
     }
@@ -238,23 +255,22 @@ final class CalcolatoreVoti
         $casa   = self::calcolaSquadra($formazioneCasa, $config);
         $ospite = self::calcolaSquadra($formazioneOspite, $config);
 
-        // Modificatore difesa: si applica in modo incrociato, la media
-        // dei difensori di una squadra genera il modificatore per i
-        // punti dell'AVVERSARIA.
-        $modDifesaSuOspite = self::modificatoreDifesa(
+        // Modificatore difesa: si applica alla STESSA squadra che
+        // schiera questi difensori (non è incrociato sull'avversaria).
+        $modDifesaCasa = self::modificatoreDifesa(
             $casa['media_difensori'],
             $formazioneCasa['modulo_difensori'] ?? count($formazioneCasa['difensori'] ?? []),
             $config['difesa'] ?? []
         );
-        $modDifesaSuCasa = self::modificatoreDifesa(
+        $modDifesaOspite = self::modificatoreDifesa(
             $ospite['media_difensori'],
             $formazioneOspite['modulo_difensori'] ?? count($formazioneOspite['difensori'] ?? []),
             $config['difesa'] ?? []
         );
 
         $modCentrocampo = self::modificatoreCentrocampo(
-            $casa['somma_centrocampisti'],
-            $ospite['somma_centrocampisti'],
+            $casa['somma_centrocampisti'],   $casa['numero_centrocampisti'],
+            $ospite['somma_centrocampisti'], $ospite['numero_centrocampisti'],
             $config['centrocampo'] ?? []
         );
 
@@ -264,18 +280,18 @@ final class CalcolatoreVoti
         $modAttaccoOspite = $ospite['modificatore_attacco'];
 
         $casa['modificatori']   = [
-            'difesa'      => $modDifesaSuCasa,
+            'difesa'      => $modDifesaCasa,
             'centrocampo' => $modCentrocampo['casa'],
             'attacco'     => $modAttaccoCasa,
         ];
         $ospite['modificatori'] = [
-            'difesa'      => $modDifesaSuOspite,
+            'difesa'      => $modDifesaOspite,
             'centrocampo' => $modCentrocampo['ospite'],
             'attacco'     => $modAttaccoOspite,
         ];
 
-        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaSuCasa   + $modCentrocampo['casa']   + $modAttaccoCasa,   2);
-        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaSuOspite + $modCentrocampo['ospite'] + $modAttaccoOspite, 2);
+        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaCasa   + $modCentrocampo['casa']   + $modAttaccoCasa,   2);
+        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaOspite + $modCentrocampo['ospite'] + $modAttaccoOspite, 2);
 
         return ['casa' => $casa, 'ospite' => $ospite];
     }

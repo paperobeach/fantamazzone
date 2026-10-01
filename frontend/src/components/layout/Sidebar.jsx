@@ -69,7 +69,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
       />
 
       <aside
-        className={`fixed left-0 top-0 h-screen w-64 sm:w-56 flex flex-col bg-pitch-900 border-r border-white/5 z-50
+        className={`fixed inset-y-0 left-0 w-64 sm:w-56 flex flex-col bg-pitch-900 border-r border-white/5 z-50
                     transition-transform duration-300 ease-out
                     ${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0`}
       >
@@ -118,7 +118,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+      <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-3 space-y-0.5">
         {NAV.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -199,7 +199,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-3 border-t border-white/5">
+      <div className="flex-shrink-0 px-3 py-3 border-t border-white/5 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         {utente ? (
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-pitch-700 border border-white/10 flex items-center justify-center flex-shrink-0">
@@ -211,7 +211,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
               <p className="text-xs font-medium text-slate-300 truncate">{utente.descrizione}</p>
               <p className="text-[10px] text-slate-600">{isAdmin ? 'Admin' : 'Utente'}</p>
             </div>
-            <button onClick={handleLogout} className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/5 transition-all">
+            <button onClick={handleLogout} aria-label="Esci" title="Esci" className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-400/5 transition-all">
               <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>

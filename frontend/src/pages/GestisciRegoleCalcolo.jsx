@@ -11,15 +11,23 @@ const TIPI_ALGORITMO = [
   { value: 'ATTACCO',     label: 'Attacco' },
 ]
 
-// Le fasce sono condivise dai tre algoritmi: [{ da, a, bonus }, ...]
-// da/a null = illimitato. Editor generico riusato per tutti e tre.
-function TabellaFasce({ fasce, onChange }) {
-  const setFascia = (idx, campo, valore) => {
-    const next = fasce.map((f, i) => (i === idx ? { ...f, [campo]: valore } : f))
+// Le fasce sono condivise da più algoritmi/parametri: [{ da, a, [campo] }, ...]
+// da/a null = illimitato. campo/etichettaCampo permettono di riusare lo
+// stesso editor anche per le fasce gol-da-punteggio (campo "gol").
+function TabellaFasce({ fasce, onChange, campo = 'bonus', etichettaCampo = 'Bonus/malus', stepCampo = 0.5 }) {
+  const setFascia = (idx, k, valore) => {
+    const next = fasce.map((f, i) => (i === idx ? { ...f, [k]: valore } : f))
     onChange(next)
   }
-  const aggiungi = () => onChange([...fasce, { da: null, a: null, bonus: 0 }])
+  const aggiungi = () => onChange([...fasce, { da: null, a: null, [campo]: 0 }])
   const rimuovi = (idx) => onChange(fasce.filter((_, i) => i !== idx))
+
+  // Sempre mostrate in ordine crescente di "da" (illimitato/null = il più basso),
+  // pur continuando a modificare l'array originale tramite l'indice vero.
+  const sogliaOrdinamento = (da) => (da === null || da === undefined ? -Infinity : Number(da))
+  const ordinate = fasce
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => sogliaOrdinamento(a.f.da) - sogliaOrdinamento(b.f.da))
 
   return (
     <div className="overflow-x-auto">
@@ -28,12 +36,12 @@ function TabellaFasce({ fasce, onChange }) {
           <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
             <th className="py-2 pr-3">Da</th>
             <th className="py-2 pr-3">A</th>
-            <th className="py-2 pr-3">Bonus/malus</th>
+            <th className="py-2 pr-3">{etichettaCampo}</th>
             <th className="py-2 w-8" />
           </tr>
         </thead>
         <tbody>
-          {fasce.map((f, idx) => (
+          {ordinate.map(({ f, i: idx }) => (
             <tr key={idx} className="border-t border-white/[0.03]">
               <td className="py-2 pr-3">
                 <input
@@ -53,9 +61,9 @@ function TabellaFasce({ fasce, onChange }) {
               </td>
               <td className="py-2 pr-3">
                 <input
-                  type="number" step="0.5"
-                  value={f.bonus ?? 0}
-                  onChange={e => setFascia(idx, 'bonus', Number(e.target.value))}
+                  type="number" step={stepCampo}
+                  value={f[campo] ?? 0}
+                  onChange={e => setFascia(idx, campo, Number(e.target.value))}
                   className="fanta-input w-24"
                 />
               </td>
@@ -102,8 +110,8 @@ function SezioneAlgoritmo({ tipo, config, onChange }) {
   const setParametri = (next) => onChange({ ...config, parametri: next })
 
   const descrizioni = {
-    DIFESA: 'Bonus/malus alla squadra AVVERSARIA in base alla media voto dei difensori titolari, corretto in base al modulo schierato.',
-    CENTROCAMPO: 'Bonus/malus incrociato in base alla differenza (in valore assoluto) fra le somme dei voti dei centrocampisti delle due squadre.',
+    DIFESA: 'Bonus/malus alla squadra STESSA (non all\'avversaria) in base alla media voto dei propri difensori titolari, corretto in base al modulo schierato.',
+    CENTROCAMPO: 'Bonus/malus incrociato in base alla differenza fra le somme dei voti dei centrocampisti delle due squadre, a parità di numero (i mancanti si equiparano con un voto fittizio).',
     ATTACCO: 'Bonus al singolo attaccante titolare privo di bonus da gol fatto, in funzione del voto netto già maturato con gli altri bonus/malus.',
   }
 
@@ -128,6 +136,18 @@ function SezioneAlgoritmo({ tipo, config, onChange }) {
           <TabellaAggiustamentoModulo
             valori={parametri.aggiustamento_modulo ?? {}}
             onChange={aggiustamento_modulo => setParametri({ ...parametri, aggiustamento_modulo })}
+          />
+        </div>
+      )}
+
+      {tipo === 'CENTROCAMPO' && (
+        <div className="mt-6 pt-5 border-t border-white/[0.05]">
+          <label className="text-xs text-slate-600 mb-1 block">Voto fittizio (centrocampisti mancanti, a parità di numero)</label>
+          <input
+            type="number" step="0.5"
+            value={parametri.voto_fittizio ?? 5}
+            onChange={e => setParametri({ ...parametri, voto_fittizio: Number(e.target.value) })}
+            className="fanta-input w-28"
           />
         </div>
       )}
@@ -159,6 +179,7 @@ export default function GestisciRegoleCalcolo() {
   const [tab, setTab] = useState('bonus')
   const [bonus, setBonus] = useState([])
   const [algoritmi, setAlgoritmi] = useState({})
+  const [parametri, setParametri] = useState([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(null)
   const [saved, setSaved] = useState(false)
@@ -167,6 +188,7 @@ export default function GestisciRegoleCalcolo() {
     if (!info) return
     setBonus(info.bonus ?? [])
     setAlgoritmi(info.algoritmi ?? {})
+    setParametri(info.parametri ?? [])
     setSaved(false)
     setSaveError(null)
   }, [info])
@@ -189,6 +211,30 @@ export default function GestisciRegoleCalcolo() {
     setSaved(false)
   }
 
+  const setValoreParametro = (codice, valore) => {
+    setParametri(prev => {
+      const esiste = prev.some(p => p.codice === codice)
+      return esiste
+        ? prev.map(p => (p.codice === codice ? { ...p, valore } : p))
+        : [...prev, { codice, etichetta: codice, valore }]
+    })
+    setSaved(false)
+  }
+  const getValoreParametro = (codice, default_ = '') => parametri.find(p => p.codice === codice)?.valore ?? default_
+
+  const aggiungiParametro = () => {
+    setParametri([...parametri, { codice: '', etichetta: '', valore: '' }])
+    setSaved(false)
+  }
+  const setCampoParametro = (idx, campo, valore) => {
+    setParametri(parametri.map((p, i) => (i === idx ? { ...p, [campo]: valore } : p)))
+    setSaved(false)
+  }
+  const rimuoviParametro = (idx) => {
+    setParametri(parametri.filter((_, i) => i !== idx))
+    setSaved(false)
+  }
+
   const salva = async () => {
     setSaving(true)
     setSaveError(null)
@@ -197,7 +243,7 @@ export default function GestisciRegoleCalcolo() {
       for (const b of bonus) {
         if (!b.codice.trim()) throw new Error('Ogni voce di bonus/malus deve avere un codice')
       }
-      await adminSalvaRegoleCalcolo(stagione, { bonus, algoritmi })
+      await adminSalvaRegoleCalcolo(stagione, { bonus, algoritmi, parametri })
       setSaved(true)
       refetch()
     } catch (err) {
@@ -233,7 +279,11 @@ export default function GestisciRegoleCalcolo() {
 
           <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
             <TabBar
-              tabs={[{ value: 'bonus', label: 'Bonus / malus' }, { value: 'modificatori', label: 'Modificatori di squadra' }]}
+              tabs={[
+                { value: 'bonus', label: 'Bonus / malus' },
+                { value: 'modificatori', label: 'Modificatori di squadra' },
+                { value: 'parametri', label: 'Parametri stagione' },
+              ]}
               active={tab}
               onChange={setTab}
             />
@@ -329,6 +379,123 @@ export default function GestisciRegoleCalcolo() {
                   />
                 </div>
               ))}
+            </div>
+          )}
+
+          {tab === 'parametri' && (
+            <div className="flex flex-col gap-6 max-w-3xl">
+              <div className="card p-6">
+                <p className="text-xs text-slate-500 mb-4">
+                  Parametri di stagione non riconducibili a un bonus/malus o a un modificatore
+                  (usati dal calcolo voti, fase 2 di "Gestione voti").
+                </p>
+                <div className="flex flex-wrap gap-6 mb-6">
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Sostituzioni di movimento (portiere escluso)</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={getValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', 5)}
+                      onChange={e => setValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Sostituzioni portiere</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={getValoreParametro('SOSTITUZIONI_MAX_PORTIERE', 1)}
+                      onChange={e => setValoreParametro('SOSTITUZIONI_MAX_PORTIERE', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Ultima giornata con fattore casa</label>
+                    <input
+                      type="number" min="0" step="1" placeholder="sempre"
+                      value={getValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', '')}
+                      onChange={e => setValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                    <p className="text-[11px] text-slate-700 mt-1">Vuoto = si applica sempre (nessun campo neutro)</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Numero di giornate della stagione</label>
+                    <input
+                      type="number" min="1" step="1"
+                      value={getValoreParametro('NUMERO_GIORNATE', 38)}
+                      onChange={e => setValoreParametro('NUMERO_GIORNATE', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-5 border-t border-white/[0.05]">
+                  <label className="text-xs text-slate-600 mb-1 block">Fasce gol fatti da punteggio totale</label>
+                  <p className="text-[11px] text-slate-700 mb-2">
+                    Determinano golf/gols in NEW_RISULTATI dal punteggio finale della squadra (fattore casa incluso).
+                  </p>
+                  <TabellaFasce
+                    fasce={(() => { try { return JSON.parse(getValoreParametro('FASCE_GOL_PUNTEGGIO', '[]')) } catch { return [] } })()}
+                    onChange={fasce => setValoreParametro('FASCE_GOL_PUNTEGGIO', JSON.stringify(fasce))}
+                    campo="gol"
+                    etichettaCampo="Gol"
+                    stepCampo={1}
+                  />
+                </div>
+              </div>
+
+              {/* Elenco generico completo: mostra/permette di aggiungere qualunque altro
+                  parametro, anche non previsto dai controlli dedicati sopra. */}
+              <div className="card p-6">
+                <p className="text-xs text-slate-500 mb-4">Elenco completo (avanzato)</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
+                        <th className="py-2 pr-3">Codice</th>
+                        <th className="py-2 pr-3">Etichetta</th>
+                        <th className="py-2 pr-3">Valore</th>
+                        <th className="py-2 w-8" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parametri.map((p, idx) => (
+                        <tr key={idx} className="border-t border-white/[0.03]">
+                          <td className="py-2 pr-3">
+                            <input
+                              type="text" value={p.codice}
+                              onChange={e => setCampoParametro(idx, 'codice', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                              className="fanta-input w-56 font-mono text-xs"
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <input
+                              type="text" value={p.etichetta}
+                              onChange={e => setCampoParametro(idx, 'etichetta', e.target.value)}
+                              className="fanta-input w-56"
+                            />
+                          </td>
+                          <td className="py-2 pr-3">
+                            <input
+                              type="text" value={p.valore}
+                              onChange={e => setCampoParametro(idx, 'valore', e.target.value)}
+                              className="fanta-input w-56 font-mono text-xs"
+                            />
+                          </td>
+                          <td className="py-2">
+                            <button type="button" onClick={() => rimuoviParametro(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button type="button" onClick={aggiungiParametro} className="btn-ghost text-xs mt-4">
+                  <Plus className="w-3.5 h-3.5" /> Aggiungi parametro
+                </button>
+              </div>
             </div>
           )}
         </>

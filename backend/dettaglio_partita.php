@@ -41,7 +41,8 @@ $risultati = query_all("SELECT
         r.mod_att  AS mod_att_casa,  r.mod_cc  AS mod_cc_casa,
         r.num_cc   AS num_cc_casa,   r.tot_cc  AS tot_cc_casa,
         r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
-        r2.num_cc  AS num_cc_ospite,  r2.tot_cc AS tot_cc_ospite
+        r2.num_cc  AS num_cc_ospite,  r2.tot_cc AS tot_cc_ospite,
+        r2.modificatore_a AS modificatore_a_ospite
     FROM NEW_RISULTATI r
     JOIN NEW_CALENDARIO cal ON cal.stagione = r.stagione
                             AND cal.giornata = r.giornata
@@ -105,7 +106,10 @@ foreach ($risultati as $r) {
             "logo"       => $r["logo_casa"],
             "ftotale"    => (float)$r["ftotale"],
             // Modificatori che compongono il punteggio totale della squadra
-            "mod_dif"    => (int)$r["modificatore"],
+            // Modificatore difesa = campo modificatore_a della riga della
+            // squadra, con segno invertito (in NEW_RISULTATI è salvato
+            // con segno opposto rispetto al bonus realmente sommato)
+            "mod_dif"    => 0 - (int)$r["modificatore_a"],
             "mod_cc"     => $r["mod_cc_casa"]  !== null ? (float)$r["mod_cc_casa"]  : null,
             "mod_att"    => $r["mod_att_casa"] !== null ? (float)$r["mod_att_casa"] : null,
             "num_cc"     => $r["num_cc_casa"]  !== null ? (int)$r["num_cc_casa"]    : null,
@@ -118,7 +122,11 @@ foreach ($risultati as $r) {
             "logo"       => $r["logo_ospite"],
             "ftotale"    => (float)$r["ftotale_a"],
             // Modificatori che compongono il punteggio totale della squadra
-            "mod_dif"    => (int)$r["modificatore_a"],
+            // Come sopra, ma letto dalla riga dell'ospite (r2): se la riga
+            // gemella non esiste, ripiego sul campo modificatore di casa
+            "mod_dif"    => $r["modificatore_a_ospite"] !== null
+                                ? 0 - (int)$r["modificatore_a_ospite"]
+                                : 0 - (int)$r["modificatore"],
             "mod_cc"     => $r["mod_cc_ospite"]  !== null ? (float)$r["mod_cc_ospite"]  : null,
             "mod_att"    => $r["mod_att_ospite"] !== null ? (float)$r["mod_att_ospite"] : null,
             "num_cc"     => $r["num_cc_ospite"]  !== null ? (int)$r["num_cc_ospite"]    : null,

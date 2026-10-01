@@ -104,14 +104,19 @@ const FASCE_GOL_PUNTEGGIO_DEFAULT = [
 ];
 
 // Parametri di stagione non riconducibili a bonus/malus o modificatori.
-const PARAMETRI_DEFAULT = [
-    ['codice' => 'SOSTITUZIONI_MAX_MOVIMENTO',   'etichetta' => 'Sostituzioni di movimento (portiere escluso)', 'valore' => '5'],
-    ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
-    ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
-    ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
-    ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
-        'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
-];
+// Funzione (non const): una "const" non può contenere una chiamata di
+// funzione come json_encode() nell'inizializzatore.
+function parametri_default(): array
+{
+    return [
+        ['codice' => 'SOSTITUZIONI_MAX_MOVIMENTO',   'etichetta' => 'Sostituzioni di movimento (portiere escluso)', 'valore' => '5'],
+        ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
+        ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
+        ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
+        ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
+            'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
+    ];
+}
 
 function carica_bonus(int $stagione, $conn): array
 {
@@ -194,7 +199,7 @@ function semina_default(int $stagione, $conn): void
     foreach (ALGORITMI_DEFAULT as $tipo => $a) {
         salva_algoritmo($stagione, $tipo, $a['algoritmo'], $a['parametri'], $a['descrizione'], $conn);
     }
-    foreach (PARAMETRI_DEFAULT as $p) {
+    foreach (parametri_default() as $p) {
         salva_parametro($stagione, $p['codice'], $p['etichetta'], $p['valore'], $conn);
     }
 }

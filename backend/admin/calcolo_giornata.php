@@ -29,8 +29,10 @@
 //     NEW_VOTI.rigorep = Rs (rigori sbagliati) — mapping richiesto
 //   - modificatore attacco: voce di squadra separata (NEW_RISULTATI.mod_att),
 //     NON sommata al voto del singolo giocatore in NEW_VOTI.totale
-//   - modificatore difesa: si applica alla STESSA squadra (non
-//     all'avversaria), vedi CalcolatoreVoti::modificatoreDifesa()
+//   - modificatore difesa: generato dai difensori di una squadra e
+//     sommato al punteggio dell'AVVERSARIA, vedi
+//     CalcolatoreVoti::modificatoreDifesa(); in NEW_RISULTATI.modificatore
+//     / modificatore_a si salva il valore RICEVUTO da ciascuna squadra
 //   - modificatore centrocampo: confronto a parità di numero di
 //     centrocampisti, pareggiato con un voto fittizio parametrizzabile
 //     (algoritmo CENTROCAMPO, parametro "voto_fittizio")
@@ -380,7 +382,9 @@ try {
         // squadra di CASA (mai all'ospite), se la giornata rientra nel
         // limite configurato (vuoto = sempre applicato).
         $applicaFattoreCasa = $ultimaGiornataFattoreCasa === '' || $giornata <= (int) $ultimaGiornataFattoreCasa;
+        $fattoreCampoCasa   = 0;
         if ($applicaFattoreCasa && $fattoreCasaValore != 0) {
+            $fattoreCampoCasa = (int) round($fattoreCasaValore);
             $risultato['casa']['totale_squadra'] = round($risultato['casa']['totale_squadra'] + $fattoreCasaValore, 2);
             $warning[] = "Squadra $idCasa: fattore casa (+$fattoreCasaValore) applicato alla giornata $giornata";
         }
@@ -397,7 +401,8 @@ try {
             $golfCasa, $golfOspite,
             (int) round($risultato['casa']['modificatori']['difesa']), (int) round($risultato['ospite']['modificatori']['difesa']),
             $risultato['casa']['modificatori']['attacco'],
-            $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo']
+            $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo'],
+            $fattoreCampoCasa
         );
         salvaRigaRisultato(
             $conn, $stagione, $giornata, $idOspite, $idCasa,
@@ -405,7 +410,8 @@ try {
             $golfOspite, $golfCasa,
             (int) round($risultato['ospite']['modificatori']['difesa']), (int) round($risultato['casa']['modificatori']['difesa']),
             $risultato['ospite']['modificatori']['attacco'],
-            $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo']
+            $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo'],
+            0
         );
 
         $partiteElaborate++;

@@ -94,10 +94,11 @@ final class CalcolatoreVoti
     // 2) Modificatore DIFESA
     // ------------------------------------------------------------
     //
-    // Si applica alla STESSA squadra che schiera questi difensori (non
-    // all'avversaria): la media voto dei difensori titolari, corretta
-    // da un aggiustamento in base al modulo schierato, determina il
-    // bonus/malus che quella squadra aggiunge al proprio punteggio.
+    // Si applica alla squadra AVVERSARIA di quella che schiera questi
+    // difensori: la media voto dei difensori titolari, corretta da un
+    // aggiustamento in base al modulo schierato, determina il
+    // bonus/malus che l'avversaria somma al proprio punteggio (una
+    // difesa debole regala punti all'attacco avversario).
     //
     // $mediaVotoDifensori: media dei voti (bonus/malus esclusi, cioè i
     //   voti "puri") dei difensori titolari della squadra
@@ -107,7 +108,7 @@ final class CalcolatoreVoti
     //   "parametri" già decodificato da JSON
     //
     // Ritorna il modificatore (intero o decimale) da sommare al
-    // punteggio della squadra stessa.
+    // punteggio della squadra AVVERSARIA (vedi calcolaPartita()).
     public static function modificatoreDifesa(
         float $mediaVotoDifensori,
         int $numeroDifensoriModulo,
@@ -255,8 +256,8 @@ final class CalcolatoreVoti
         $casa   = self::calcolaSquadra($formazioneCasa, $config);
         $ospite = self::calcolaSquadra($formazioneOspite, $config);
 
-        // Modificatore difesa: si applica alla STESSA squadra che
-        // schiera questi difensori (non è incrociato sull'avversaria).
+        // Modificatore difesa: generato dai difensori di una squadra, ma
+        // ricevuto (sommato al punteggio) dalla squadra AVVERSARIA.
         $modDifesaCasa = self::modificatoreDifesa(
             $casa['media_difensori'],
             $formazioneCasa['modulo_difensori'] ?? count($formazioneCasa['difensori'] ?? []),
@@ -279,19 +280,22 @@ final class CalcolatoreVoti
         $modAttaccoCasa   = $casa['modificatore_attacco'];
         $modAttaccoOspite = $ospite['modificatore_attacco'];
 
+        // 'difesa' = modificatore RICEVUTO dalla squadra (generato dalla
+        // difesa avversaria): è il valore sommato al suo totale e salvato
+        // in NEW_RISULTATI.modificatore / modificatore_a.
         $casa['modificatori']   = [
-            'difesa'      => $modDifesaCasa,
+            'difesa'      => $modDifesaOspite,
             'centrocampo' => $modCentrocampo['casa'],
             'attacco'     => $modAttaccoCasa,
         ];
         $ospite['modificatori'] = [
-            'difesa'      => $modDifesaOspite,
+            'difesa'      => $modDifesaCasa,
             'centrocampo' => $modCentrocampo['ospite'],
             'attacco'     => $modAttaccoOspite,
         ];
 
-        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaCasa   + $modCentrocampo['casa']   + $modAttaccoCasa,   2);
-        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaOspite + $modCentrocampo['ospite'] + $modAttaccoOspite, 2);
+        $casa['totale_squadra']   = round($casa['totale_giocatori']   + $modDifesaOspite + $modCentrocampo['casa']   + $modAttaccoCasa,   2);
+        $ospite['totale_squadra'] = round($ospite['totale_giocatori'] + $modDifesaCasa   + $modCentrocampo['ospite'] + $modAttaccoOspite, 2);
 
         return ['casa' => $casa, 'ospite' => $ospite];
     }

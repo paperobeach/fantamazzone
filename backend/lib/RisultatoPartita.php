@@ -32,15 +32,22 @@ function salvaRigaRisultato(
     float $modAtt,
     int $numCc,
     float $totCc,
-    float $modCc
+    float $modCc,
+    ?float $fattoreCampo = null
 ): array {
     // Calcolo punti e segno (identico a backend/admin/risultati.php)
     if ($golf > $gols) {
-        $punti = 3; $segno = "W"; $fc = 1; // fattore campo (vittoria in casa)
+        $punti = 3; $segno = "W"; $fc = 1; // legacy (inserimento manuale)
     } elseif ($golf === $gols) {
         $punti = 1; $segno = "N"; $fc = 0;
     } else {
         $punti = 0; $segno = "L"; $fc = 0;
+    }
+    // Se il chiamante passa il fattore campo realmente applicato (calcolo
+    // giornata: FATTORE_CASA della squadra di casa, 0 per l'ospite) si
+    // scrive quel valore al posto del flag legacy 1/0 legato al risultato.
+    if ($fattoreCampo !== null) {
+        $fc = $fattoreCampo;
     }
 
     $exists = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI

@@ -20,13 +20,13 @@ function ScoreBox({ risultato }) {
   return (
     <div className="flex items-center gap-2">
       <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
-        segno === 'W' ? 'bg-green-500/15 text-green-400' :
+        ['V', 'W'].includes(segno) ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
       }`}>{golf}</span>
       <span className="text-slate-600 text-xs font-mono">:</span>
       <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
-        segno === 'L' ? 'bg-green-500/15 text-green-400' :
+        ['P', 'L'].includes(segno) ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
       }`}>{gols}</span>

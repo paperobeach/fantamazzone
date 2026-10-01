@@ -8,8 +8,8 @@ import { Link } from 'react-router-dom'
 import TeamLogo from '../components/TeamLogo'
 
 function TrendIcon({ segno }) {
-  if (segno === 'W') return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-  if (segno === 'L') return <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+  if (['V', 'W'].includes(segno)) return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+  if (['P', 'L'].includes(segno)) return <TrendingDown className="w-3.5 h-3.5 text-red-400" />
   return <Minus className="w-3.5 h-3.5 text-slate-600" />
 }
 

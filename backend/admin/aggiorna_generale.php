@@ -51,9 +51,9 @@ foreach ($squadre as $sq) {
         $punteggi[] = (float)$r["ftotale"];
 
         switch ($r["segno"]) {
-            case "W": $vinte++; break;
+            case "V": case "W": $vinte++; break;
             case "N": $nulle++; break;
-            case "L": $perse++; break;
+            case "P": case "L": $perse++; break;
         }
     }
 

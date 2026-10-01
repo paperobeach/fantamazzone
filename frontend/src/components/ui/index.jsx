@@ -57,9 +57,13 @@ export function RoleBadge({ ruolo }) {
   return <span className={`stat-pill ${r.cls}`}>{r.label}</span>
 }
 
-// ── Sign badge (W/N/L) ────────────────────────────────────────
+// ── Sign badge (V/N/P; W/L legacy) ────────────────────────────────────────
 export function SignBadge({ segno }) {
-  const map = { W: { cls: 'badge-win', label: 'V' }, N: { cls: 'badge-draw', label: 'P' }, L: { cls: 'badge-loss', label: 'S' } }
+  const map = {
+    V: { cls: 'badge-win', label: 'V' }, W: { cls: 'badge-win', label: 'V' },
+    N: { cls: 'badge-draw', label: 'N' },
+    P: { cls: 'badge-loss', label: 'P' }, L: { cls: 'badge-loss', label: 'P' },
+  }
   const s = map[segno] ?? { cls: '', label: segno }
   return <span className={`stat-pill ${s.cls}`}>{s.label}</span>
 }

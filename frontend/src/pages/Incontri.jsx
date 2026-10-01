@@ -28,13 +28,13 @@ function MatchCard({ match }) {
         <div className="flex-shrink-0 flex flex-col items-center gap-1">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm sm:text-lg font-bold text-display ${
-              segno === 'W' ? 'bg-green-500/15 text-green-400' :
+              ['V', 'W'].includes(segno) ? 'bg-green-500/15 text-green-400' :
               segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                               'bg-pitch-800 text-slate-400'
             }`}>{golf}</span>
             <span className="text-slate-600 font-mono text-sm">:</span>
             <span className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-sm sm:text-lg font-bold text-display ${
-              segno === 'L' ? 'bg-green-500/15 text-green-400' :
+              ['P', 'L'].includes(segno) ? 'bg-green-500/15 text-green-400' :
               segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                               'bg-pitch-800 text-slate-400'
             }`}>{gols}</span>

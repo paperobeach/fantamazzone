@@ -8,7 +8,7 @@
 //        modificatore, modificatore_a,
 //        mod_att, num_cc, tot_cc, mod_cc }
 //
-// Calcola automaticamente punti e segno (W/N/L) in base ai gol.
+// Calcola automaticamente punti e segno (V/N/P) in base ai gol.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/RisultatoPartita.php";
@@ -44,7 +44,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $mod, $mod_a, $mod_att, $num_cc, $tot_cc, $mod_cc
     );
 
-    $segnoOpposto = ["W" => "L", "N" => "N", "L" => "W"];
+    $segnoOpposto = ["V" => "P", "N" => "N", "P" => "V"];
     $puntiOspite  = $esito["punti"] === 1 ? 1 : (3 - $esito["punti"]);
 
     api_success([

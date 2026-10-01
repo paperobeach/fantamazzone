@@ -31,8 +31,10 @@
 //     NON sommata al voto del singolo giocatore in NEW_VOTI.totale
 //   - modificatore difesa: generato dai difensori di una squadra e
 //     sommato al punteggio dell'AVVERSARIA, vedi
-//     CalcolatoreVoti::modificatoreDifesa(); in NEW_RISULTATI.modificatore
-//     / modificatore_a si salva il valore RICEVUTO da ciascuna squadra
+//     CalcolatoreVoti::modificatoreDifesa(); in NEW_RISULTATI la riga di
+//     una squadra salva in `modificatore` il valore GENERATO dalla
+//     propria difesa (ricevuto dall'avversaria) e in `modificatore_a`
+//     quello generato dalla difesa avversaria (ricevuto da lei)
 //   - modificatore centrocampo: confronto a parità di numero di
 //     centrocampisti, pareggiato con un voto fittizio parametrizzabile
 //     (algoritmo CENTROCAMPO, parametro "voto_fittizio")
@@ -399,7 +401,7 @@ try {
             $conn, $stagione, $giornata, $idCasa, $idOspite,
             $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
             $golfCasa, $golfOspite,
-            (int) round($risultato['casa']['modificatori']['difesa']), (int) round($risultato['ospite']['modificatori']['difesa']),
+            (int) round($risultato['ospite']['modificatori']['difesa']), (int) round($risultato['casa']['modificatori']['difesa']),
             $risultato['casa']['modificatori']['attacco'],
             $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo'],
             $fattoreCampoCasa
@@ -408,7 +410,7 @@ try {
             $conn, $stagione, $giornata, $idOspite, $idCasa,
             $risultato['ospite']['totale_squadra'], $risultato['casa']['totale_squadra'],
             $golfOspite, $golfCasa,
-            (int) round($risultato['ospite']['modificatori']['difesa']), (int) round($risultato['casa']['modificatori']['difesa']),
+            (int) round($risultato['casa']['modificatori']['difesa']), (int) round($risultato['ospite']['modificatori']['difesa']),
             $risultato['ospite']['modificatori']['attacco'],
             $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo'],
             0

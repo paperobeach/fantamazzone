@@ -156,20 +156,12 @@ export const adminInsertVoti       = (stagione, giornata, id_squadra, voti) =>
 export const adminInsertRisultato  = (stagione, body) =>
   post('admin/risultati.php', { stagione, ...body })
 
-export const adminChiudiGiornata   = (stagione, giornata) =>
-  post('admin/chiudi_giornata.php', { stagione, giornata })
+// Fase 3 gestione voti: stato e chiusura giornata (admin/chiusura_giornata.php)
+export const getStatoChiusuraGiornata = (stagione, giornata) =>
+  get('admin/chiusura_giornata.php', { stagione, giornata })
 
-export const adminAggiornaStatistiche = (stagione) =>
-  post('admin/aggiorna_statistiche.php', { stagione })
-
-export const adminAggiornaGenerale = (stagione, giornata) =>
-  post('admin/aggiorna_generale.php', { stagione, giornata })
-
-export const adminAggiornaTopFlop  = (stagione) =>
-  post('admin/aggiorna_top_flop.php', { stagione })
-
-export const adminAggiornaKulovic  = (stagione) =>
-  post('admin/aggiorna_kulovic.php', { stagione })
+export const adminChiudiGiornata = (stagione, giornata) =>
+  post('admin/chiusura_giornata.php', { stagione, giornata })
 
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
@@ -244,28 +236,3 @@ export const adminCaricaVotiSerieA = (stagione, giornata, file, forza = false) =
 // la giornata non è chiusa.
 export const adminCalcolaGiornata = (stagione, giornata) =>
   post('admin/calcolo_giornata.php', { stagione, giornata })
-
-/**
- * Chiude una giornata ed esegue in sequenza tutti gli aggiornamenti admin.
- * Restituisce un array di { step, ok, error? }
- */
-export async function adminChiudiEAggiorna(stagione, giornata) {
-  const steps = [
-    { label: 'Chiusura giornata',    fn: () => adminChiudiGiornata(stagione, giornata) },
-    { label: 'Statistiche',          fn: () => adminAggiornaStatistiche(stagione) },
-    { label: 'Classifica generale',  fn: () => adminAggiornaGenerale(stagione, giornata) },
-    { label: 'Top / Flop 11',        fn: () => adminAggiornaTopFlop(stagione) },
-    { label: 'Kulovic',              fn: () => adminAggiornaKulovic(stagione) },
-  ]
-  const results = []
-  for (const step of steps) {
-    try {
-      await step.fn()
-      results.push({ step: step.label, ok: true })
-    } catch (e) {
-      results.push({ step: step.label, ok: false, error: e.message })
-      break // interrompe se un passaggio fallisce
-    }
-  }
-  return results
-}

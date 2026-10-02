@@ -113,6 +113,8 @@ function parametri_default(): array
         ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
         ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
         ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
+        ['codice' => 'TOPFLOP_SOGLIA_PERCENTUALE',   'etichetta' => 'Top/Flop 11: giocate minime (% delle partite giocate)', 'valore' => '50'],
+        ['codice' => 'MARCATORI_MIN_GIOCATE',        'etichetta' => 'Marcatori: giocate minime per migliori/peggiori',       'valore' => '5'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
     ];

@@ -427,6 +427,25 @@ export default function GestisciRegoleCalcolo() {
                       className="fanta-input w-28"
                     />
                   </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Top/Flop 11: giocate minime (%)</label>
+                    <input
+                      type="number" min="0" max="100" step="1"
+                      value={getValoreParametro('TOPFLOP_SOGLIA_PERCENTUALE', 50)}
+                      onChange={e => setValoreParametro('TOPFLOP_SOGLIA_PERCENTUALE', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                    <p className="text-[11px] text-slate-700 mt-1">% delle partite giocate dalla squadra (50 = metà)</p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-600 mb-1 block">Marcatori: giocate minime migliori/peggiori</label>
+                    <input
+                      type="number" min="0" step="1"
+                      value={getValoreParametro('MARCATORI_MIN_GIOCATE', 5)}
+                      onChange={e => setValoreParametro('MARCATORI_MIN_GIOCATE', e.target.value)}
+                      className="fanta-input w-28"
+                    />
+                  </div>
                 </div>
 
                 <div className="pt-5 border-t border-white/[0.05]">

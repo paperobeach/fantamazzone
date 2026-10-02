@@ -1,70 +1,9 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadre, adminInsertRisultato, adminInsertVoti, adminChiudiEAggiorna } from '../api/client'
+import { getSquadre, adminInsertRisultato, adminInsertVoti } from '../api/client'
 import { PageHeader, LoadingState, Spinner } from '../components/ui'
-import { CheckCircle2, XCircle, AlertTriangle } from 'lucide-react'
-
-// ── Wizard chiusura giornata ────────────────────────────────────────────────
-function ChiudiGiornataWizard({ stagione }) {
-  const [giornata, setGiornata] = useState('')
-  const [running,  setRunning]  = useState(false)
-  const [steps,    setSteps]    = useState(null)
-
-  const run = async () => {
-    if (!giornata) return
-    setRunning(true)
-    setSteps(null)
-    const res = await adminChiudiEAggiorna(stagione, Number(giornata))
-    setSteps(res)
-    setRunning(false)
-  }
-
-  return (
-    <div className="card p-6">
-      <h3 className="font-semibold text-slate-200 mb-1">Chiudi giornata e aggiorna</h3>
-      <p className="text-xs text-slate-600 mb-5">
-        Chiude la giornata e ricalcola in sequenza classifica, statistiche, Top/Flop e Kulovic.
-      </p>
-
-      <div className="info-box warning mb-5 rounded-lg px-4 py-3 flex gap-3 bg-yellow-500/5 border border-yellow-500/20 text-yellow-200 text-sm">
-        <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-        <span>Operazione irreversibile. Assicurati di aver inserito tutti i voti e i risultati prima di procedere.</span>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input
-          type="number"
-          min="1"
-          max="38"
-          value={giornata}
-          onChange={e => setGiornata(e.target.value)}
-          placeholder="N° giornata"
-          className="fanta-input w-full sm:w-36"
-        />
-        <button onClick={run} disabled={running || !giornata} className="btn-primary disabled:opacity-40 justify-center">
-          {running ? <><Spinner size="sm" /> Elaborazione...</> : 'Chiudi e aggiorna'}
-        </button>
-      </div>
-
-      {steps && (
-        <div className="space-y-2">
-          {steps.map((s, i) => (
-            <div key={i} className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm ${
-              s.ok ? 'bg-green-500/5 border border-green-500/10' : 'bg-red-500/5 border border-red-500/10'
-            }`}>
-              {s.ok
-                ? <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                : <XCircle     className="w-4 h-4 text-red-400 flex-shrink-0" />}
-              <span className={s.ok ? 'text-green-300' : 'text-red-300'}>{s.step}</span>
-              {s.error && <span className="text-xs text-red-500 ml-auto">{s.error}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+import { CheckCircle2, XCircle } from 'lucide-react'
 
 // ── Inserimento risultato ───────────────────────────────────────────────────
 function InserisciRisultato({ stagione, squadre }) {
@@ -186,7 +125,6 @@ export default function Admin() {
 
   const TABS = [
     { value: 'risultati', label: 'Risultati' },
-    { value: 'chiudi',    label: 'Chiudi giornata' },
   ]
 
   return (
@@ -210,7 +148,6 @@ export default function Admin() {
       </div>
 
       {tab === 'risultati' && <InserisciRisultato stagione={stagione} squadre={squadre} />}
-      {tab === 'chiudi'    && <ChiudiGiornataWizard stagione={stagione} />}
     </div>
   )
 }

@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getVotiSerieAInfo, adminCaricaVotiSerieA, adminCalcolaGiornata } from '../api/client'
+import {
+  getVotiSerieAInfo, adminCaricaVotiSerieA, adminCalcolaGiornata,
+  getStatoChiusuraGiornata, adminChiudiGiornata,
+} from '../api/client'
 import { PageHeader, Spinner, ErrorState } from '../components/ui'
 import {
-  UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Lock, CalendarCheck, Calculator,
+  UploadCloud, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Lock, CalendarCheck, Calculator, Flag, XCircle,
 } from 'lucide-react'
 
 const RUOLI = [
@@ -42,6 +45,16 @@ export default function GestioneVoti() {
   const [calcErrore,  setCalcErrore]  = useState(null)
   const [calcRisultato, setCalcRisultato] = useState(null)
 
+  // Fase 3: chiusura giornata
+  const [chiudendo,         setChiudendo]         = useState(false)
+  const [chiusuraErrore,    setChiusuraErrore]    = useState(null)
+  const [chiusuraRisultato, setChiusuraRisultato] = useState(null)
+  const [confermaChiusura,  setConfermaChiusura]  = useState(false)
+  const { data: stato, refetch: refetchStato } = useFetch(
+    stagione && giornata ? () => getStatoChiusuraGiornata(Number(stagione), giornata) : null,
+    [stagione, giornata],
+  )
+
   const resetFile = () => {
     setFile(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -49,6 +62,7 @@ export default function GestioneVoti() {
 
   const resetFeedback = () => { setErrors([]); setMismatch(null); setResult(null) }
   const resetFeedbackCalcolo = () => { setCalcErrore(null); setCalcRisultato(null) }
+  const resetFeedbackChiusura = () => { setChiusuraErrore(null); setChiusuraRisultato(null); setConfermaChiusura(false) }
 
   const handleFileChange = (e) => {
     resetFeedback()
@@ -58,6 +72,7 @@ export default function GestioneVoti() {
   const handleGiornataChange = (e) => {
     resetFeedback()
     resetFeedbackCalcolo()
+    resetFeedbackChiusura()
     setGiornata(Number(e.target.value))
   }
 
@@ -87,6 +102,27 @@ export default function GestioneVoti() {
 
   const handleSubmit = (e) => { e.preventDefault(); upload(false) }
 
+  const chiudiGiornata = async () => {
+    setChiusuraErrore(null)
+    setChiusuraRisultato(null)
+    setChiudendo(true)
+    try {
+      const res = await adminChiudiGiornata(Number(stagione), giornata)
+      setChiusuraRisultato(res)
+      setConfermaChiusura(false)
+      if (res.ok) {
+        // La giornata corrente diventa la successiva: ricarico info e stato
+        refetch()
+        if (res.prossima_giornata) setGiornata(res.prossima_giornata)
+        else refetchStato()
+      }
+    } catch (err) {
+      setChiusuraErrore(err.message)
+    } finally {
+      setChiudendo(false)
+    }
+  }
+
   const calcolaVoti = async () => {
     resetFeedbackCalcolo()
     setCalcolando(true)
@@ -94,6 +130,7 @@ export default function GestioneVoti() {
       const res = await adminCalcolaGiornata(Number(stagione), giornata)
       setCalcRisultato(res)
       refetch()
+      refetchStato()
     } catch (err) {
       setCalcErrore(err.message)
     } finally {
@@ -117,14 +154,25 @@ export default function GestioneVoti() {
 
       {/* Fasi del flusso */}
       <div className="flex flex-wrap gap-3 max-w-2xl mb-6">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gold-500/10 text-gold-400 text-sm font-medium">
-          <span className="w-5 h-5 rounded-full bg-gold-500/20 text-xs flex items-center justify-center">1</span>
-          Caricamento voti Serie A
-        </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gold-500/10 text-gold-400 text-sm font-medium">
-          <span className="w-5 h-5 rounded-full bg-gold-500/20 text-xs flex items-center justify-center">2</span>
-          Calcolo voti fantacalcio
-        </div>
+        {[
+          { n: 1, label: 'Caricamento voti Serie A', done: votiPresenti > 0 },
+          { n: 2, label: 'Calcolo voti fantacalcio', done: !!stato && stato.partite_attese > 0 && stato.partite_calcolate >= stato.partite_attese },
+          { n: 3, label: 'Chiusura giornata',        done: giaChiusa },
+        ].map(f => (
+          <div
+            key={f.n}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+              f.done ? 'bg-green-500/10 text-green-300' : 'bg-gold-500/10 text-gold-400'
+            }`}
+          >
+            <span className={`w-5 h-5 rounded-full text-xs flex items-center justify-center ${
+              f.done ? 'bg-green-500/20' : 'bg-gold-500/20'
+            }`}>
+              {f.done ? <CheckCircle2 className="w-3.5 h-3.5" /> : f.n}
+            </span>
+            {f.label}
+          </div>
+        ))}
       </div>
 
       {errorInfo ? (
@@ -365,6 +413,114 @@ export default function GestioneVoti() {
                     <p className="font-medium mb-1">Avvisi:</p>
                     <ul className="list-disc list-inside space-y-0.5">
                       {calcRisultato.warning.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Fase 3: chiusura giornata */}
+          <div className="card p-6 max-w-2xl mt-8">
+            <h3 className="text-sm font-semibold text-slate-300 mb-1">Fase 3 — Chiusura giornata</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Conferma in modo definitivo i voti della giornata {giornata ?? ''}: aggiorna statistiche giocatori,
+              classifica generale e Top/Flop 11, poi la giornata corrente diventa la successiva.
+              L'operazione non è reversibile.
+            </p>
+
+            {!stato ? (
+              <div className="flex justify-center py-4"><Spinner size="sm" /></div>
+            ) : (
+              <>
+                <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                  <div>
+                    <p className="text-display text-2xl font-bold text-grass-400">{stato.voti_serie_a}</p>
+                    <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Voti Serie A</p>
+                  </div>
+                  <div>
+                    <p className="text-display text-2xl font-bold text-grass-400">{stato.partite_calcolate}/{stato.partite_attese}</p>
+                    <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Partite calcolate</p>
+                  </div>
+                  <div>
+                    <p className="text-display text-2xl font-bold text-grass-400">{stato.senza_contributo}</p>
+                    <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Titolari senza voto</p>
+                  </div>
+                </div>
+
+                {stato.motivi_blocco.length > 0 && (
+                  <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">
+                    <Lock className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
+                    <ul className="space-y-0.5">{stato.motivi_blocco.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                  </div>
+                )}
+
+                {stato.chiudibile && stato.avvisi.length > 0 && (
+                  <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">
+                    <AlertTriangle className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
+                    <ul className="space-y-0.5">{stato.avvisi.map((a, i) => <li key={i}>{a}</li>)}</ul>
+                  </div>
+                )}
+
+                {stato.chiudibile && (
+                  <>
+                    <label className="flex items-start gap-2 text-xs text-slate-400 mb-4 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={confermaChiusura}
+                        onChange={e => setConfermaChiusura(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      Ho verificato i risultati e confermo la chiusura definitiva della giornata {giornata}
+                      {stato.ultima_della_stagione ? ' (ultima della stagione)' : ''}.
+                    </label>
+                    <button
+                      type="button"
+                      onClick={chiudiGiornata}
+                      disabled={chiudendo || !confermaChiusura}
+                      className="btn-primary disabled:opacity-40"
+                    >
+                      {chiudendo
+                        ? <><Spinner size="sm" /> Chiusura in corso...</>
+                        : <><Flag className="w-4 h-4" /> Chiudi giornata {giornata}</>}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+
+            {chiusuraErrore && (
+              <div className="rounded-lg px-4 py-3 flex gap-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm mt-4">
+                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" /> {chiusuraErrore}
+              </div>
+            )}
+
+            {chiusuraRisultato && (
+              <div className="mt-4">
+                <div className={`flex items-center gap-2 mb-2 ${chiusuraRisultato.ok ? 'text-green-300' : 'text-red-300'}`}>
+                  {chiusuraRisultato.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                  <span className="font-medium text-sm">
+                    {chiusuraRisultato.ok
+                      ? (chiusuraRisultato.stagione_conclusa
+                          ? `Giornata ${chiusuraRisultato.giornata} chiusa — stagione conclusa`
+                          : `Giornata ${chiusuraRisultato.giornata} chiusa — giornata corrente: ${chiusuraRisultato.prossima_giornata}`)
+                      : chiusuraRisultato.errore}
+                  </span>
+                </div>
+                <ul className="space-y-1 text-sm">
+                  {chiusuraRisultato.passi.map(p => (
+                    <li key={p.codice} className="flex items-center gap-2 text-slate-300">
+                      {p.ok ? <CheckCircle2 className="w-4 h-4 text-green-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
+                      {p.etichetta}
+                      <span className="text-xs text-slate-500">{p.ok ? p.dettaglio : p.errore}</span>
+                    </li>
+                  ))}
+                </ul>
+                {chiusuraRisultato.avvisi?.length > 0 && (
+                  <div className="rounded-lg px-4 py-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mt-3">
+                    <p className="font-medium mb-1">Avvisi:</p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {chiusuraRisultato.avvisi.map((w, i) => <li key={i}>{w}</li>)}
                     </ul>
                   </div>
                 )}

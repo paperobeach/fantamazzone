@@ -28,11 +28,7 @@
     ├── sistema.php
     ├── penalita.php
     └── admin/
-        ├── aggiorna_generale.php
-        ├── aggiorna_statistiche.php
-        ├── aggiorna_top_flop.php
-        ├── aggiorna_kulovic.php
-        ├── chiudi_giornata.php
+        ├── chiusura_giornata.php
         ├── risultati.php
         └── voti.php
 ```
@@ -94,11 +90,7 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 |---|---|---|---|
 | 1 | `api/admin/voti.php` | `stagione, giornata, id_squadra, voti[]` | Inserisce voti giocatori |
 | 2 | `api/admin/risultati.php` | `stagione, giornata, id_squadra, id_squadra_a, ...` | Inserisce risultato partita |
-| 3 | `api/admin/chiudi_giornata.php` | `stagione, giornata` | Marca giornata come chiusa |
-| 4 | `api/admin/aggiorna_statistiche.php` | `stagione` | Ricalcola STATISTICHE |
-| 5 | `api/admin/aggiorna_generale.php` | `stagione, giornata` | Ricalcola classifica |
-| 6 | `api/admin/aggiorna_top_flop.php` | `stagione` | Ricalcola TOP11/FLOP11 |
-| 7 | `api/admin/aggiorna_kulovic.php` | `stagione` | Ricalcola KULOVIC |
+| 3 | `api/admin/chiusura_giornata.php` | `stagione, giornata` | **Fase 3 – chiusura**: ricostruisce statistiche, classifica generale e Top/Flop 11, poi scrive il flag di chiusura (GET = stato chiudibilità) |
 
 ---
 
@@ -108,8 +100,8 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 1. Apri il pannello admin React
 2. Inserisci i voti per ogni squadra   → POST admin/voti.php
 3. Inserisci i risultati               → POST admin/risultati.php
-4. Chiudi la giornata                  → POST admin/chiudi_giornata.php
-5. Il frontend chiama in sequenza gli aggiorna_* automaticamente
+4. Chiudi la giornata (fase 3)      → POST admin/chiusura_giornata.php
+   (aggiorna da sola statistiche, classifica e Top/Flop 11)
 ```
 
 ---

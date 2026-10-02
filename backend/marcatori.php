@@ -5,6 +5,7 @@
 // GET ?stagione=2024&tipo=marcatori&limit=20
 // ============================================================
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/lib/AggiornamentiGiornata.php";
 
 $stagione = param_int("stagione");
 $tipo     = param_str("tipo", false) ?? "marcatori";
@@ -13,12 +14,16 @@ if ($limit < 1 || $limit > 200) $limit = 20;
 
 $campi_base = "id_squadra, squadra, logo, id_giocatore, giocatore, ruolo, giocate, media";
 
+// Giocate minime per "migliori"/"peggiori" (parametro di stagione, default 5)
+$min_giocate = (int) agg_parametro_stagione($conn, $stagione, "MARCATORI_MIN_GIOCATE", MARCATORI_MIN_GIOCATE_DEFAULT);
+if ($min_giocate < 0) $min_giocate = 0;
+
 switch ($tipo) {
     case "marcatori":
-        $sql = "SELECT $campi_base, gols, autogol
+        $sql = "SELECT $campi_base, golf, autogol
                 FROM NEW_STATISTICHE
-                WHERE stagione = $stagione AND gols > 0
-                ORDER BY gols DESC, media DESC
+                WHERE stagione = $stagione AND golf > 0
+                ORDER BY golf DESC, media DESC
                 LIMIT $limit";
         break;
 
@@ -33,7 +38,7 @@ switch ($tipo) {
     case "migliori":
         $sql = "SELECT $campi_base
                 FROM NEW_STATISTICHE
-                WHERE stagione = $stagione AND giocate >= 5
+                WHERE stagione = $stagione AND giocate >= $min_giocate
                 ORDER BY media DESC
                 LIMIT $limit";
         break;
@@ -41,7 +46,7 @@ switch ($tipo) {
     case "peggiori":
         $sql = "SELECT $campi_base
                 FROM NEW_STATISTICHE
-                WHERE stagione = $stagione AND giocate >= 5
+                WHERE stagione = $stagione AND giocate >= $min_giocate
                 ORDER BY media ASC
                 LIMIT $limit";
         break;

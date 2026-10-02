@@ -22,7 +22,7 @@ export default function Marcatori() {
   )
 
   const colLabel = { marcatori: 'Gol', assist: 'Assist', migliori: 'Media', peggiori: 'Media' }
-  const colKey   = { marcatori: 'gols', assist: 'assist', migliori: 'media', peggiori: 'media' }
+  const colKey   = { marcatori: 'golf', assist: 'assist', migliori: 'media', peggiori: 'media' }
 
   return (
     <div className="animate-fade-up">

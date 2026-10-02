@@ -163,6 +163,13 @@ export const getStatoChiusuraGiornata = (stagione, giornata) =>
 export const adminChiudiGiornata = (stagione, giornata) =>
   post('admin/chiusura_giornata.php', { stagione, giornata })
 
+// Riapertura dell'ultima giornata chiusa (admin/riapertura_giornata.php)
+export const getStatoRiapertura = (stagione) =>
+  get('admin/riapertura_giornata.php', { stagione })
+
+export const adminRiapriGiornata = (stagione, giornata) =>
+  post('admin/riapertura_giornata.php', { stagione, giornata })
+
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
 //        Allenatori + Utenze). Se la stagione non ha ancora dati,

@@ -30,6 +30,7 @@
     ├── penalita.php
     └── admin/
         ├── chiusura_giornata.php
+        ├── riapertura_giornata.php
         ├── risultati.php
         └── voti.php
 ```
@@ -97,6 +98,7 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | 1 | `api/admin/voti.php` | `stagione, giornata, id_squadra, voti[]` | Inserisce voti giocatori |
 | 2 | `api/admin/risultati.php` | `stagione, giornata, id_squadra, id_squadra_a, ...` | Inserisce risultato partita |
 | 3 | `api/admin/chiusura_giornata.php` | `stagione, giornata` | **Fase 3 – chiusura**: ricostruisce statistiche, classifica generale e Top/Flop 11, poi scrive il flag di chiusura (GET = stato chiudibilità) |
+| 4 | `api/admin/riapertura_giornata.php` | `stagione, giornata` | **Riapertura** dell'ultima giornata chiusa: ricostruisce statistiche, classifica e Top/Flop 11 fino alla giornata precedente, poi rimuove il flag di chiusura (GET = stato) |
 
 ---
 

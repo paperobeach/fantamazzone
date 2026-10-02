@@ -48,3 +48,22 @@ export function conteggioAtteso(modulo) {
   if (!cfg) return null
   return { '1': 1, '2': cfg.d, '3': cfg.c, '4': cfg.a }
 }
+
+// Ordine di ruolo usato per la panchina quando non c'è nessun altro
+// criterio (ordine già salvato, o appena stabilito dall'utente):
+// Portieri, Attaccanti, Centrocampisti, Difensori. Si applica sia alla
+// "situazione di default" (nessuna formazione da caricare, né per la
+// giornata corrente né per la precedente) sia a "Svuota il campo".
+export const ORDINE_RUOLO_PANCHINA_DEFAULT = { '1': 0, '4': 1, '3': 2, '2': 3 }
+
+// Ordina un elenco di id giocatore secondo ORDINE_RUOLO_PANCHINA_DEFAULT.
+// L'ordinamento è stabile (Array.prototype.sort lo è negli ambienti
+// moderni): a parità di ruolo, i giocatori mantengono l'ordine relativo
+// che avevano in ingresso.
+export function ordinaPerRuoloDefault(ids, byId) {
+  return [...ids].sort((a, b) => {
+    const ra = ORDINE_RUOLO_PANCHINA_DEFAULT[String(byId[a]?.ruolo)] ?? 99
+    const rb = ORDINE_RUOLO_PANCHINA_DEFAULT[String(byId[b]?.ruolo)] ?? 99
+    return ra - rb
+  })
+}

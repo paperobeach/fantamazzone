@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown, Armchair, ArrowRight, ArrowLeft } from 'lucide-react'
-import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso } from '../lib/pitchLayout'
+import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 
 const ROLE_PILL_CLASS = {
   1: 'badge-role-p', 2: 'badge-role-d', 3: 'badge-role-c', 4: 'badge-role-a',
@@ -500,17 +500,23 @@ export function FormationBuilder({
               </>
             )}
           </div>
-          {!moduloAttesoOk && (
-            <p className="text-[11px] text-gold-400 mt-2">
-              Completa tutti gli slot del modulo {modulo} per poter salvare.
-            </p>
-          )}
-          {selectedId && (
-            <p className="text-[11px] text-grass-400 mt-2">
-              Giocatore selezionato: {byId[selectedId]?.descrizione}. Le posizioni compatibili in campo sono evidenziate:
-              clicca uno slot per posizionarlo, oppure un altro giocatore nello stesso elenco per scambiarli di posto.
-            </p>
-          )}
+          {/* Altezza riservata FISSA (non solo minima): evita che la
+              comparsa/scomparsa di questo messaggio faccia "saltare"
+              panchina e tribuna sotto (impilate in colonna singola su
+              mobile) mentre si seleziona o si scambia un giocatore con
+              un click. overflow-hidden è una rete di sicurezza nel raro
+              caso di un nome giocatore molto lungo. */}
+          <div className="mt-2 h-[34px] overflow-hidden">
+            {selectedId ? (
+              <p className="text-[11px] leading-tight text-grass-400">
+                Giocatore selezionato: {byId[selectedId]?.descrizione}. Tocca uno slot per posizionarlo, o un altro giocatore per scambiarli.
+              </p>
+            ) : !moduloAttesoOk ? (
+              <p className="text-[11px] leading-tight text-gold-400">
+                Completa tutti gli slot del modulo {modulo} per poter salvare.
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {/* Panchina */}
@@ -645,9 +651,12 @@ export function FormationBuilder({
         <button
           type="button"
           onClick={() => {
-            // Rimanda in panchina solo chi era in campo: la tribuna non
-            // viene toccata, resta esclusa come l'utente l'ha impostata.
-            commit(slots.map(() => null), [...titolariIds, ...panchinaIds], tribunaIds)
+            // Rimanda in panchina solo chi era in campo (la tribuna non
+            // viene toccata, resta esclusa come l'utente l'ha impostata)
+            // e riordina l'intera panchina per ruolo: Portieri,
+            // Attaccanti, Centrocampisti, Difensori.
+            const nuovaPanchina = ordinaPerRuoloDefault([...titolariIds, ...panchinaIds], byId)
+            commit(slots.map(() => null), nuovaPanchina, tribunaIds)
             setDropdownSlot(null)
           }}
           className="btn-ghost text-xs"

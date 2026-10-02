@@ -4,7 +4,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getSquadra, getGiornataCorrente, getFormazione, saveFormazione } from '../api/client'
 import { PageHeader, LoadingState, ErrorState } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
-import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo } from '../lib/pitchLayout'
+import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock } from 'lucide-react'
 
 const MODULO_DEFAULT = '4-4-2'
@@ -43,7 +43,14 @@ const MOTIVO_EMAIL_LABEL = {
  * - GET  al mount (quando si conosce la giornata di riferimento) per
  *   precompilare modulo, titolari, panchina e tribuna secondo la
  *   codifica sopra, se per quella giornata esiste già una formazione
- *   salvata.
+ *   salvata. Se NON esiste, si tenta di caricare quella della giornata
+ *   precedente (stesso criterio di codifica). Se non esiste nemmeno
+ *   quella (es. giornata 1, o nessuna formazione mai salvata), si parte
+ *   dalla "situazione di default": campo vuoto e TUTTA la rosa in
+ *   panchina, ordinata per ruolo — Portieri, Attaccanti, Centrocampisti,
+ *   Difensori (vedi ordinaPerRuoloDefault in lib/pitchLayout.js). Lo
+ *   stesso ordinamento si applica quando l'utente clicca "Svuota il
+ *   campo" (logica nel componente FormationBuilder).
  * - POST quando l'utente clicca "Salva formazione" (solo se completa).
  *
  * La pagina è protetta (ProtectedRoute in App.jsx): "utente" è quindi
@@ -96,6 +103,29 @@ export default function Formazione() {
       : null,
     [ultimaStagione, idSquadra, giornata]
   )
+  const giornataCorrenteVuota = Array.isArray(formazioneSalvata) && formazioneSalvata.length === 0
+
+  // ── Se la giornata corrente non ha ancora una formazione, si prova
+  //    con quella della giornata precedente (stesso squadra/stagione) ──
+  const { data: formazionePrecedente, error: errorFormazionePrecedente } = useFetch(
+    idSquadra !== null && ultimaStagione !== null && giornata !== null &&
+      giornata > 1 && giornataCorrenteVuota
+      ? () => getFormazione(ultimaStagione, giornata - 1, idSquadra)
+      : null,
+    [ultimaStagione, idSquadra, giornata, giornataCorrenteVuota]
+  )
+
+  // Pronti a inizializzare lo stato locale solo quando sappiamo già se
+  // "ripiegare" sulla giornata precedente serve davvero o no: se la
+  // giornata corrente ha già una formazione, basta quella; altrimenti
+  // serve anche la risposta della giornata precedente — a meno che non
+  // si sia già alla giornata 1 (non c'è una "precedente" su cui
+  // provare). Un eventuale errore su questo tentativo di ripiego non
+  // deve bloccare la pagina all'infinito: si procede semplicemente con
+  // la situazione di default, come se non ci fosse nulla da recuperare.
+  const formazioniPronte = Array.isArray(formazioneSalvata) &&
+    (!giornataCorrenteVuota || giornata <= 1 ||
+      Array.isArray(formazionePrecedente) || !!errorFormazionePrecedente)
 
   const [modulo, setModulo]     = useState(MODULO_DEFAULT)
   const [titolari, setTitolari] = useState([])
@@ -109,10 +139,11 @@ export default function Formazione() {
   const [motivoEmail, setMotivoEmail]   = useState(null)
 
   // ── Inizializza/ricarica lo stato locale quando arrivano rosa e
-  //    formazione salvata (per la giornata di riferimento corrente) ──
+  //    formazione salvata (per la giornata di riferimento corrente,
+  //    con eventuale ripiego sulla giornata precedente) ──
   useEffect(() => {
     if (rosa.length === 0) return
-    if (formazioneSalvata === null) return // risposta non ancora arrivata
+    if (!formazioniPronte) return
 
     setSaving(false)
     setSaveError(null)
@@ -120,22 +151,32 @@ export default function Formazione() {
     setEmailInviata(false)
     setMotivoEmail(null)
 
-    if (!Array.isArray(formazioneSalvata) || formazioneSalvata.length === 0) {
-      // Nessuna formazione salvata per questa giornata: si riparte da zero.
+    const byId = Object.fromEntries(rosa.map(p => [p.id, p]))
+
+    // Fonte dei dati, in ordine di priorità: giornata corrente, poi la
+    // precedente, altrimenti nessuna (situazione di default).
+    const fonte = formazioneSalvata.length > 0
+      ? formazioneSalvata
+      : (Array.isArray(formazionePrecedente) && formazionePrecedente.length > 0)
+        ? formazionePrecedente
+        : null
+
+    if (!fonte) {
+      // Situazione di default: campo vuoto, tutta la rosa in panchina
+      // ordinata per ruolo (Portieri, Attaccanti, Centrocampisti,
+      // Difensori).
       setModulo(MODULO_DEFAULT)
       setTitolari([])
-      setPanchina(rosa.map(p => p.id))
+      setPanchina(ordinaPerRuoloDefault(rosa.map(p => p.id), byId))
       setTribuna([])
       return
     }
-
-    const byId = Object.fromEntries(rosa.map(p => [p.id, p]))
 
     // f.MAGLIA codifica la posizione: 1..11 = titolare (nello slot
     // corrispondente, da portiere a attaccanti, sinistra→destra),
     // 12+ = panchina nell'ordine salvato. Chi non compare affatto tra le
     // righe restituite è considerato in tribuna.
-    const ordinati = [...formazioneSalvata].sort((a, b) => a.maglia - b.maglia)
+    const ordinati = [...fonte].sort((a, b) => a.maglia - b.maglia)
     const idsTitolari = ordinati.filter(r => r.maglia <= 11).map(r => r.id_giocatore).filter(id => byId[id])
     const idsPanchina = ordinati.filter(r => r.maglia >= 12).map(r => r.id_giocatore).filter(id => byId[id])
 
@@ -154,7 +195,7 @@ export default function Formazione() {
     // (nella formazione letta) va in tribuna.
     setTribuna(rosa.filter(p => !inFormazione.has(p.id)).map(p => p.id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idSquadra, giornata, rosa.length, formazioneSalvata])
+  }, [idSquadra, giornata, rosa.length, formazioneSalvata, formazionePrecedente, formazioniPronte])
 
   const attesi = conteggioAtteso(modulo)
   const conteggio = { '1': 0, '2': 0, '3': 0, '4': 0 }
@@ -262,7 +303,7 @@ export default function Formazione() {
         <ErrorState message={errorGiornata} />
       ) : errorFormazione ? (
         <ErrorState message={errorFormazione} />
-      ) : loadingGiornata || !Array.isArray(formazioneSalvata) ? (
+      ) : loadingGiornata || !formazioniPronte ? (
         <LoadingState label="Caricamento formazione..." />
       ) : (
         <>

@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getRegoleCalcolo, adminSalvaRegoleCalcolo } from '../api/client'
 import { PageHeader, Spinner, ErrorState, TabBar } from '../components/ui'
-import { Plus, Trash2, Save, CheckCircle2, AlertTriangle, Info } from 'lucide-react'
+import { Plus, Trash2, Save, CheckCircle2, AlertTriangle, Info, Lock, Copy } from 'lucide-react'
 
 const TIPI_ALGORITMO = [
   { value: 'DIFESA',      label: 'Difesa' },
@@ -14,7 +14,7 @@ const TIPI_ALGORITMO = [
 // Le fasce sono condivise da più algoritmi/parametri: [{ da, a, [campo] }, ...]
 // da/a null = illimitato. campo/etichettaCampo permettono di riusare lo
 // stesso editor anche per le fasce gol-da-punteggio (campo "gol").
-function TabellaFasce({ fasce, onChange, campo = 'bonus', etichettaCampo = 'Bonus/malus', stepCampo = 0.5 }) {
+function TabellaFasce({ fasce, onChange, campo = 'bonus', etichettaCampo = 'Bonus/malus', stepCampo = 0.5, readOnly = false }) {
   const setFascia = (idx, k, valore) => {
     const next = fasce.map((f, i) => (i === idx ? { ...f, [k]: valore } : f))
     onChange(next)
@@ -37,7 +37,7 @@ function TabellaFasce({ fasce, onChange, campo = 'bonus', etichettaCampo = 'Bonu
             <th className="py-2 pr-3">Da</th>
             <th className="py-2 pr-3">A</th>
             <th className="py-2 pr-3">{etichettaCampo}</th>
-            <th className="py-2 w-8" />
+            {!readOnly && <th className="py-2 w-8" />}
           </tr>
         </thead>
         <tbody>
@@ -67,18 +67,22 @@ function TabellaFasce({ fasce, onChange, campo = 'bonus', etichettaCampo = 'Bonu
                   className="fanta-input w-24"
                 />
               </td>
-              <td className="py-2">
-                <button type="button" onClick={() => rimuovi(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </td>
+              {!readOnly && (
+                <td className="py-2">
+                  <button type="button" onClick={() => rimuovi(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
-      <button type="button" onClick={aggiungi} className="btn-ghost text-xs mt-3">
-        <Plus className="w-3.5 h-3.5" /> Aggiungi fascia
-      </button>
+      {!readOnly && (
+        <button type="button" onClick={aggiungi} className="btn-ghost text-xs mt-3">
+          <Plus className="w-3.5 h-3.5" /> Aggiungi fascia
+        </button>
+      )}
     </div>
   )
 }
@@ -105,7 +109,7 @@ function TabellaAggiustamentoModulo({ valori, onChange }) {
   )
 }
 
-function SezioneAlgoritmo({ tipo, config, onChange }) {
+function SezioneAlgoritmo({ tipo, config, onChange, readOnly = false }) {
   const parametri = config.parametri ?? { fasce: [] }
   const setParametri = (next) => onChange({ ...config, parametri: next })
 
@@ -127,6 +131,7 @@ function SezioneAlgoritmo({ tipo, config, onChange }) {
         <TabellaFasce
           fasce={parametri.fasce ?? []}
           onChange={fasce => setParametri({ ...parametri, fasce })}
+          readOnly={readOnly}
         />
       </div>
 
@@ -169,14 +174,154 @@ function SezioneAlgoritmo({ tipo, config, onChange }) {
   )
 }
 
+// Giornata minima ammessa per una cella: successiva all'ultima giornata già
+// impostata più in alto nello stesso girone e a quelle della fase precedente.
+function calcolaMinimi(fasi, valoreDi) {
+  const minimi = {}
+  let maxPrec = 0
+  for (const fase of fasi) {
+    const nCol = Math.max(1, fase.gironi.length)
+    let maxFase = 0
+    for (let col = 0; col < nCol; col++) {
+      let ultima = 0
+      for (const turno of fase.turni) {
+        const cella = turno.celle[col]
+        minimi[cella.codice] = Math.max(ultima, maxPrec) + 1
+        const v = parseInt(valoreDi(cella.codice), 10)
+        if (!Number.isNaN(v)) {
+          ultima = Math.max(ultima, v)
+          maxFase = Math.max(maxFase, v)
+        }
+      }
+    }
+    maxPrec = Math.max(maxPrec, maxFase)
+  }
+  return minimi
+}
+
+// Associazione turni Champions → giornata di fantacampionato. Nelle fasi a
+// gironi ogni girone ha la propria colonna, indipendente dall'altra.
+function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, readOnly, onPrecompila }) {
+  const minimi = calcolaMinimi(fasi, getValore)
+  const opzioni = Array.from({ length: numeroGiornate }, (_, i) => i + 1)
+
+  const copiaGirone = (fase, da, a) => {
+    for (const turno of fase.turni) {
+      const src = turno.celle.find(c => c.girone === da)
+      const dst = turno.celle.find(c => c.girone === a)
+      if (src && dst) setValore(dst, getValore(src.codice))
+    }
+  }
+
+  const Cella = ({ cella }) => {
+    const valore = getValore(cella.codice)
+    const fuori = valore !== '' && Number(valore) > numeroGiornate
+    return (
+      <select
+        value={valore}
+        disabled={readOnly}
+        onChange={e => setValore(cella, e.target.value)}
+        className={`fanta-input w-24 ${fuori ? 'border-red-500/50' : ''}`}
+        aria-label={cella.codice}
+      >
+        <option value="">{cella.opzionale ? 'non previsto' : '—'}</option>
+        {fuori && <option value={valore}>{valore}</option>}
+        {opzioni.map(g => (
+          <option key={g} value={g} disabled={g < (minimi[cella.codice] ?? 1)}>G. {g}</option>
+        ))}
+      </select>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+        <p className="text-xs text-slate-500 max-w-xl">
+          Per ogni giornata della Champions scegli la giornata di fantacampionato in cui si gioca
+          (la Champions è in contemporanea al campionato). I gironi sono indipendenti: ad esempio la
+          giornata 1 del girone A può cadere in G. 2 e la giornata 1 del girone B in G. 3. Le giornate
+          di uno stesso girone devono essere crescenti e ogni fase inizia dopo la fine della precedente.
+          Il calendario Champions viene creato da "Inizializzazione stagione" in base a questa
+          configurazione.
+        </p>
+        {!readOnly && (
+          <button type="button" onClick={onPrecompila} className="btn-ghost text-xs">
+            Precompila dal calendario esistente
+          </button>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 mt-4">
+        {fasi.map(fase => (
+          <div key={fase.id} className={`rounded-lg border border-white/5 p-3 ${fase.gironi.length === 0 ? 'md:col-span-2' : ''}`}>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="text-xs font-semibold text-slate-400">{fase.label}</div>
+              {!readOnly && fase.gironi.length === 2 && (
+                <button
+                  type="button"
+                  onClick={() => copiaGirone(fase, fase.gironi[0], fase.gironi[1])}
+                  className="text-[11px] text-slate-500 hover:text-slate-300 inline-flex items-center gap-1"
+                  title={`Copia le giornate del girone ${fase.gironi[0]} sul girone ${fase.gironi[1]}`}
+                >
+                  <Copy className="w-3 h-3" /> {fase.gironi[0]} → {fase.gironi[1]}
+                </button>
+              )}
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] text-slate-600 uppercase tracking-widest">
+                  <th className="py-1 pr-3 font-medium">Giornata Champions</th>
+                  {fase.gironi.length > 0
+                    ? fase.gironi.map(g => <th key={g} className="py-1 pr-3 font-medium">Girone {g}</th>)
+                    : <th className="py-1 pr-3 font-medium">Giornata fantacampionato</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {fase.turni.map(turno => (
+                  <tr key={turno.n} className="border-t border-white/[0.03]">
+                    <td className="py-1.5 pr-3 text-xs text-slate-500">{turno.label}</td>
+                    {turno.celle.map(c => (
+                      <td key={c.codice} className="py-1.5 pr-3">{Cella({ cella: c })}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Sezione con titolo per le sottosezioni di "Parametri stagione"
+function Sottosezione({ titolo, descrizione, children }) {
+  return (
+    <section className="card p-6">
+      <h3 className="text-sm font-semibold text-slate-300">{titolo}</h3>
+      {descrizione && <p className="text-xs text-slate-500 mt-1">{descrizione}</p>}
+      <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+// Codici gestiti da controlli dedicati (o obsoleti): non compaiono nell'elenco avanzato
+const CODICI_GESTITI = new Set([
+  'NUMERO_GIORNATE', 'GIORNATA_SERIE_A_INIZIO', 'FASCE_GOL_PUNTEGGIO',
+  'SOSTITUZIONI_MAX_MOVIMENTO', 'SOSTITUZIONI_MAX_PORTIERE', 'ULTIMA_GIORNATA_FATTORE_CASA',
+  'TOPFLOP_SOGLIA_PERCENTUALE', 'MARCATORI_MIN_GIOCATE',
+])
+const isCodiceChampions = (c) => c.startsWith('CHAMP_')
+
 export default function GestisciRegoleCalcolo() {
-  const { stagione } = useApp()
+  const { stagione, ultimaStagione } = useApp()
   const { data: info, loading, error, refetch } = useFetch(
     stagione ? () => getRegoleCalcolo(stagione) : null,
     [stagione],
   )
 
   const [tab, setTab] = useState('bonus')
+  const [sezioneParametri, setSezioneParametri] = useState('struttura')
   const [bonus, setBonus] = useState([])
   const [algoritmi, setAlgoritmi] = useState({})
   const [parametri, setParametri] = useState([])
@@ -192,6 +337,9 @@ export default function GestisciRegoleCalcolo() {
     setSaved(false)
     setSaveError(null)
   }, [info])
+
+  // Modificabile solo per l'ultima stagione (il backend rifiuta comunque il salvataggio)
+  const readOnly = info ? info.modificabile === false || (ultimaStagione != null && stagione !== ultimaStagione) : true
 
   const setVoceBonus = (idx, campo, valore) => {
     setBonus(bonus.map((b, i) => (i === idx ? { ...b, [campo]: valore } : b)))
@@ -222,23 +370,20 @@ export default function GestisciRegoleCalcolo() {
   }
   const getValoreParametro = (codice, default_ = '') => parametri.find(p => p.codice === codice)?.valore ?? default_
 
-  // Giornate di campionato dei turni Champions (parametri CHAMP_*)
+  // Giornate di fantacampionato delle celle Champions (parametri CHAMP_*)
   const fasiChampions = info?.champions ?? []
-  const setGiornataTurno = (fase, turno, valore) =>
-    setValoreParametro(
-      turno.codice,
-      valore.replace(/\D/g, '').slice(0, 2),
-      `Champions - ${fase.label} - ${turno.label}: giornata di campionato`,
-    )
+  const setGiornataCella = (cella, valore) =>
+    setValoreParametro(cella.codice, String(valore ?? '').replace(/\D/g, '').slice(0, 2), `Champions - ${cella.codice}: giornata di fantacampionato`)
   const usaSuggerite = () => {
     for (const f of fasiChampions) {
       for (const t of f.turni) {
-        if (t.suggerita != null && getValoreParametro(t.codice, '') === '') {
-          setGiornataTurno(f, t, String(t.suggerita))
+        for (const c of t.celle) {
+          if (c.suggerita != null && getValoreParametro(c.codice, '') === '') setGiornataCella(c, c.suggerita)
         }
       }
     }
   }
+  const numeroGiornate = Math.max(1, parseInt(getValoreParametro('NUMERO_GIORNATE', 38), 10) || 38)
 
   const aggiungiParametro = () => {
     setParametri([...parametri, { codice: '', etichetta: '', valore: '' }])
@@ -254,6 +399,7 @@ export default function GestisciRegoleCalcolo() {
   }
 
   const salva = async () => {
+    if (readOnly) return
     setSaving(true)
     setSaveError(null)
     setSaved(false)
@@ -285,7 +431,17 @@ export default function GestisciRegoleCalcolo() {
         <div className="flex justify-center py-16"><Spinner size="lg" /></div>
       ) : (
         <>
-          {info.ereditata_da && (
+          {readOnly && (
+            <div className="max-w-3xl rounded-lg px-4 py-3 flex gap-3 bg-slate-500/5 border border-slate-500/20 text-slate-300 text-sm mb-6">
+              <Lock className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+              <span>
+                Sola lettura: le regole sono modificabili solo per l'ultima stagione
+                {ultimaStagione ? ` (${ultimaStagione})` : ''}. Stai consultando la stagione {stagione}.
+              </span>
+            </div>
+          )}
+
+          {!readOnly && info.ereditata_da && (
             <div className="max-w-3xl rounded-lg px-4 py-3 flex gap-3 bg-grass-500/5 border border-grass-500/20 text-slate-300 text-sm mb-6">
               <Info className="w-4 h-4 text-grass-400 flex-shrink-0 mt-0.5" />
               <span>
@@ -305,9 +461,11 @@ export default function GestisciRegoleCalcolo() {
               active={tab}
               onChange={setTab}
             />
-            <button onClick={salva} disabled={saving} className="btn-primary disabled:opacity-40">
-              {saving ? <><Spinner size="sm" /> Salvataggio...</> : <><Save className="w-4 h-4" /> Salva regole</>}
-            </button>
+            {!readOnly && (
+              <button onClick={salva} disabled={saving} className="btn-primary disabled:opacity-40">
+                {saving ? <><Spinner size="sm" /> Salvataggio...</> : <><Save className="w-4 h-4" /> Salva regole</>}
+              </button>
+            )}
           </div>
 
           {saveError && (
@@ -322,6 +480,7 @@ export default function GestisciRegoleCalcolo() {
           )}
 
           {tab === 'bonus' && (
+            <fieldset disabled={readOnly} className="contents">
             <div className="card p-6 max-w-3xl">
               <p className="text-xs text-slate-500 mb-4">
                 Voci fisse applicate al voto del singolo giocatore. L'elenco può cambiare da una stagione
@@ -335,7 +494,7 @@ export default function GestisciRegoleCalcolo() {
                       <th className="py-2 pr-3">Etichetta</th>
                       <th className="py-2 pr-3">Valore</th>
                       <th className="py-2 pr-3">Attiva</th>
-                      <th className="py-2 w-8" />
+                      {!readOnly && <th className="py-2 w-8" />}
                     </tr>
                   </thead>
                   <tbody>
@@ -369,23 +528,29 @@ export default function GestisciRegoleCalcolo() {
                             className="w-4 h-4"
                           />
                         </td>
-                        <td className="py-2">
-                          <button type="button" onClick={() => rimuoviVoceBonus(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
+                        {!readOnly && (
+                          <td className="py-2">
+                            <button type="button" onClick={() => rimuoviVoceBonus(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <button type="button" onClick={aggiungiVoceBonus} className="btn-ghost text-xs mt-4">
-                <Plus className="w-3.5 h-3.5" /> Aggiungi voce
-              </button>
+              {!readOnly && (
+                <button type="button" onClick={aggiungiVoceBonus} className="btn-ghost text-xs mt-4">
+                  <Plus className="w-3.5 h-3.5" /> Aggiungi voce
+                </button>
+              )}
             </div>
+            </fieldset>
           )}
 
           {tab === 'modificatori' && (
+            <fieldset disabled={readOnly} className="contents">
             <div className="flex flex-col gap-6 max-w-3xl">
               {TIPI_ALGORITMO.map(({ value, label }) => (
                 <div key={value}>
@@ -394,185 +559,197 @@ export default function GestisciRegoleCalcolo() {
                     tipo={value}
                     config={algoritmi[value] ?? { algoritmo: '', parametri: { fasce: [] } }}
                     onChange={config => setAlgoritmo(value, config)}
+                    readOnly={readOnly}
                   />
                 </div>
               ))}
             </div>
+            </fieldset>
           )}
 
           {tab === 'parametri' && (
-            <div className="flex flex-col gap-6 max-w-3xl">
-              <div className="card p-6">
-                <p className="text-xs text-slate-500 mb-4">
-                  Parametri di stagione non riconducibili a un bonus/malus o a un modificatore
-                  (usati dal calcolo voti, fase 2 di "Gestione voti").
-                </p>
-                <div className="flex flex-wrap gap-6 mb-6">
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Sostituzioni di movimento (portiere escluso)</label>
-                    <input
-                      type="number" min="0" step="1"
-                      value={getValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', 5)}
-                      onChange={e => setValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', e.target.value)}
-                      className="fanta-input w-28"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Sostituzioni portiere</label>
-                    <input
-                      type="number" min="0" step="1"
-                      value={getValoreParametro('SOSTITUZIONI_MAX_PORTIERE', 1)}
-                      onChange={e => setValoreParametro('SOSTITUZIONI_MAX_PORTIERE', e.target.value)}
-                      className="fanta-input w-28"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Ultima giornata con fattore casa</label>
-                    <input
-                      type="number" min="0" step="1" placeholder="sempre"
-                      value={getValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', '')}
-                      onChange={e => setValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', e.target.value)}
-                      className="fanta-input w-28"
-                    />
-                    <p className="text-[11px] text-slate-700 mt-1">Vuoto = si applica sempre (nessun campo neutro)</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Numero di giornate della stagione</label>
-                    <input
-                      type="number" min="1" step="1"
-                      value={getValoreParametro('NUMERO_GIORNATE', 38)}
-                      onChange={e => setValoreParametro('NUMERO_GIORNATE', e.target.value)}
-                      className="fanta-input w-28"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Top/Flop 11: giocate minime (%)</label>
+            <fieldset disabled={readOnly} className="contents">
+              <div className="flex flex-col gap-6 max-w-3xl">
+                <TabBar
+                  tabs={[
+                    { value: 'struttura', label: 'Struttura stagione' },
+                    { value: 'regole', label: 'Regole di gioco' },
+                    { value: 'statistiche', label: 'Configurazioni statistiche' },
+                  ]}
+                  active={sezioneParametri}
+                  onChange={setSezioneParametri}
+                />
+
+                {sezioneParametri === 'struttura' && (
+                  <>
+                    <Sottosezione
+                      titolo="Calendario del campionato"
+                      descrizione="Numero di giornate e raccordo con il calendario della Serie A."
+                    >
+                      <div className="flex flex-wrap gap-6">
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Numero di giornate della stagione</label>
+                          <input
+                            type="number" min="1" max="99" step="1"
+                            value={getValoreParametro('NUMERO_GIORNATE', 38)}
+                            onChange={e => setValoreParametro('NUMERO_GIORNATE', e.target.value, 'Numero di giornate della stagione')}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Giornata di Serie A di partenza</label>
+                          <input
+                            type="number" min="1" step="1"
+                            value={getValoreParametro('GIORNATA_SERIE_A_INIZIO', 1)}
+                            onChange={e => setValoreParametro('GIORNATA_SERIE_A_INIZIO', e.target.value, 'Giornata di Serie A di partenza')}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1 max-w-xs">
+                            Giornata di Serie A a cui corrisponde la 1ª giornata di fantacampionato (che può iniziare dopo la 1ª di Serie A).
+                          </p>
+                        </div>
+                      </div>
+                    </Sottosezione>
+
+                    <Sottosezione titolo="Calendario Champions">
+                      <CalendarioChampions
+                        fasi={fasiChampions}
+                        numeroGiornate={numeroGiornate}
+                        getValore={(cod) => getValoreParametro(cod, '')}
+                        setValore={setGiornataCella}
+                        readOnly={readOnly}
+                        onPrecompila={usaSuggerite}
+                      />
+                    </Sottosezione>
+                  </>
+                )}
+
+                {sezioneParametri === 'regole' && (
+                  <>
+                    <Sottosezione
+                      titolo="Fasce gol fatti da punteggio totale"
+                      descrizione="Determinano golf/gols in NEW_RISULTATI dal punteggio finale della squadra (fattore casa incluso)."
+                    >
+                      <TabellaFasce
+                        fasce={(() => { try { return JSON.parse(getValoreParametro('FASCE_GOL_PUNTEGGIO', '[]')) } catch { return [] } })()}
+                        onChange={fasce => setValoreParametro('FASCE_GOL_PUNTEGGIO', JSON.stringify(fasce), 'Fasce gol fatti da punteggio totale')}
+                        campo="gol"
+                        etichettaCampo="Gol"
+                        stepCampo={1}
+                        readOnly={readOnly}
+                      />
+                    </Sottosezione>
+
+                    <Sottosezione titolo="Sostituzioni e fattore casa">
+                      <div className="flex flex-wrap gap-6">
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Sostituzioni di movimento (portiere escluso)</label>
+                          <input
+                            type="number" min="0" step="1"
+                            value={getValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', 5)}
+                            onChange={e => setValoreParametro('SOSTITUZIONI_MAX_MOVIMENTO', e.target.value, 'Sostituzioni di movimento (portiere escluso)')}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Sostituzioni portiere</label>
+                          <input
+                            type="number" min="0" step="1"
+                            value={getValoreParametro('SOSTITUZIONI_MAX_PORTIERE', 1)}
+                            onChange={e => setValoreParametro('SOSTITUZIONI_MAX_PORTIERE', e.target.value, 'Sostituzioni portiere')}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Ultima giornata di fantacampionato con fattore casa valido</label>
+                          <input
+                            type="number" min="0" step="1" placeholder="sempre"
+                            value={getValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', '')}
+                            onChange={e => setValoreParametro('ULTIMA_GIORNATA_FATTORE_CASA', e.target.value, 'Ultima giornata con fattore casa (vuoto = sempre)')}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">Vuoto = si applica sempre (nessun campo neutro)</p>
+                        </div>
+                      </div>
+                    </Sottosezione>
+                  </>
+                )}
+
+                {sezioneParametri === 'statistiche' && (
+                  <Sottosezione titolo="Top / Flop 11">
+                    <label className="text-xs text-slate-600 mb-1 block">Giocate minime (%)</label>
                     <input
                       type="number" min="0" max="100" step="1"
                       value={getValoreParametro('TOPFLOP_SOGLIA_PERCENTUALE', 50)}
-                      onChange={e => setValoreParametro('TOPFLOP_SOGLIA_PERCENTUALE', e.target.value)}
+                      onChange={e => setValoreParametro('TOPFLOP_SOGLIA_PERCENTUALE', e.target.value, 'Top/Flop 11: giocate minime (% delle partite giocate)')}
                       className="fanta-input w-28"
                     />
                     <p className="text-[11px] text-slate-700 mt-1">% delle partite giocate dalla squadra (50 = metà)</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-600 mb-1 block">Marcatori: giocate minime migliori/peggiori</label>
-                    <input
-                      type="number" min="0" step="1"
-                      value={getValoreParametro('MARCATORI_MIN_GIOCATE', 5)}
-                      onChange={e => setValoreParametro('MARCATORI_MIN_GIOCATE', e.target.value)}
-                      className="fanta-input w-28"
-                    />
-                  </div>
-                </div>
+                  </Sottosezione>
+                )}
 
-                <div className="pt-5 border-t border-white/[0.05]">
-                  <label className="text-xs text-slate-600 mb-1 block">Fasce gol fatti da punteggio totale</label>
-                  <p className="text-[11px] text-slate-700 mb-2">
-                    Determinano golf/gols in NEW_RISULTATI dal punteggio finale della squadra (fattore casa incluso).
-                  </p>
-                  <TabellaFasce
-                    fasce={(() => { try { return JSON.parse(getValoreParametro('FASCE_GOL_PUNTEGGIO', '[]')) } catch { return [] } })()}
-                    onChange={fasce => setValoreParametro('FASCE_GOL_PUNTEGGIO', JSON.stringify(fasce))}
-                    campo="gol"
-                    etichettaCampo="Gol"
-                    stepCampo={1}
-                  />
-                </div>
-              </div>
-
-              <div className="card p-6">
-                <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
-                  <h3 className="text-sm font-semibold text-slate-300">Calendario Champions</h3>
-                  <button type="button" onClick={usaSuggerite} className="btn-ghost text-xs">
-                    Precompila dal calendario esistente
-                  </button>
-                </div>
-                <p className="text-xs text-slate-500 mb-4">
-                  Associa a ogni turno la giornata di campionato in cui si gioca. La Champions è in
-                  contemporanea al campionato: la giornata indicata vale per entrambe le competizioni.
-                  Le giornate devono essere comprese tra 1 e il numero di giornate della stagione, tutte diverse
-                  e in ordine crescente. Il calendario Champions viene creato da "Inizializzazione stagione"
-                  sulla base di questa configurazione.
-                </p>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {fasiChampions.map(f => (
-                    <div key={f.id} className="rounded-lg border border-white/5 p-3">
-                      <div className="text-xs font-semibold text-slate-400 mb-2">{f.label}</div>
-                      <div className="space-y-1.5">
-                        {f.turni.map(t => (
-                          <div key={t.codice} className="flex items-center justify-between gap-2">
-                            <label htmlFor={t.codice} className="text-xs text-slate-500">{t.label}</label>
-                            <input
-                              id={t.codice}
-                              type="text" inputMode="numeric" maxLength={2}
-                              value={getValoreParametro(t.codice, '')}
-                              onChange={e => setGiornataTurno(f, t, e.target.value)}
-                              placeholder={t.suggerita != null ? String(t.suggerita) : 'g.'}
-                              title="Giornata di campionato"
-                              className="fanta-input w-16 text-center"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                {/* Elenco generico: mostra/permette di aggiungere qualunque altro parametro
+                    non previsto dai controlli dedicati (esclusi quelli già gestiti sopra). */}
+                {parametri.some(p => !CODICI_GESTITI.has(p.codice) && !isCodiceChampions(p.codice)) || !readOnly ? (
+                  <details className="card p-6">
+                    <summary className="text-xs text-slate-500 cursor-pointer">Altri parametri (avanzato)</summary>
+                    <div className="overflow-x-auto mt-4">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
+                            <th className="py-2 pr-3">Codice</th>
+                            <th className="py-2 pr-3">Etichetta</th>
+                            <th className="py-2 pr-3">Valore</th>
+                            {!readOnly && <th className="py-2 w-8" />}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parametri.map((p, idx) => (
+                            CODICI_GESTITI.has(p.codice) || isCodiceChampions(p.codice) ? null : (
+                              <tr key={idx} className="border-t border-white/[0.03]">
+                                <td className="py-2 pr-3">
+                                  <input
+                                    type="text" value={p.codice}
+                                    onChange={e => setCampoParametro(idx, 'codice', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
+                                    className="fanta-input w-56 font-mono text-xs"
+                                  />
+                                </td>
+                                <td className="py-2 pr-3">
+                                  <input
+                                    type="text" value={p.etichetta}
+                                    onChange={e => setCampoParametro(idx, 'etichetta', e.target.value)}
+                                    className="fanta-input w-56"
+                                  />
+                                </td>
+                                <td className="py-2 pr-3">
+                                  <input
+                                    type="text" value={p.valore}
+                                    onChange={e => setCampoParametro(idx, 'valore', e.target.value)}
+                                    className="fanta-input w-56 font-mono text-xs"
+                                  />
+                                </td>
+                                {!readOnly && (
+                                  <td className="py-2">
+                                    <button type="button" onClick={() => rimuoviParametro(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                )}
+                              </tr>
+                            )
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
-                </div>
+                    {!readOnly && (
+                      <button type="button" onClick={aggiungiParametro} className="btn-ghost text-xs mt-4">
+                        <Plus className="w-3.5 h-3.5" /> Aggiungi parametro
+                      </button>
+                    )}
+                  </details>
+                ) : null}
               </div>
-
-              {/* Elenco generico completo: mostra/permette di aggiungere qualunque altro
-                  parametro, anche non previsto dai controlli dedicati sopra. */}
-              <div className="card p-6">
-                <p className="text-xs text-slate-500 mb-4">Elenco completo (avanzato)</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
-                        <th className="py-2 pr-3">Codice</th>
-                        <th className="py-2 pr-3">Etichetta</th>
-                        <th className="py-2 pr-3">Valore</th>
-                        <th className="py-2 w-8" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parametri.map((p, idx) => (
-                        <tr key={idx} className="border-t border-white/[0.03]">
-                          <td className="py-2 pr-3">
-                            <input
-                              type="text" value={p.codice}
-                              onChange={e => setCampoParametro(idx, 'codice', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                              className="fanta-input w-56 font-mono text-xs"
-                            />
-                          </td>
-                          <td className="py-2 pr-3">
-                            <input
-                              type="text" value={p.etichetta}
-                              onChange={e => setCampoParametro(idx, 'etichetta', e.target.value)}
-                              className="fanta-input w-56"
-                            />
-                          </td>
-                          <td className="py-2 pr-3">
-                            <input
-                              type="text" value={p.valore}
-                              onChange={e => setCampoParametro(idx, 'valore', e.target.value)}
-                              className="fanta-input w-56 font-mono text-xs"
-                            />
-                          </td>
-                          <td className="py-2">
-                            <button type="button" onClick={() => rimuoviParametro(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <button type="button" onClick={aggiungiParametro} className="btn-ghost text-xs mt-4">
-                  <Plus className="w-3.5 h-3.5" /> Aggiungi parametro
-                </button>
-              </div>
-            </div>
+            </fieldset>
           )}
         </>
       )}

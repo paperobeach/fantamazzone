@@ -13,26 +13,35 @@
 // GET  ?stagione=2026
 //      → { stagione, bonus:[...], algoritmi:{ DIFESA:{...}, CENTROCAMPO:{...}, ATTACCO:{...} },
 //          parametri:[{codice, etichetta, valore}, ...] }
-//          champions:[{id,label,turni:[{codice,label,opzionale,suggerita}]}] }
-//      "champions" descrive i turni della Champions: per ciascuno la
-//      giornata di campionato si configura come parametro CHAMP_*
-//      (vedi lib/ChampionsCalendario.php); "suggerita" è la giornata
-//      del calendario Champions esistente (stagione stessa o
-//      precedente), usabile come valore di partenza.
-//      Se la stagione non ha ancora configurazione, viene copiata
+//          champions:[{id,label,gironi:[...],turni:[{n,label,celle:[{codice,girone,opzionale,suggerita}]}]}],
+//          ultima_stagione, modificabile }
+//      "champions" descrive i turni della Champions: per ciascuna cella
+//      (turno × girone) la giornata di fantacampionato si configura come
+//      parametro CHAMP_* (vedi lib/ChampionsCalendario.php); "suggerita"
+//      è la giornata del calendario Champions esistente (stagione stessa
+//      o precedente), usabile come valore di partenza.
+//      "modificabile" è true solo per l'ULTIMA stagione (MAX di
+//      NEW_SQUADRE): le stagioni precedenti sono in sola lettura.
+//      Se l'ultima stagione non ha ancora configurazione, viene copiata
 //      automaticamente dalla stagione più recente che ne ha una,
 //      oppure (se è la prima in assoluto) dai valori di default
-//      codificati in questo file.
+//      codificati in questo file. Per le stagioni precedenti senza
+//      configurazione la GET non scrive nulla: mostra in sola lettura
+//      quella della stagione configurata più vicina.
 //
 // POST { stagione, bonus: [{codice, etichetta, valore, ordine, attivo}, ...],
 //        algoritmi: { DIFESA: {algoritmo, parametri, descrizione}, ... },
 //        parametri: [{codice, etichetta, valore}, ...] }
 //      Sostituisce integralmente la configurazione della stagione.
+//      Rifiutata (403) se la stagione non è l'ultima.
 //      Si può inviare solo una parte (bonus / algoritmi / parametri):
 //      quelle non inviate restano invariate.
-//      I parametri CHAMP_* (giornata di campionato di ogni turno
-//      Champions) sono validati prima di qualsiasi scrittura: intero
-//      tra 1 e NUMERO_GIORNATE, senza duplicati e in ordine crescente.
+//      I parametri CHAMP_* (giornata di fantacampionato di ogni turno
+//      Champions, per girone) sono validati prima di qualsiasi
+//      scrittura: intero tra 1 e NUMERO_GIORNATE, crescente nello
+//      stesso girone e con ogni fase successiva alla precedente.
+//      NUMERO_GIORNATE (1-99) e GIORNATA_SERIE_A_INIZIO (>= 1) devono
+//      essere interi.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
@@ -124,10 +133,18 @@ function parametri_default(): array
         ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
         ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
         ['codice' => 'TOPFLOP_SOGLIA_PERCENTUALE',   'etichetta' => 'Top/Flop 11: giocate minime (% delle partite giocate)', 'valore' => '50'],
-        ['codice' => 'MARCATORI_MIN_GIOCATE',        'etichetta' => 'Marcatori: giocate minime per migliori/peggiori',       'valore' => '5'],
+        ['codice' => 'GIORNATA_SERIE_A_INIZIO',      'etichetta' => 'Giornata di Serie A di partenza',              'valore' => '1'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
     ];
+}
+
+// Ultima stagione disponibile (la stessa elenca sistema.php?tipo=stagioni):
+// solo questa ha la configurazione modificabile.
+function ultima_stagione(): int
+{
+    $r = query_one("SELECT MAX(stagione) AS s FROM NEW_SQUADRE");
+    return (int) ($r['s'] ?? 0);
 }
 
 function carica_bonus(int $stagione, $conn): array
@@ -242,6 +259,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $input    = json_decode(file_get_contents("php://input"), true) ?? $_POST;
     $stagione = (int) ($input['stagione'] ?? 0);
     if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
+    if ($stagione !== ultima_stagione()) {
+        api_error("Le regole di calcolo sono modificabili solo per l'ultima stagione", 403);
+    }
 
     // Giornate Champions: validate prima di scrivere qualunque cosa.
     if (isset($input['parametri']) && is_array($input['parametri'])) {
@@ -249,6 +269,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $maxGiornate = null;
         foreach ($input['parametri'] as $p) {
             $cod = trim((string) ($p['codice'] ?? ''));
+            $val = trim((string) ($p['valore'] ?? ''));
+            if ($cod === 'NUMERO_GIORNATE' && (!ctype_digit($val) || (int) $val < 1 || (int) $val > 99)) {
+                api_error("Il numero di giornate deve essere un intero tra 1 e 99", 400);
+            }
+            if ($cod === 'GIORNATA_SERIE_A_INIZIO' && (!ctype_digit($val) || (int) $val < 1)) {
+                api_error("La giornata di Serie A di partenza deve essere un intero >= 1", 400);
+            }
             if (strpos($cod, 'CHAMP_') === 0) $champ[$cod] = (string) ($p['valore'] ?? '');
             if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {
                 $maxGiornate = (int) $p['valore'];
@@ -349,6 +376,9 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
 $stagione = param_int("stagione");
 if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
 
+$ultima       = ultima_stagione();
+$modificabile = ($stagione === $ultima);
+
 $bonus        = carica_bonus($stagione, $conn);
 $algoritmi    = carica_algoritmi($stagione, $conn);
 $parametri    = carica_parametri($stagione, $conn);
@@ -360,36 +390,63 @@ if (empty($bonus) && empty($algoritmi) && empty($parametri)) {
     $altra = query_one("SELECT MAX(stagione) AS s FROM NEW_REGOLE_BONUS WHERE stagione <> $stagione");
     $stagioneOrigine = (int) ($altra['s'] ?? 0);
 
-    if ($stagioneOrigine > 0) {
-        copia_configurazione($stagioneOrigine, $stagione, $conn);
-        $ereditata_da = $stagioneOrigine;
+    if ($modificabile) {
+        if ($stagioneOrigine > 0) {
+            copia_configurazione($stagioneOrigine, $stagione, $conn);
+            $ereditata_da = $stagioneOrigine;
+        } else {
+            semina_default($stagione, $conn);
+        }
+        $bonus     = carica_bonus($stagione, $conn);
+        $algoritmi = carica_algoritmi($stagione, $conn);
+        $parametri = carica_parametri($stagione, $conn);
     } else {
-        semina_default($stagione, $conn);
+        // Stagione precedente senza configurazione: sola lettura, nessuna
+        // scrittura. Si mostra quella della stagione configurata più
+        // vicina (preferibilmente precedente).
+        $vicina = query_one("SELECT MAX(stagione) AS s FROM NEW_REGOLE_BONUS WHERE stagione < $stagione");
+        $stagioneOrigine = (int) ($vicina['s'] ?? 0) ?: $stagioneOrigine;
+        if ($stagioneOrigine > 0) {
+            $bonus     = carica_bonus($stagioneOrigine, $conn);
+            $algoritmi = carica_algoritmi($stagioneOrigine, $conn);
+            $parametri = carica_parametri($stagioneOrigine, $conn);
+            $ereditata_da = $stagioneOrigine;
+        }
     }
-    $bonus     = carica_bonus($stagione, $conn);
-    $algoritmi = carica_algoritmi($stagione, $conn);
-    $parametri = carica_parametri($stagione, $conn);
 }
 
-// Struttura dei turni Champions con la giornata suggerita dal calendario esistente
-$sorgenteCal = champions_giornate_calendario($stagione);
-if (empty($sorgenteCal)) $sorgenteCal = champions_giornate_calendario($stagione - 1);
-$champions = champions_turni();
-$n = 0;
+// Struttura dei turni Champions, con la giornata suggerita dal calendario
+// esistente (stagione stessa o, in mancanza, precedente) per ogni cella.
+$suggerite = champions_suggerite($stagione);
+if (empty($suggerite)) $suggerite = champions_suggerite($stagione - 1);
+$champions = champions_fasi();
 foreach ($champions as &$fase) {
     foreach ($fase['turni'] as &$turno) {
-        $turno['suggerita'] = $sorgenteCal[$n] ?? null;
-        $n++;
+        foreach ($turno['celle'] as &$cella) {
+            $cella['suggerita'] = $suggerite[$cella['codice']] ?? null;
+        }
+        unset($cella);
     }
     unset($turno);
 }
 unset($fase);
 
+// Compatibilità con i vecchi codici CHAMP_* senza girone: se la cella nuova
+// non è ancora salvata, la si presenta con il valore del vecchio codice.
+$presenti = array_column($parametri, 'codice');
+foreach (champions_parametri_stagione($stagione) as $cod => $val) {
+    if (!in_array($cod, $presenti, true)) {
+        $parametri[] = ['codice' => $cod, 'etichetta' => $cod, 'valore' => $val];
+    }
+}
+
 api_success([
-    "stagione"      => $stagione,
-    "champions"     => $champions,
-    "ereditata_da"  => $ereditata_da,
-    "bonus"         => $bonus,
-    "algoritmi"     => $algoritmi,
-    "parametri"     => $parametri,
+    "stagione"        => $stagione,
+    "ultima_stagione" => $ultima,
+    "modificabile"    => $modificabile,
+    "champions"       => $champions,
+    "ereditata_da"    => $ereditata_da,
+    "bonus"           => $bonus,
+    "algoritmi"       => $algoritmi,
+    "parametri"       => $parametri,
 ]);

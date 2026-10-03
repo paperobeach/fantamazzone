@@ -19,7 +19,6 @@
     ├── dettaglio_partita.php
     ├── top_flop.php
     ├── statistiche.php
-    ├── marcatori.php
     ├── login.php
     ├── champions.php
     ├── formazioni.php
@@ -63,7 +62,6 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | `api/squadre.php?stagione=&id=` | stagione, id | Squadra + rosa |
 | `api/dettaglio_partita.php?stagione=&giornata=` | stagione, giornata, [id_squadra] | Dettaglio partite (voti giocatori, modificatori) |
 | `api/statistiche.php?stagione=` | stagione, [id_squadra], [ruolo], [ordine] | Statistiche giocatori |
-| `api/marcatori.php?stagione=&tipo=` | stagione, tipo=(marcatori\|assist\|migliori\|peggiori) | Classifiche individuali |
 | `api/top_flop.php?stagione=` | stagione, [tipo=top\|flop] | Top11 / Flop11 |
 | `api/champions.php?stagione=&sezione=` | stagione, sezione=(classifica\|gironi\|note) | Coppa Champions |
 | `api/formazioni.php?stagione=&giornata=&id_squadra=` | stagione, giornata, id_squadra | Formazione inserita |

@@ -53,12 +53,13 @@
 //     CALENDARIO CHAMPIONS: la Champions si gioca in contemporanea al
 //     campionato; la giornata di campionato di ogni turno (Fase 1,
 //     Fase 2, Fase finale) è configurata in "Gestisci regole di
-//     calcolo" → "Parametri stagione" (NEW_PARAMETRI_STAGIONE,
-//     codici CHAMP_*, vedi lib/ChampionsCalendario.php). Qui la
-//     configurazione viene SOLO LETTA: i turni della struttura
-//     sorgente (stagione precedente), ordinati cronologicamente, sono
-//     associati per posizione ai turni previsti e la colonna
-//     "giornata" è sostituita con quella configurata. Se la
+//     calcolo" → "Parametri stagione" → "Struttura stagione"
+//     (NEW_PARAMETRI_STAGIONE, codici CHAMP_* con un valore per
+//     girone, vedi lib/ChampionsCalendario.php). Qui la configurazione
+//     viene SOLO LETTA: le giornate della struttura sorgente (stagione
+//     precedente), ordinate cronologicamente, sono associate per
+//     posizione ai turni previsti e la colonna "giornata" è sostituita
+//     con quella configurata per il girone della riga. Se la
 //     configurazione manca o non è valida (fuori da 1..giornate, non
 //     crescente, duplicata) il salvataggio viene rifiutato PRIMA di
 //     modificare qualsiasi dato.
@@ -382,14 +383,17 @@ if (!empty($errors)) {
 $champGiornate = [];
 if ($giornate !== null && !$formazionePresente) {
     $champGiornate = champions_parametri_stagione($stagione);
-    $sorgenteCal = champions_giornate_calendario($stagione - 1);
+    $turniCron   = champions_turni_cronologici();
+    $sorgenteCal = champions_assegna_sorgente($stagione - 1); // giornata sorgente => indice turno
     $obbligatori = [];
-    foreach (champions_turni_piatti() as $n => $t) {
-        if (isset($sorgenteCal[$n]) && !$t["opzionale"]) $obbligatori[] = $t["codice"];
+    foreach ($sorgenteCal as $idx) {
+        foreach ($turniCron[$idx]["celle"] ?? [] as $c) {
+            if (!$c["opzionale"]) $obbligatori[] = $c["codice"];
+        }
     }
     $champErr = [];
     foreach (champions_valida_giornate($champGiornate, $giornate, $obbligatori) as [$cod, $msg]) {
-        $champErr[] = err_field(null, $cod, $msg . " (Gestisci regole di calcolo → Parametri stagione)");
+        $champErr[] = err_field(null, $cod, $msg . " (Gestisci regole di calcolo → Parametri stagione → Struttura stagione)");
     }
     if (!empty($champErr)) validation_error($champErr);
 }
@@ -478,26 +482,24 @@ try {
             FROM NEW_CALENDARIO
             WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
 
-        // La giornata sorgente in posizione cronologica N corrisponde al
-        // N-esimo turno di champions_turni_piatti(): viene sostituita con
-        // la giornata di campionato configurata per quel turno.
-        $sorgente = champions_giornate_calendario($stagionePrecedente);
-        $turni = champions_turni_piatti();
-        $mappa = [];
-        foreach ($sorgente as $n => $gSorg) {
-            $cod = $turni[$n]["codice"] ?? null;
-            if ($cod !== null && ($champGiornate[$cod] ?? "") !== "") $mappa[$gSorg] = (int) $champGiornate[$cod];
-        }
+        // Ogni giornata sorgente corrisponde a un turno (per posizione
+        // cronologica); per ogni riga si usa la cella del suo girone e la
+        // colonna "giornata" è sostituita con quella configurata.
+        $turniCron = champions_turni_cronologici();
+        $sorgente  = champions_assegna_sorgente($stagionePrecedente);
         $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
                                 FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagionePrecedente");
 
         esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
         foreach ($righeSorg as $rs) {
             $gSorg = (int) $rs["giornata"];
-            if (!isset($mappa[$gSorg])) continue; // turno non configurato (es. replay) o oltre i turni previsti
+            if (!isset($sorgente[$gSorg]) || !isset($turniCron[$sorgente[$gSorg]])) continue; // oltre i turni previsti
+            $cella  = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
+            $gNuova = (int) ($champGiornate[$cella["codice"]] ?? 0);
+            if ($gNuova < 1) continue; // turno non configurato (es. replay)
             $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
             esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-                VALUES ($stagione, {$mappa[$gSorg]}, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
+                VALUES ($stagione, $gNuova, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
         }
 
         $calendarioAggiornato = true;

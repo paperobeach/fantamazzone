@@ -13,7 +13,6 @@ const Calendario  = lazy(() => import('./pages/Calendario'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
-const Marcatori   = lazy(() => import('./pages/Marcatori'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
@@ -92,7 +91,6 @@ function AppShell() {
                       mantenuto per eventuali link/segnalibri esistenti. */}
                   <Route path="/incontri"     element={<Navigate to="/calendario" replace />} />
                   <Route path="/statistiche"  element={<Statistiche />} />
-                  <Route path="/marcatori"    element={<Marcatori />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/formazione"   element={

@@ -111,11 +111,6 @@ export const getDettaglioPartita = (stagione, giornata, id_squadra = null) =>
 export const getStatistiche = (stagione, params = {}) =>
   get('statistiche.php', { stagione, ...params })
 
-// ── Marcatori ────────────────────────────────────────────────
-
-export const getMarcatori = (stagione, tipo = 'marcatori', limit = 20) =>
-  get('marcatori.php', { stagione, tipo, limit })
-
 // ── Top / Flop 11 ────────────────────────────────────────────
 
 export const getTopFlop = (stagione, tipo = null) =>

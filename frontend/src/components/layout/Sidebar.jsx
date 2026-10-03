@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays
 } from 'lucide-react'
 
 const NAV = [
@@ -12,7 +12,6 @@ const NAV = [
   { to: '/calendario',   icon: Calendar,     label: 'Calendario'    },
   { to: '/squadre',      icon: Users,        label: 'Squadre'       },
   { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
-  { to: '/marcatori',    icon: Medal,        label: 'Marcatori'     },
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
 ]

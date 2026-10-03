@@ -29,7 +29,6 @@ const TOPFLOP_COMPOSIZIONE = [1 => 1, 2 => 3, 3 => 4, 4 => 3];
 
 // Valori di riserva se i parametri di stagione non sono stati configurati
 const TOPFLOP_SOGLIA_PERCENTUALE_DEFAULT = 50;
-const MARCATORI_MIN_GIOCATE_DEFAULT      = 5;
 
 /**
  * Legge un parametro di stagione da NEW_PARAMETRI_STAGIONE.

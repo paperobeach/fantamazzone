@@ -1,5 +1,5 @@
 // ── Pitch formation (modulo 3-4-3) ─────────────────────────────
-const ROLE_LABEL = { '1': 'P', '2': 'D', '3': 'C', '4': 'A' }
+import TeamLogo from './TeamLogo'
 
 // Posizioni percentuali (x, y) sul campo per il modulo 3-4-3.
 // y = 0 rete avversaria (attacco), y = 100 propria porta (difesa).
@@ -29,12 +29,8 @@ function buildSlots(players) {
 function PlayerToken({ player, isTop }) {
   return (
     <div className="flex flex-col items-center gap-1 w-16 sm:w-20">
-      <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2 shadow-lg ${
-        isTop
-          ? 'bg-grass-500/90 border-grass-300 text-pitch-950'
-          : 'bg-red-500/90 border-red-300 text-white'
-      }`}>
-        {ROLE_LABEL[String(player.ruolo)] ?? '?'}
+      <div className={`rounded-lg ring-2 shadow-lg ${isTop ? 'ring-grass-300' : 'ring-red-400'}`}>
+        <TeamLogo logo={player.logo} nome={player.squadra} size="sm" className="!max-w-[3.5rem] sm:!max-w-[4.5rem]" />
       </div>
       <span className="text-[10px] leading-tight text-center text-white font-medium truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
         {player.giocatore}

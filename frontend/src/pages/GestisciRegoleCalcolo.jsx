@@ -211,16 +211,34 @@ export default function GestisciRegoleCalcolo() {
     setSaved(false)
   }
 
-  const setValoreParametro = (codice, valore) => {
+  const setValoreParametro = (codice, valore, etichetta = codice) => {
     setParametri(prev => {
       const esiste = prev.some(p => p.codice === codice)
       return esiste
         ? prev.map(p => (p.codice === codice ? { ...p, valore } : p))
-        : [...prev, { codice, etichetta: codice, valore }]
+        : [...prev, { codice, etichetta, valore }]
     })
     setSaved(false)
   }
   const getValoreParametro = (codice, default_ = '') => parametri.find(p => p.codice === codice)?.valore ?? default_
+
+  // Giornate di campionato dei turni Champions (parametri CHAMP_*)
+  const fasiChampions = info?.champions ?? []
+  const setGiornataTurno = (fase, turno, valore) =>
+    setValoreParametro(
+      turno.codice,
+      valore.replace(/\D/g, '').slice(0, 2),
+      `Champions - ${fase.label} - ${turno.label}: giornata di campionato`,
+    )
+  const usaSuggerite = () => {
+    for (const f of fasiChampions) {
+      for (const t of f.turni) {
+        if (t.suggerita != null && getValoreParametro(t.codice, '') === '') {
+          setGiornataTurno(f, t, String(t.suggerita))
+        }
+      }
+    }
+  }
 
   const aggiungiParametro = () => {
     setParametri([...parametri, { codice: '', etichetta: '', valore: '' }])
@@ -460,6 +478,45 @@ export default function GestisciRegoleCalcolo() {
                     etichettaCampo="Gol"
                     stepCampo={1}
                   />
+                </div>
+              </div>
+
+              <div className="card p-6">
+                <div className="flex items-start justify-between gap-3 mb-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-slate-300">Calendario Champions</h3>
+                  <button type="button" onClick={usaSuggerite} className="btn-ghost text-xs">
+                    Precompila dal calendario esistente
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  Associa a ogni turno la giornata di campionato in cui si gioca. La Champions è in
+                  contemporanea al campionato: la giornata indicata vale per entrambe le competizioni.
+                  Le giornate devono essere comprese tra 1 e il numero di giornate della stagione, tutte diverse
+                  e in ordine crescente. Il calendario Champions viene creato da "Inizializzazione stagione"
+                  sulla base di questa configurazione.
+                </p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {fasiChampions.map(f => (
+                    <div key={f.id} className="rounded-lg border border-white/5 p-3">
+                      <div className="text-xs font-semibold text-slate-400 mb-2">{f.label}</div>
+                      <div className="space-y-1.5">
+                        {f.turni.map(t => (
+                          <div key={t.codice} className="flex items-center justify-between gap-2">
+                            <label htmlFor={t.codice} className="text-xs text-slate-500">{t.label}</label>
+                            <input
+                              id={t.codice}
+                              type="text" inputMode="numeric" maxLength={2}
+                              value={getValoreParametro(t.codice, '')}
+                              onChange={e => setGiornataTurno(f, t, e.target.value)}
+                              placeholder={t.suggerita != null ? String(t.suggerita) : 'g.'}
+                              title="Giornata di campionato"
+                              className="fanta-input w-16 text-center"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

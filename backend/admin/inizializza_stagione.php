@@ -50,6 +50,19 @@
 //             WHERE stagione = :stagione - 1
 //     Se "giornate" non è indicato, il calendario non viene toccato.
 //
+//     CALENDARIO CHAMPIONS: la Champions si gioca in contemporanea al
+//     campionato; la giornata di campionato di ogni turno (Fase 1,
+//     Fase 2, Fase finale) è configurata in "Gestisci regole di
+//     calcolo" → "Parametri stagione" (NEW_PARAMETRI_STAGIONE,
+//     codici CHAMP_*, vedi lib/ChampionsCalendario.php). Qui la
+//     configurazione viene SOLO LETTA: i turni della struttura
+//     sorgente (stagione precedente), ordinati cronologicamente, sono
+//     associati per posizione ai turni previsti e la colonna
+//     "giornata" è sostituita con quella configurata. Se la
+//     configurazione manca o non è valida (fuori da 1..giornate, non
+//     crescente, duplicata) il salvataggio viene rifiutato PRIMA di
+//     modificare qualsiasi dato.
+//
 //   Se ESISTE già almeno una formazione per la stagione (controllo
 //   ripetuto anche qui lato server, non ci si fida del frontend):
 //     - vengono accettate in scrittura SOLO utenza/password/
@@ -103,6 +116,7 @@
 // specifiche in un secondo momento, come indicato dall'utente.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
+require_once __DIR__ . "/../lib/ChampionsCalendario.php";
 
 const STAGIONE_MODELLO_CALENDARIO = 2011; // stagione "modello" da cui copiare gli accoppiamenti
 
@@ -180,6 +194,7 @@ function formazione_presente_per_stagione($stagione) {
     $fc = query_one("SELECT COUNT(*) AS n FROM NEW_FORMAZIONI WHERE STAGIONE = $stagione");
     return $fc && (int) $fc["n"] > 0;
 }
+
 
 // ------------------------------------------------------------
 // GET → dati esistenti (una riga per squadra) per la stagione
@@ -361,6 +376,24 @@ if (!empty($errors)) {
     validation_error($errors);
 }
 
+// ---- Configurazione Champions (letta da "Gestisci regole di calcolo") ----
+// Serve solo se si rigenera il calendario e non ci sono formazioni.
+// Validata PRIMA di toccare qualsiasi dato.
+$champGiornate = [];
+if ($giornate !== null && !$formazionePresente) {
+    $champGiornate = champions_parametri_stagione($stagione);
+    $sorgenteCal = champions_giornate_calendario($stagione - 1);
+    $obbligatori = [];
+    foreach (champions_turni_piatti() as $n => $t) {
+        if (isset($sorgenteCal[$n]) && !$t["opzionale"]) $obbligatori[] = $t["codice"];
+    }
+    $champErr = [];
+    foreach (champions_valida_giornate($champGiornate, $giornate, $obbligatori) as [$cod, $msg]) {
+        $champErr[] = err_field(null, $cod, $msg . " (Gestisci regole di calcolo → Parametri stagione)");
+    }
+    if (!empty($champErr)) validation_error($champErr);
+}
+
 if (!colonna_email_presente($conn)) {
     api_error("La colonna 'email' non esiste ancora su NEW_ALLENATORI: eseguire prima la migrazione migrazione_email_allenatori.sql. Nessun dato è stato modificato.", 500);
 }
@@ -445,11 +478,27 @@ try {
             FROM NEW_CALENDARIO
             WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
 
+        // La giornata sorgente in posizione cronologica N corrisponde al
+        // N-esimo turno di champions_turni_piatti(): viene sostituita con
+        // la giornata di campionato configurata per quel turno.
+        $sorgente = champions_giornate_calendario($stagionePrecedente);
+        $turni = champions_turni_piatti();
+        $mappa = [];
+        foreach ($sorgente as $n => $gSorg) {
+            $cod = $turni[$n]["codice"] ?? null;
+            if ($cod !== null && ($champGiornate[$cod] ?? "") !== "") $mappa[$gSorg] = (int) $champGiornate[$cod];
+        }
+        $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
+                                FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagionePrecedente");
+
         esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
-        esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-            SELECT $stagione, giornata, giornata_camp, posizione, squadra, girone
-            FROM NEW_CALENDARIO_CHAMP
-            WHERE stagione = $stagionePrecedente");
+        foreach ($righeSorg as $rs) {
+            $gSorg = (int) $rs["giornata"];
+            if (!isset($mappa[$gSorg])) continue; // turno non configurato (es. replay) o oltre i turni previsti
+            $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
+            esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
+                VALUES ($stagione, {$mappa[$gSorg]}, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
+        }
 
         $calendarioAggiornato = true;
     }

@@ -343,7 +343,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
               : ` Confermando, i dati esistenti per la stagione ${stagione} in NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE verranno sostituiti con quelli qui sopra.`}
           </p>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-3 mt-4 pt-4 border-t border-white/5">
+          <div className="flex flex-col items-end sm:flex-row sm:items-center justify-end gap-3 mt-4 pt-4 border-t border-white/5">
             {!formazionePresente && (
               <div className="flex items-center gap-2">
                 <label className="text-xs text-slate-500 whitespace-nowrap" htmlFor="giornate-campionato">
@@ -362,7 +362,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
                 />
               </div>
             )}
-            <button onClick={salva} disabled={saving} className="btn-primary text-sm disabled:opacity-40">
+            <button onClick={salva} disabled={saving} className="btn-primary text-sm w-auto self-end sm:self-auto disabled:opacity-40">
               {saving ? <><Spinner size="sm" /> Salvataggio in corso...</> : 'Salva'}
             </button>
           </div>

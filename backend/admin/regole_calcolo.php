@@ -13,6 +13,12 @@
 // GET  ?stagione=2026
 //      → { stagione, bonus:[...], algoritmi:{ DIFESA:{...}, CENTROCAMPO:{...}, ATTACCO:{...} },
 //          parametri:[{codice, etichetta, valore}, ...] }
+//          champions:[{id,label,turni:[{codice,label,opzionale,suggerita}]}] }
+//      "champions" descrive i turni della Champions: per ciascuno la
+//      giornata di campionato si configura come parametro CHAMP_*
+//      (vedi lib/ChampionsCalendario.php); "suggerita" è la giornata
+//      del calendario Champions esistente (stagione stessa o
+//      precedente), usabile come valore di partenza.
 //      Se la stagione non ha ancora configurazione, viene copiata
 //      automaticamente dalla stagione più recente che ne ha una,
 //      oppure (se è la prima in assoluto) dai valori di default
@@ -24,9 +30,13 @@
 //      Sostituisce integralmente la configurazione della stagione.
 //      Si può inviare solo una parte (bonus / algoritmi / parametri):
 //      quelle non inviate restano invariate.
+//      I parametri CHAMP_* (giornata di campionato di ogni turno
+//      Champions) sono validati prima di qualsiasi scrittura: intero
+//      tra 1 e NUMERO_GIORNATE, senza duplicati e in ordine crescente.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
+require_once __DIR__ . "/../lib/ChampionsCalendario.php";
 
 mysqli_set_charset($conn, "utf8mb4");
 
@@ -233,6 +243,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $stagione = (int) ($input['stagione'] ?? 0);
     if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
 
+    // Giornate Champions: validate prima di scrivere qualunque cosa.
+    if (isset($input['parametri']) && is_array($input['parametri'])) {
+        $champ = [];
+        $maxGiornate = null;
+        foreach ($input['parametri'] as $p) {
+            $cod = trim((string) ($p['codice'] ?? ''));
+            if (strpos($cod, 'CHAMP_') === 0) $champ[$cod] = (string) ($p['valore'] ?? '');
+            if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {
+                $maxGiornate = (int) $p['valore'];
+            }
+        }
+        if (!empty($champ)) {
+            $errChamp = champions_valida_giornate($champ, $maxGiornate);
+            if (!empty($errChamp)) {
+                api_error("Giornate Champions non valide: " . implode(" — ", array_column($errChamp, 1)), 400);
+            }
+        }
+    }
+
     if (isset($input['bonus']) && is_array($input['bonus'])) {
         foreach ($input['bonus'] as $b) {
             $codice = trim((string) ($b['codice'] ?? ''));
@@ -342,8 +371,23 @@ if (empty($bonus) && empty($algoritmi) && empty($parametri)) {
     $parametri = carica_parametri($stagione, $conn);
 }
 
+// Struttura dei turni Champions con la giornata suggerita dal calendario esistente
+$sorgenteCal = champions_giornate_calendario($stagione);
+if (empty($sorgenteCal)) $sorgenteCal = champions_giornate_calendario($stagione - 1);
+$champions = champions_turni();
+$n = 0;
+foreach ($champions as &$fase) {
+    foreach ($fase['turni'] as &$turno) {
+        $turno['suggerita'] = $sorgenteCal[$n] ?? null;
+        $n++;
+    }
+    unset($turno);
+}
+unset($fase);
+
 api_success([
     "stagione"      => $stagione,
+    "champions"     => $champions,
     "ereditata_da"  => $ereditata_da,
     "bonus"         => $bonus,
     "algoritmi"     => $algoritmi,

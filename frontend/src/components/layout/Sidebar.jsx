@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw
+  ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays
 } from 'lucide-react'
 
 const NAV = [
@@ -28,6 +28,7 @@ const TEAM_NAV = [
 const ADMIN_NAV = [
   { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
   { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializzazione stagione' },
+  { to: '/importa-calendario-serie-a',  icon: CalendarDays, label: 'Importa calendario Serie A' },
   { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
   { to: '/riapertura-giornata',          icon: RotateCcw, label: 'Riapri giornata' },
   { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },

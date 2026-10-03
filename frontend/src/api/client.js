@@ -238,3 +238,21 @@ export const adminCaricaVotiSerieA = (stagione, giornata, file, forza = false) =
 // la giornata non è chiusa.
 export const adminCalcolaGiornata = (stagione, giornata) =>
   post('admin/calcolo_giornata.php', { stagione, giornata })
+
+// ── Importa calendario Serie A (pagina admin) ────────────────
+// GET  → riepilogo del calendario Serie A già caricato per la stagione
+//        (totale partite, giornate con date, n. partite e n. orari
+//        da definire).
+// POST → upload del file Excel (sheet "Tutte le partite") con tutte le
+//        partite della Serie A (tabella NEW_CALENDARIO_SERIE_A). Il
+//        calendario della stagione viene sostituito; in caso di errori
+//        di validazione (VALIDATION_ERROR) non viene scritto nulla.
+export const getCalendarioSerieAInfo = (stagione) =>
+  get('admin/calendario_serie_a.php', { stagione })
+
+export const adminImportaCalendarioSerieA = (stagione, file) => {
+  const formData = new FormData()
+  formData.append('stagione', stagione)
+  formData.append('file', file)
+  return postFile('admin/calendario_serie_a.php', formData)
+}

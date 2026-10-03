@@ -24,6 +24,7 @@ const InizializzazioneStagione = lazy(() => import('./pages/InizializzazioneStag
 const GestioneVoti = lazy(() => import('./pages/GestioneVoti'))
 const GestisciRegoleCalcolo = lazy(() => import('./pages/GestisciRegoleCalcolo'))
 const RiaperturaGiornata = lazy(() => import('./pages/RiaperturaGiornata'))
+const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSerieA'))
 
 function PageLoader() {
   return (
@@ -112,6 +113,9 @@ function AppShell() {
                   } />
                   <Route path="/riapertura-giornata" element={
                     <AdminRoute><RiaperturaGiornata /></AdminRoute>
+                  } />
+                  <Route path="/importa-calendario-serie-a" element={
+                    <AdminRoute><ImportaCalendarioSerieA /></AdminRoute>
                   } />
                   <Route path="/regole-calcolo" element={
                     <AdminRoute><GestisciRegoleCalcolo /></AdminRoute>

@@ -168,19 +168,28 @@ export const adminRiapriGiornata = (stagione, giornata) =>
 //        indica se la stagione ha già formazioni inserite (in tal
 //        caso il salvataggio è limitato a utenza/password/abilitazione).
 //        La password non viene mai restituita.
-// POST → Body: { stagione, giornate?, righe: [...] }. Se non esistono
-//        ancora formazioni per la stagione, consolida NEW_SQUADRE +
-//        NEW_ALLENATORI + NEW_UTENZE (cancellazione preventiva per
-//        stagione, operazione ripetibile) e, se è indicato "giornate"
-//        (1-99), rigenera anche NEW_CALENDARIO e NEW_CALENDARIO_CHAMP.
-//        Se invece esistono già formazioni, aggiorna solo utenza/
-//        password/abilitazione delle squadre esistenti e non tocca
-//        calendario.
+// POST → Passo 1 (fase "utenze"): Body { stagione, fase: 'utenze', righe: [...] }.
+//        Se non esistono ancora formazioni per la stagione, consolida
+//        NEW_SQUADRE + NEW_ALLENATORI + NEW_UTENZE (cancellazione
+//        preventiva per stagione, operazione ripetibile). Se esistono
+//        già formazioni, aggiorna solo utenza/password/abilitazione/
+//        amministratore/email delle squadre esistenti. Non tocca i
+//        calendari.
+//        Passo 2 (fase "calendari"): Body { stagione, fase: 'calendari' }.
+//        Rigenera NEW_CALENDARIO e NEW_CALENDARIO_CHAMP leggendo numero
+//        di giornate e giornate Champions dalla configurazione di stagione.
+// GET  ?fase=calendari → stato/verifica del passo 2.
 export const getInizializzazioneStagione = (stagione) =>
   get('admin/inizializza_stagione.php', { stagione })
 
 export const adminInizializzaStagione = (stagione, payload) =>
-  post('admin/inizializza_stagione.php', { stagione, ...payload })
+  post('admin/inizializza_stagione.php', { stagione, fase: 'utenze', ...payload })
+
+export const getStatoCalendariStagione = (stagione) =>
+  get('admin/inizializza_stagione.php', { stagione, fase: 'calendari' })
+
+export const adminCreaCalendariStagione = (stagione) =>
+  post('admin/inizializza_stagione.php', { stagione, fase: 'calendari' })
 
 // ── Inserimento rose ─────────────────────────────────────────
 // Carica il file Excel (sheet "Giocatori") ed esegue i 3 step

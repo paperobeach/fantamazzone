@@ -2,11 +2,23 @@
 // ============================================================
 // api/admin/inizializza_stagione.php
 //
+// L'inizializzazione della stagione si svolge in DUE PASSI separati:
+//
+//   PASSO 1 — "Creazione utenze" (fase "utenze")
+//     Crea squadre, allenatori e utenze (credenziali e ordine delle
+//     squadre). Non tocca i calendari.
+//   PASSO 2 — "Creazione calendari" (fase "calendari")
+//     Da eseguire DOPO aver controllato i parametri della stagione in
+//     "Gestisci regole di calcolo" → "Parametri stagione". Genera
+//     NEW_CALENDARIO e NEW_CALENDARIO_CHAMP leggendo dalla
+//     configurazione (NEW_PARAMETRI_STAGIONE): numero di giornate
+//     (NUMERO_GIORNATE) e giornate Champions (CHAMP_*). Non ha
+//     parametri di input oltre alla stagione.
+//
 // GET  ?stagione=2027
 //   Restituisce, una riga per squadra, i dati per la stagione
 //   indicata (join tra NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE
 //   sullo stesso id). La password non viene mai restituita.
-//
 //   - Se per la stagione richiesta non esiste ancora nessuna
 //     squadra, la tabella viene precompilata con i dati
 //     dell'ULTIMA stagione disponibile (MAX(stagione) presente in
@@ -15,10 +27,18 @@
 //     della stagione richiesta).
 //   - "formazione_presente" indica se per la stagione richiesta
 //     esiste già almeno una formazione (NEW_FORMAZIONI): se true,
-//     il frontend deve limitare la modifica ai soli campi
-//     utenza/password/abilitazione (vedi POST).
+//     il passo 1 si limita ai soli campi utenza/password/abilitazione/
+//     amministratore/email e il passo 2 non è eseguibile.
 //
-// POST { stagione, giornate, righe: [{ ordine, nome, logo, albo,
+// GET  ?stagione=2027&fase=calendari
+//   Stato del passo 2: { numero_giornate, squadre_presenti,
+//   formazione_presente, calendario_righe, calendario_champ_righe,
+//   errori: [messaggi], eseguibile }. "errori" elenca i motivi per cui
+//   i calendari non sono generabili (squadre mancanti, formazioni già
+//   presenti, NUMERO_GIORNATE non configurato, giornate Champions non
+//   valide).
+//
+// POST { stagione, fase: "utenze", righe: [{ ordine, nome, logo, albo,
 //                            allenatore, foto_allenatore, email,
 //                            utenza, password, abilitazione,
 //                            amministratore }] }
@@ -30,40 +50,6 @@
 //       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
 //     con cancellazione preventiva per stagione + reinserimento
 //     (operazione ripetibile).
-//
-//     Se inoltre è stato indicato "giornate" (1-99), rigenera anche
-//     il calendario:
-//       - NEW_CALENDARIO: copia le righe del "calendario modello"
-//         (stagione 2011) con giornata <= giornate, sostituendo la
-//         stagione con quella indicata:
-//           DELETE FROM NEW_CALENDARIO WHERE stagione = :stagione
-//           INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
-//             SELECT giornata, posizione, squadra, :stagione
-//             FROM NEW_CALENDARIO
-//             WHERE giornata <= :giornate AND stagione = 2011
-//       - NEW_CALENDARIO_CHAMP: copia la struttura della Champions
-//         della stagione precedente (:stagione - 1):
-//           DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = :stagione
-//           INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-//             SELECT :stagione, giornata, giornata_camp, posizione, squadra, girone
-//             FROM NEW_CALENDARIO_CHAMP
-//             WHERE stagione = :stagione - 1
-//     Se "giornate" non è indicato, il calendario non viene toccato.
-//
-//     CALENDARIO CHAMPIONS: la Champions si gioca in contemporanea al
-//     campionato; la giornata di campionato di ogni turno (Fase 1,
-//     Fase 2, Fase finale) è configurata in "Gestisci regole di
-//     calcolo" → "Parametri stagione" → "Struttura stagione"
-//     (NEW_PARAMETRI_STAGIONE, codici CHAMP_* con un valore per
-//     girone, vedi lib/ChampionsCalendario.php). Qui la configurazione
-//     viene SOLO LETTA: le giornate della struttura sorgente (stagione
-//     precedente), ordinate cronologicamente, sono associate per
-//     posizione ai turni previsti e la colonna "giornata" è sostituita
-//     con quella configurata per il girone della riga. Se la
-//     configurazione manca o non è valida (fuori da 1..giornate, non
-//     crescente, duplicata) il salvataggio viene rifiutato PRIMA di
-//     modificare qualsiasi dato.
-//
 //   Se ESISTE già almeno una formazione per la stagione (controllo
 //   ripetuto anche qui lato server, non ci si fida del frontend):
 //     - vengono accettate in scrittura SOLO utenza/password/
@@ -72,9 +58,35 @@
 //       cancellazione+reinserimento). L'email è infatti SEMPRE
 //       modificabile, in qualsiasi momento della stagione;
 //     - non è possibile aggiungere/rimuovere/rinominare squadre né
-//       cambiarne l'allenatore;
-//     - NON vengono toccati né NEW_CALENDARIO né NEW_CALENDARIO_CHAMP,
-//       indipendentemente dal valore di "giornate".
+//       cambiarne l'allenatore.
+//   Se "fase" è omessa vale "utenze".
+//
+// POST { stagione, fase: "calendari" }
+//   Rigenera i calendari della stagione (operazione ripetibile):
+//     - NEW_CALENDARIO: copia le righe del "calendario modello"
+//       (stagione 2011) con giornata <= NUMERO_GIORNATE, sostituendo
+//       la stagione con quella indicata:
+//         DELETE FROM NEW_CALENDARIO WHERE stagione = :stagione
+//         INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
+//           SELECT giornata, posizione, squadra, :stagione
+//           FROM NEW_CALENDARIO
+//           WHERE giornata <= :giornate AND stagione = 2011
+//     - NEW_CALENDARIO_CHAMP: copia la struttura della Champions
+//       della stagione precedente (:stagione - 1). La Champions si
+//       gioca in contemporanea al campionato; la giornata di
+//       campionato di ogni turno e di ogni girone è configurata in
+//       "Gestisci regole di calcolo" → "Parametri stagione" →
+//       "Struttura stagione" (codici CHAMP_*, vedi
+//       lib/ChampionsCalendario.php) e qui viene SOLO LETTA: le
+//       giornate della struttura sorgente, ordinate
+//       cronologicamente, sono associate per posizione ai turni
+//       previsti e la colonna "giornata" è sostituita con quella
+//       configurata per il girone della riga.
+//   Richiede che esistano le squadre della stagione (passo 1) e NON
+//   che esistano già formazioni. Se la configurazione manca o non è
+//   valida (NUMERO_GIORNATE assente, giornate Champions fuori da
+//   1..giornate, non crescenti) la richiesta è rifiutata PRIMA di
+//   modificare qualsiasi dato.
 //
 // Mapping colonna riga → colonna DB (in lettura si usa sempre il
 // valore su NEW_SQUADRE quando il dato è duplicato; in scrittura
@@ -198,10 +210,106 @@ function formazione_presente_per_stagione($stagione) {
 
 
 // ------------------------------------------------------------
+// PASSO 2 — contesto e generazione dei calendari
+// ------------------------------------------------------------
+
+/** NUMERO_GIORNATE dalla configurazione di stagione (null se assente o non valido). */
+function numero_giornate_configurato($stagione) {
+    $r = query_one("SELECT valore FROM NEW_PARAMETRI_STAGIONE
+                    WHERE stagione = $stagione AND codice = 'NUMERO_GIORNATE'");
+    $v = $r ? trim((string) $r["valore"]) : "";
+    if ($v === "" || !ctype_digit($v) || (int) $v < 1 || (int) $v > 99) return null;
+    return (int) $v;
+}
+
+/**
+ * Verifica se i calendari della stagione sono generabili.
+ * @return array [ numero_giornate|null, giornate_champions (codice=>valore), errori (messaggi) ]
+ */
+function calendari_verifica($stagione) {
+    $errori = [];
+    $ns = query_one("SELECT COUNT(*) AS n FROM NEW_SQUADRE WHERE stagione = $stagione");
+    if (!$ns || (int) $ns["n"] === 0) {
+        $errori[] = "Nessuna squadra per la stagione $stagione: completare prima il passo 1 (Creazione utenze).";
+    }
+    if (formazione_presente_per_stagione($stagione)) {
+        $errori[] = "Per la stagione $stagione esistono già formazioni inserite: i calendari non sono più modificabili.";
+    }
+
+    $giornate = numero_giornate_configurato($stagione);
+    if ($giornate === null) {
+        $errori[] = "Numero di giornate non configurato per la stagione $stagione: impostarlo in Gestisci regole di calcolo → Parametri stagione → Struttura stagione.";
+    }
+
+    $champGiornate = champions_parametri_stagione($stagione);
+    if ($giornate !== null) {
+        $turniCron   = champions_turni_cronologici();
+        $sorgenteCal = champions_assegna_sorgente($stagione - 1); // giornata sorgente => indice turno
+        $obbligatori = [];
+        foreach ($sorgenteCal as $idx) {
+            foreach ($turniCron[$idx]["celle"] ?? [] as $c) {
+                if (!$c["opzionale"]) $obbligatori[] = $c["codice"];
+            }
+        }
+        foreach (champions_valida_giornate($champGiornate, $giornate, $obbligatori) as [$cod, $msg]) {
+            $errori[] = $msg . " (Gestisci regole di calcolo → Parametri stagione → Struttura stagione)";
+        }
+    }
+    return [$giornate, $champGiornate, $errori];
+}
+
+/** Rigenera NEW_CALENDARIO e NEW_CALENDARIO_CHAMP (da chiamare dentro il try/transazione). */
+function calendari_genera($conn, $stagione, $giornate, array $champGiornate) {
+    $stagionePrecedente = $stagione - 1;
+
+    esegui($conn, "DELETE FROM NEW_CALENDARIO WHERE stagione = $stagione");
+    esegui($conn, "INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
+        SELECT giornata, posizione, squadra, $stagione
+        FROM NEW_CALENDARIO
+        WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
+
+    // Ogni giornata sorgente corrisponde a un turno (per posizione
+    // cronologica); per ogni riga si usa la cella del suo girone e la
+    // colonna "giornata" è sostituita con quella configurata.
+    $turniCron = champions_turni_cronologici();
+    $sorgente  = champions_assegna_sorgente($stagionePrecedente);
+    $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
+                            FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagionePrecedente");
+
+    esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
+    foreach ($righeSorg as $rs) {
+        $gSorg = (int) $rs["giornata"];
+        if (!isset($sorgente[$gSorg]) || !isset($turniCron[$sorgente[$gSorg]])) continue; // oltre i turni previsti
+        $cella  = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
+        $gNuova = (int) ($champGiornate[$cella["codice"]] ?? 0);
+        if ($gNuova < 1) continue; // turno non configurato (es. replay)
+        $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
+        esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
+            VALUES ($stagione, $gNuova, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
+    }
+}
+
+// ------------------------------------------------------------
 // GET → dati esistenti (una riga per squadra) per la stagione
 // ------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     $stagione = param_int("stagione");
+
+    if (param_str("fase", false) === "calendari") {
+        [$giornate, , $errori] = calendari_verifica($stagione);
+        $ns  = query_one("SELECT COUNT(*) AS n FROM NEW_SQUADRE WHERE stagione = $stagione");
+        $cal = query_one("SELECT COUNT(*) AS n FROM NEW_CALENDARIO WHERE stagione = $stagione");
+        $chp = query_one("SELECT COUNT(*) AS n FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
+        api_success([
+            "numero_giornate"        => $giornate,
+            "squadre_presenti"       => (int) ($ns["n"] ?? 0),
+            "formazione_presente"    => formazione_presente_per_stagione($stagione),
+            "calendario_righe"       => (int) ($cal["n"] ?? 0),
+            "calendario_champ_righe" => (int) ($chp["n"] ?? 0),
+            "errori"                 => $errori,
+            "eseguibile"             => empty($errori),
+        ]);
+    }
 
     $righe = righe_per_stagione($conn, $stagione);
 
@@ -228,29 +336,56 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 // ------------------------------------------------------------
 $input = json_decode(file_get_contents("php://input"), true) ?? $_POST;
 
-$stagione     = (int) ($input["stagione"] ?? 0);
-$righe        = $input["righe"] ?? [];
-$giornateRaw  = $input["giornate"] ?? null;
+$stagione = (int) ($input["stagione"] ?? 0);
+$fase     = (string) ($input["fase"] ?? "utenze");
 
 if ($stagione < 2000 || $stagione > 2100) {
     api_error("Parametro 'stagione' obbligatorio e deve essere un anno a 4 cifre plausibile (2000-2100)", 400);
 }
+if (!in_array($fase, ["utenze", "calendari"], true)) {
+    api_error("Parametro 'fase' non valido: valori ammessi 'utenze' o 'calendari'", 400);
+}
+
+// ------------------------------------------------------------
+// POST fase "calendari" → PASSO 2
+// ------------------------------------------------------------
+if ($fase === "calendari") {
+    [$giornate, $champGiornate, $errori] = calendari_verifica($stagione);
+    if (!empty($errori)) {
+        validation_error(array_map(function ($m) { return err_field(null, "calendari", $m); }, $errori));
+    }
+
+    mysqli_begin_transaction($conn);
+    try {
+        calendari_genera($conn, $stagione, $giornate, $champGiornate);
+        mysqli_commit($conn);
+    } catch (Throwable $e) {
+        mysqli_rollback($conn);
+        api_error("Errore durante la creazione dei calendari: " . $e->getMessage(), 500);
+    }
+
+    $cal = query_one("SELECT COUNT(*) AS n FROM NEW_CALENDARIO WHERE stagione = $stagione");
+    $chp = query_one("SELECT COUNT(*) AS n FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
+    api_success([
+        "ok"                     => true,
+        "stagione"               => $stagione,
+        "fase"                   => "calendari",
+        "numero_giornate"        => $giornate,
+        "calendario_righe"       => (int) ($cal["n"] ?? 0),
+        "calendario_champ_righe" => (int) ($chp["n"] ?? 0),
+    ]);
+}
+
+// ------------------------------------------------------------
+// POST fase "utenze" → PASSO 1
+// ------------------------------------------------------------
+$righe = $input["righe"] ?? [];
+
 if (!is_array($righe)) {
     api_error("Formato dati non valido: 'righe' deve essere un array", 400);
 }
 if (empty($righe)) {
     api_error("Inserire almeno una riga (squadra)", 400);
-}
-
-// "giornate": numero di giornate del campionato, opzionale, al
-// massimo 2 cifre (1-99). Se assente/vuoto, il calendario non viene
-// toccato in questo salvataggio.
-$giornate = null;
-if ($giornateRaw !== null && $giornateRaw !== "") {
-    if (!ctype_digit((string) $giornateRaw) || (int) $giornateRaw < 1 || (int) $giornateRaw > 99) {
-        api_error("Il numero di giornate deve essere un intero di al massimo 2 cifre (1-99)", 400);
-    }
-    $giornate = (int) $giornateRaw;
 }
 
 // Ricontrollato sempre lato server: non ci si fida di un eventuale
@@ -377,27 +512,6 @@ if (!empty($errors)) {
     validation_error($errors);
 }
 
-// ---- Configurazione Champions (letta da "Gestisci regole di calcolo") ----
-// Serve solo se si rigenera il calendario e non ci sono formazioni.
-// Validata PRIMA di toccare qualsiasi dato.
-$champGiornate = [];
-if ($giornate !== null && !$formazionePresente) {
-    $champGiornate = champions_parametri_stagione($stagione);
-    $turniCron   = champions_turni_cronologici();
-    $sorgenteCal = champions_assegna_sorgente($stagione - 1); // giornata sorgente => indice turno
-    $obbligatori = [];
-    foreach ($sorgenteCal as $idx) {
-        foreach ($turniCron[$idx]["celle"] ?? [] as $c) {
-            if (!$c["opzionale"]) $obbligatori[] = $c["codice"];
-        }
-    }
-    $champErr = [];
-    foreach (champions_valida_giornate($champGiornate, $giornate, $obbligatori) as [$cod, $msg]) {
-        $champErr[] = err_field(null, $cod, $msg . " (Gestisci regole di calcolo → Parametri stagione → Struttura stagione)");
-    }
-    if (!empty($champErr)) validation_error($champErr);
-}
-
 if (!colonna_email_presente($conn)) {
     api_error("La colonna 'email' non esiste ancora su NEW_ALLENATORI: eseguire prima la migrazione migrazione_email_allenatori.sql. Nessun dato è stato modificato.", 500);
 }
@@ -434,7 +548,7 @@ try {
             "stagione"            => $stagione,
             "righe"               => count($rigaData),
             "modalita"            => "solo_utenze",
-            "calendario_aggiornato" => false,
+            "fase"                => "utenze",
         ]);
     }
 
@@ -471,48 +585,14 @@ try {
             VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc')");
     }
 
-    // ---- Calendario (solo se è stato indicato il numero di giornate) ----
-    $calendarioAggiornato = false;
-    if ($giornate !== null) {
-        $stagionePrecedente = $stagione - 1;
-
-        esegui($conn, "DELETE FROM NEW_CALENDARIO WHERE stagione = $stagione");
-        esegui($conn, "INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
-            SELECT giornata, posizione, squadra, $stagione
-            FROM NEW_CALENDARIO
-            WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
-
-        // Ogni giornata sorgente corrisponde a un turno (per posizione
-        // cronologica); per ogni riga si usa la cella del suo girone e la
-        // colonna "giornata" è sostituita con quella configurata.
-        $turniCron = champions_turni_cronologici();
-        $sorgente  = champions_assegna_sorgente($stagionePrecedente);
-        $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
-                                FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagionePrecedente");
-
-        esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
-        foreach ($righeSorg as $rs) {
-            $gSorg = (int) $rs["giornata"];
-            if (!isset($sorgente[$gSorg]) || !isset($turniCron[$sorgente[$gSorg]])) continue; // oltre i turni previsti
-            $cella  = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
-            $gNuova = (int) ($champGiornate[$cella["codice"]] ?? 0);
-            if ($gNuova < 1) continue; // turno non configurato (es. replay)
-            $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
-            esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-                VALUES ($stagione, $gNuova, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
-        }
-
-        $calendarioAggiornato = true;
-    }
-
     mysqli_commit($conn);
 
     api_success([
         "ok"                     => true,
         "stagione"               => $stagione,
+        "fase"                   => "utenze",
         "righe"                  => count($rigaData),
         "modalita"               => "completa",
-        "calendario_aggiornato"  => $calendarioAggiornato,
     ]);
 } catch (Throwable $e) {
     mysqli_rollback($conn);

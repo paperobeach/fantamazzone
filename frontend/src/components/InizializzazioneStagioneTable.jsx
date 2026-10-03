@@ -6,7 +6,8 @@ import { getInizializzazioneStagione, adminInizializzaStagione } from '../api/cl
 import { Spinner } from './ui'
 
 // ============================================================
-// "Inizializzazione stagione" — pagina unica (no wizard)
+// "Inizializzazione stagione" — PASSO 1: Creazione utenze
+// (il passo 2, Creazione calendari, è in CreazioneCalendari.jsx)
 //
 // 1) L'utente indica la stagione (anno a 4 cifre, libero) e preme
 //    "Carica".
@@ -21,10 +22,9 @@ import { Spinner } from './ui'
 //      SEMPRE modificabile.
 // 3) Al salvataggio, un'unica chiamata aggiorna in blocco le tabelle
 //    coinvolte, con cancellazione preventiva per stagione così
-//    l'operazione è ripetibile. Se non ci sono ancora formazioni ed
-//    è stato indicato il numero di giornate, vengono anche
-//    rigenerati NEW_CALENDARIO (dal calendario modello) e
-//    NEW_CALENDARIO_CHAMP (dalla stagione precedente).
+//    l'operazione è ripetibile. I calendari NON vengono toccati: si
+//    creano nel passo 2, dopo aver controllato i parametri della
+//    stagione.
 //
 // Mapping colonna → campo DB (in lettura da NEW_SQUADRE quando il
 // campo è duplicato su più tabelle, in scrittura su tutte):
@@ -55,11 +55,10 @@ const emptyRiga = (ordine = '') => ({
   utenza: '', password: '', abilitazione: 'N', amministratore: 'N',
 })
 
-export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
+export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onStagioneChange, onProsegui }) {
   const [stagione, setStagione] = useState(stagioneIniziale ? String(stagioneIniziale) : '')
   const [caricata, setCaricata] = useState(false)
   const [righe, setRighe]       = useState([])
-  const [giornate, setGiornate] = useState('')
 
   const [fonteStagione, setFonteStagione]             = useState(null)  // stagione da cui sono stati precaricati i dati (null = già quelli richiesti)
   const [formazionePresente, setFormazionePresente]   = useState(false) // blocca i campi squadra/allenatore
@@ -100,8 +99,8 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
         : [emptyRiga(1)])
       setFonteStagione(dati.fonte_stagione ?? null)
       setFormazionePresente(!!dati.formazione_presente)
-      setGiornate('')
       setCaricata(true)
+      onStagioneChange?.(stagione)
     } catch (e) {
       setErrorMsg(e.message)
     } finally {
@@ -114,7 +113,6 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
     setRighe([])
     setFonteStagione(null)
     setFormazionePresente(false)
-    setGiornate('')
     setResult(null)
     setErrors(null)
     setErrorMsg(null)
@@ -136,6 +134,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
     setErrorMsg(null)
     try {
       const payload = {
+        fase: 'utenze',
         righe: righe.map(r => ({
           ordine: Number(r.ordine),
           nome: r.nome, logo: r.logo, albo: r.albo,
@@ -144,8 +143,6 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
           utenza: r.utenza, password: r.password, abilitazione: r.abilitazione,
           amministratore: r.amministratore,
         })),
-        // Ignorato dal backend se per la stagione esistono già formazioni.
-        giornate: !formazionePresente && giornate !== '' ? Number(giornate) : undefined,
       }
       const res = await adminInizializzaStagione(Number(stagione), payload)
       setResult(res)
@@ -164,9 +161,9 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
     <div className="card p-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h3 className="font-semibold text-slate-200 mb-1">Inizializzazione stagione</h3>
+          <h3 className="font-semibold text-slate-200 mb-1">Passo 1 · Creazione utenze</h3>
           <p className="text-xs text-slate-600">
-            Una riga per squadra: dati squadra, allenatore e utenza di accesso associata.
+            Una riga per squadra: ordine, dati squadra, allenatore e credenziali di accesso.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -344,35 +341,10 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
           </p>
 
           <div className="flex flex-col items-end sm:flex-row sm:items-center justify-end gap-3 mt-4 pt-4 border-t border-white/5">
-            {!formazionePresente && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-slate-500 whitespace-nowrap" htmlFor="giornate-campionato">
-                  Giornate campionato
-                </label>
-                <input
-                  id="giornate-campionato"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={2}
-                  value={giornate}
-                  onChange={e => setGiornate(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                  placeholder="es. 38"
-                  title="Numero di giornate del campionato: se indicato, rigenera calendario e calendario Champions"
-                  className="fanta-input w-20 text-center"
-                />
-              </div>
-            )}
             <button onClick={salva} disabled={saving} className="btn-primary text-sm w-auto self-end sm:self-auto disabled:opacity-40">
               {saving ? <><Spinner size="sm" /> Salvataggio in corso...</> : 'Salva'}
             </button>
           </div>
-
-          {!formazionePresente && giornate !== '' && (
-            <p className="text-[11px] text-slate-600 mt-2 text-right">
-              Con {giornate} giornate verranno rigenerati anche NEW_CALENDARIO (dal calendario modello, giornate 1-{giornate})
-              e NEW_CALENDARIO_CHAMP (a partire dalla struttura Champions della stagione {Number(stagione) - 1 || '—'}).
-            </p>
-          )}
 
           {result?.ok && (
             <div className="mt-5 px-4 py-3 rounded-lg text-sm bg-green-500/10 border border-green-500/20 text-green-300">
@@ -381,13 +353,16 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale }) {
               </div>
               {result.modalita === 'completa' && (
                 <p className="text-xs text-green-400/80 mt-1">
-                  {result.calendario_aggiornato
-                    ? 'Calendario campionato e calendario Champions rigenerati.'
-                    : 'Calendario non modificato (nessun numero di giornate indicato).'}
+                  Squadre, allenatori e utenze salvati. I calendari non sono stati toccati: crearli nel passo 2.
                 </p>
               )}
               {result.modalita === 'solo_utenze' && (
-                <p className="text-xs text-green-400/80 mt-1">Aggiornate solo utenze ed email (squadre/calendario non toccati).</p>
+                <p className="text-xs text-green-400/80 mt-1">Aggiornate solo utenze ed email (squadre non toccate).</p>
+              )}
+              {onProsegui && !formazionePresente && (
+                <button onClick={onProsegui} className="btn-ghost text-xs mt-3">
+                  Procedi al passo 2: creazione calendari →
+                </button>
               )}
             </div>
           )}

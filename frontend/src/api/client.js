@@ -121,11 +121,6 @@ export const getMarcatori = (stagione, tipo = 'marcatori', limit = 20) =>
 export const getTopFlop = (stagione, tipo = null) =>
   get('top_flop.php', { stagione, ...(tipo ? { tipo } : {}) })
 
-// ── Kulovic ──────────────────────────────────────────────────
-
-export const getKulovic = (stagione, id_squadra = null) =>
-  get('kulovic.php', { stagione, id_squadra })
-
 // ── Champions ────────────────────────────────────────────────
 
 export const getChampions = (stagione, sezione = 'classifica', girone = null) =>

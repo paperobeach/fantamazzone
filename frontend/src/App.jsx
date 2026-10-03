@@ -15,7 +15,6 @@ const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
 const Marcatori   = lazy(() => import('./pages/Marcatori'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
-const Kulovic     = lazy(() => import('./pages/Kulovic'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const Login       = lazy(() => import('./pages/Login'))
@@ -94,7 +93,6 @@ function AppShell() {
                   <Route path="/statistiche"  element={<Statistiche />} />
                   <Route path="/marcatori"    element={<Marcatori />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
-                  <Route path="/kulovic"      element={<Kulovic />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/formazione"   element={
                     <ProtectedRoute><Formazione /></ProtectedRoute>

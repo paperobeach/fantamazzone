@@ -21,7 +21,6 @@
     ├── statistiche.php
     ├── marcatori.php
     ├── login.php
-    ├── kulovic.php
     ├── champions.php
     ├── formazioni.php
     ├── mailer.php
@@ -66,7 +65,6 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | `api/statistiche.php?stagione=` | stagione, [id_squadra], [ruolo], [ordine] | Statistiche giocatori |
 | `api/marcatori.php?stagione=&tipo=` | stagione, tipo=(marcatori\|assist\|migliori\|peggiori) | Classifiche individuali |
 | `api/top_flop.php?stagione=` | stagione, [tipo=top\|flop] | Top11 / Flop11 |
-| `api/kulovic.php?stagione=` | stagione, [id_squadra] | Stats fortuna/sfortuna |
 | `api/champions.php?stagione=&sezione=` | stagione, sezione=(classifica\|gironi\|note) | Coppa Champions |
 | `api/formazioni.php?stagione=&giornata=&id_squadra=` | stagione, giornata, id_squadra | Formazione inserita |
 | `api/penalita.php?stagione=` | stagione | Penalità squadre |

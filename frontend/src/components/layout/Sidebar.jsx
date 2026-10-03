@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
-  Star, Zap, Shield, LogOut,
+  Star, Shield, LogOut,
   ChevronDown, Medal, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw
 } from 'lucide-react'
 
@@ -14,7 +14,6 @@ const NAV = [
   { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
   { to: '/marcatori',    icon: Medal,        label: 'Marcatori'     },
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },
-  { to: '/kulovic',      icon: Zap,          label: 'Kulovic'       },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
 ]
 

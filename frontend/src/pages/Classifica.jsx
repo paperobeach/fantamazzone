@@ -5,6 +5,7 @@ import { getGenerale } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, SignBadge } from '../components/ui'
 import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import TeamLogo from '../components/TeamLogo'
 
 function TrendIcon({ segno }) {
   if (segno === 'W') return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
@@ -59,8 +60,6 @@ export default function Classifica() {
     return 0
   })
 
-  const leader = squadre[0]
-
   const SortBtn = ({ col, label }) => (
     <button
       onClick={() => setSortBy(col)}
@@ -83,26 +82,6 @@ export default function Classifica() {
         subtitle={`Stagione ${stagione} / ${stagione + 1}`}
       />
 
-      {/* Summary strip: compact, secondary to the ranking table below */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 mb-5 px-1 text-xs">
-        <span className="text-slate-600">
-          <span className="text-slate-500">Capolista</span>{' '}
-          <span className="text-slate-300 font-medium">{leader?.squadra ?? '—'}</span>{' '}
-          <span className="text-grass-400">({leader?.punti} pt)</span>
-        </span>
-        <span className="text-slate-700">·</span>
-        <span className="text-slate-600">
-          <span className="text-slate-500">Miglior media</span>{' '}
-          <span className="text-slate-300 font-medium">{[...data].sort((a,b) => b.media - a.media)[0]?.squadra ?? '—'}</span>{' '}
-          <span className="text-slate-500">({[...data].sort((a,b) => b.media - a.media)[0]?.media})</span>
-        </span>
-        <span className="text-slate-700">·</span>
-        <span className="text-slate-600">
-          <span className="text-slate-500">Giornata</span>{' '}
-          <span className="text-slate-300 font-medium">{data[0]?.partiteg ?? '—'}</span>
-        </span>
-      </div>
-
       {/* Table */}
       <div className="card overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-3 border-b border-white/5">
@@ -122,7 +101,7 @@ export default function Classifica() {
               <th className="w-10">#</th>
               <th>Squadra</th>
               <th className="text-center">PG</th>
-              <th className="text-center">Pts</th>
+              <th className="text-center bg-grass-500/10">Pts</th>
               <th className="text-center">V</th>
               <th className="text-center">P</th>
               <th className="text-center">S</th>
@@ -165,21 +144,19 @@ export default function Classifica() {
                       to={`/squadre/${sq.id_squadra}`}
                       className="flex items-center gap-3 group"
                     >
-                      <div className="w-7 h-7 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-[10px] font-bold text-slate-400 flex-shrink-0 group-hover:border-grass-500/30 transition-colors">
-                        {sq.squadra?.[0]}
-                      </div>
+                      <TeamLogo logo={sq.logo} nome={sq.squadra} size="sm" />
                       <span className="font-medium text-slate-200 group-hover:text-grass-400 transition-colors text-sm">
                         {sq.squadra}
                       </span>
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.partiteg}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="text-display font-bold text-lg text-white">{sq.punti}</span>
+                  <td className="px-3 py-3 text-center bg-grass-500/10 border-x border-grass-500/20">
+                    <span className="text-display font-extrabold text-2xl text-grass-400">{sq.punti}</span>
                   </td>
-                  <td className="px-4 py-3 text-center text-green-400 text-sm font-medium">{sq.vinte}</td>
-                  <td className="px-4 py-3 text-center text-yellow-400 text-sm">{sq.nulle}</td>
-                  <td className="px-4 py-3 text-center text-red-400 text-sm">{sq.perse}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.vinte}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.nulle}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.perse}</td>
                   <td className="px-4 py-3 text-center text-slate-300 text-sm">{sq.golf}</td>
                   <td className="px-4 py-3 text-center text-slate-500 text-sm">{sq.gols}</td>
                   <td className="px-4 py-3 text-center">

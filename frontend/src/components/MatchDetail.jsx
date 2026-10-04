@@ -1,3 +1,4 @@
+import { Briefcase } from 'lucide-react'
 import { RoleBadge } from './ui'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
@@ -11,6 +12,25 @@ export function VotoBox({ voto, totale, giocata }) {
       v >= 5   ? 'text-yellow-400' :
                  'text-red-400'
     }`}>{v.toFixed(2)}</span>
+  )
+}
+
+// ── Nome giocatore, con evidenza della riserva d'ufficio ──
+// Due forme (vedi backend/dettaglio_partita.php):
+//  - ID fittizio (ufficio_fittizio): nessun calciatore reale → solo la dicitura "Riserva d'ufficio";
+//  - ID reale (dati storici o ammonito senza voto): nome del calciatore + dicitura.
+export function NomeGiocatore({ g }) {
+  if (!g.riserva_ufficio) return <span>{g.giocatore}</span>
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto assegnato d'ufficio">
+      <Briefcase className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
+      {g.ufficio_fittizio
+        ? <span className="text-amber-300">Riserva d'ufficio</span>
+        : <>
+            <span>{g.giocatore}</span>
+            <span className="text-[10px] font-mono uppercase tracking-wide text-amber-400">Riserva d'ufficio</span>
+          </>}
+    </span>
   )
 }
 
@@ -35,9 +55,9 @@ export function GiocatoriTable({ giocatori }) {
       </thead>
       <tbody>
         {(giocatori ?? []).map((g, i) => (
-          <tr key={i} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+          <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : ''}`}>
             <td className="px-3 py-2"><RoleBadge ruolo={g.ruolo} /></td>
-            <td className="px-3 py-2 text-slate-300 font-medium">{g.giocatore}</td>
+            <td className="px-3 py-2 text-slate-300 font-medium"><NomeGiocatore g={g} /></td>
             <td className="px-3 py-2 text-center">
               <VotoBox voto={g.voto} totale={g.voto} giocata={g.giocata} />
             </td>

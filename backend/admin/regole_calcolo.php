@@ -130,6 +130,10 @@ function parametri_default(): array
     return [
         ['codice' => 'SOSTITUZIONI_MAX_MOVIMENTO',   'etichetta' => 'Sostituzioni di movimento (portiere escluso)', 'valore' => '5'],
         ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
+        ['codice' => 'RISERVE_UFFICIO_MAX',          'etichetta' => "Riserve d'ufficio: numero massimo schierabile", 'valore' => '1'],
+        ['codice' => 'VOTO_UFFICIO_PORTIERE',        'etichetta' => "Voto d'ufficio portiere",                      'valore' => '3'],
+        ['codice' => 'VOTO_UFFICIO_MOVIMENTO',       'etichetta' => "Voto d'ufficio giocatore di movimento",        'valore' => '4'],
+        ['codice' => 'VOTO_UFFICIO_AMMONITO',        'etichetta' => "Voto d'ufficio giocatore ammonito senza voto", 'valore' => '5'],
         ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
         ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
         ['codice' => 'TOPFLOP_SOGLIA_PERCENTUALE',   'etichetta' => 'Top/Flop 11: giocate minime (% delle partite giocate)', 'valore' => '50'],
@@ -275,6 +279,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
             if ($cod === 'GIORNATA_SERIE_A_INIZIO' && (!ctype_digit($val) || (int) $val < 1)) {
                 api_error("La giornata di Serie A di partenza deve essere un intero >= 1", 400);
+            }
+            if ($cod === 'RISERVE_UFFICIO_MAX' && (!ctype_digit($val) || (int) $val > 11)) {
+                api_error("Il numero massimo di riserve d'ufficio deve essere un intero tra 0 e 11", 400);
+            }
+            if (in_array($cod, ['VOTO_UFFICIO_PORTIERE', 'VOTO_UFFICIO_MOVIMENTO', 'VOTO_UFFICIO_AMMONITO'], true)
+                && (!is_numeric($val) || (float) $val < 0 || (float) $val > 10)) {
+                api_error("Il voto d'ufficio deve essere un numero tra 0 e 10", 400);
             }
             if (strpos($cod, 'CHAMP_') === 0) $champ[$cod] = (string) ($p['valore'] ?? '');
             if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {

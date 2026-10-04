@@ -70,15 +70,24 @@ foreach ($risultati as $r) {
 }
 $ids_str = implode(",", array_unique($ids));
 
+// RISERVE D'UFFICIO (v.rufficio = 1): due forme, entrambe gestite.
+//  - storica / ammonito senza voto: id_giocatore = ID del calciatore
+//    reale (titolare) → nome e ruolo da NEW_GIOCATORI;
+//  - ID fittizio NEGATIVO (-(ruolo*1000000 + idSquadra*100 + n)): non
+//    esiste in NEW_GIOCATORI (LEFT JOIN) → nome "Riserva d'ufficio" e
+//    ruolo ricavato dall'ID stesso.
 $voti_raw = query_all("SELECT
         v.id_squadra, v.id_giocatore,
-        g.descrizione AS giocatore, g.ruolo,
+        COALESCE(g.descrizione, 'Riserva d''ufficio') AS giocatore,
+        COALESCE(g.ruolo, FLOOR(ABS(v.id_giocatore) / 1000000)) AS ruolo,
         f.MAGLIA AS maglia,
+        v.rufficio,
+        (g.id IS NULL) AS ufficio_fittizio,
         v.voto, v.totale, v.giocata,
         v.reti, v.ammonizioni, v.espulsioni, v.autogol,
         v.retis, v.rigores, v.rigorep, v.assist
     FROM NEW_VOTI v
-    JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
+    LEFT JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
     LEFT JOIN NEW_FORMAZIONI f ON f.ID_GIOCATORE = v.id_giocatore
                            AND f.ID_SQUADRA  = v.id_squadra
                            AND f.STAGIONE    = v.stagione
@@ -86,11 +95,14 @@ $voti_raw = query_all("SELECT
     WHERE v.stagione = $stagione
       AND v.giornata = $giornata
       AND v.id_squadra IN ($ids_str)
-    ORDER BY v.id_squadra, g.ruolo, v.totale DESC");
+    ORDER BY v.id_squadra, ruolo, v.totale DESC");
 
 // Raggruppo voti per squadra
 $voti_per_squadra = [];
 foreach ($voti_raw as $v) {
+    $v["ruolo"]            = (int)$v["ruolo"];
+    $v["riserva_ufficio"]  = (int)$v["rufficio"] === 1;
+    $v["ufficio_fittizio"] = (int)$v["ufficio_fittizio"] === 1;
     $voti_per_squadra[(int)$v["id_squadra"]][] = $v;
 }
 

@@ -80,16 +80,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $id_squadra = param_int("id_squadra");
 
     $data = query_all("SELECT
-            v.id_giocatore, g.descrizione AS giocatore, g.ruolo,
+            v.id_giocatore,
+            COALESCE(g.descrizione, 'Riserva d''ufficio') AS giocatore,
+            COALESCE(g.ruolo, FLOOR(ABS(v.id_giocatore) / 1000000)) AS ruolo,
+            v.rufficio,
             v.voto, v.totale, v.giocata,
             v.reti, v.ammonizioni, v.espulsioni, v.autogol,
             v.retis, v.rigores, v.rigorep, v.assist
         FROM NEW_VOTI v
-        JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
+        LEFT JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
         WHERE v.stagione    = $stagione
           AND v.giornata    = $giornata
           AND v.id_squadra  = $id_squadra
-        ORDER BY g.ruolo, v.totale DESC");
+        ORDER BY ruolo, v.totale DESC");
 
     api_success($data);
 }

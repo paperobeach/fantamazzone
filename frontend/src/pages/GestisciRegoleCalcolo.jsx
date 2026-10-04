@@ -619,6 +619,53 @@ export default function GestisciRegoleCalcolo() {
                       />
                     </Sottosezione>
 
+                    <Sottosezione
+                      titolo="Riserve d'ufficio"
+                      descrizione="Se un titolare non prende voto e non ci sono sostituti idonei in panchina, si inserisce un voto d'ufficio. La riserva d'ufficio concorre al totale delle sostituzioni consentite (movimento / portiere)."
+                    >
+                      <div className="flex flex-wrap gap-6">
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Riserve d'ufficio schierabili (max)</label>
+                          <input
+                            type="number" min="0" max="11" step="1"
+                            value={getValoreParametro('RISERVE_UFFICIO_MAX', 1)}
+                            onChange={e => setValoreParametro('RISERVE_UFFICIO_MAX', e.target.value, "Riserve d'ufficio: numero massimo schierabile")}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Voto portiere</label>
+                          <input
+                            type="number" min="0" max="10" step="0.5"
+                            value={getValoreParametro('VOTO_UFFICIO_PORTIERE', 3)}
+                            onChange={e => setValoreParametro('VOTO_UFFICIO_PORTIERE', e.target.value, "Voto d'ufficio portiere")}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1 max-w-[11rem]">Né il portiere né i suoi sostituti hanno voto</p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Voto giocatore di movimento</label>
+                          <input
+                            type="number" min="0" max="10" step="0.5"
+                            value={getValoreParametro('VOTO_UFFICIO_MOVIMENTO', 4)}
+                            onChange={e => setValoreParametro('VOTO_UFFICIO_MOVIMENTO', e.target.value, "Voto d'ufficio giocatore di movimento")}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1 max-w-[11rem]">Né il titolare né i sostituti per ruolo hanno voto</p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Voto ammonito senza voto</label>
+                          <input
+                            type="number" min="0" max="10" step="0.5"
+                            value={getValoreParametro('VOTO_UFFICIO_AMMONITO', 5)}
+                            onChange={e => setValoreParametro('VOTO_UFFICIO_AMMONITO', e.target.value, "Voto d'ufficio giocatore ammonito senza voto")}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1 max-w-[11rem]">Il voto è assegnato al giocatore stesso (ID reale)</p>
+                        </div>
+                      </div>
+                    </Sottosezione>
+
                     <Sottosezione titolo="Sostituzioni e fattore casa">
                       <div className="flex flex-wrap gap-6">
                         <div>

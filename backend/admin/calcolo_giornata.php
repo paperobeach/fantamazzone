@@ -62,6 +62,25 @@
 //     tracciato in NEW_VOTI con una riga a zero (nessun contributo al
 //     punteggio), tramite salva_non_giocanti().
 //
+//   - RISERVE D'UFFICIO (NEW_VOTI.rufficio = 1): se un titolare non ha
+//     voto e non c'è un sostituto idoneo in panchina, si inserisce una
+//     riserva d'ufficio, nel rispetto del limite RISERVE_UFFICIO_MAX
+//     (default 1) e dei limiti di sostituzione (la riserva d'ufficio
+//     CONCORRE al totale delle sostituzioni consentite):
+//       1. portiere senza voto (né lui né i panchinari)  → voto
+//          VOTO_UFFICIO_PORTIERE (default 3)
+//       2. giocatore di movimento senza voto (né lui né i panchinari
+//          dello stesso ruolo)                           → voto
+//          VOTO_UFFICIO_MOVIMENTO (default 4)
+//       3. titolare senza voto ma AMMONITO               → voto
+//          VOTO_UFFICIO_AMMONITO (default 5), con l'ID del giocatore
+//          stesso (precede la ricerca del sostituto in panchina)
+//     Nei casi 1 e 2 la riserva è salvata con un ID FITTIZIO NEGATIVO
+//     (vedi id_riserva_ufficio()) e il titolare resta tracciato con la
+//     sua riga a zero. Nei dati storici la riga d'ufficio riporta invece
+//     l'ID del calciatore titolare: dettaglio_partita.php gestisce
+//     entrambe le forme.
+//
 // Tutti i parametri di stagione non riconducibili a bonus/malus o
 // modificatori (sostituzioni, fattore casa, fasce gol) vivono in
 // NEW_PARAMETRI_STAGIONE, generica (codice => valore testuale): questo
@@ -119,6 +138,44 @@ $fasceGolPunteggio           = json_decode($config['parametri']['FASCE_GOL_PUNTE
     ['da' => null, 'a' => null, 'gol' => 0], // nessuna fascia configurata: 0 gol per tutti, per non bloccare il calcolo
 ];
 $fattoreCasaValore = (float) ($config['bonus']['FATTORE_CASA'] ?? 0);
+
+// Parametro numerico di stagione con default di riserva (vuoto = default)
+function parametro_numerico(array $config, string $codice, float $default): float
+{
+    $v = $config['parametri'][$codice] ?? null;
+    if ($v === null || trim((string) $v) === '' || !is_numeric($v)) return $default;
+    return (float) $v;
+}
+
+// Riserve d'ufficio: numero massimo schierabile e voti assegnati
+$configUfficio = [
+    'max'            => max(0, (int) parametro_numerico($config, 'RISERVE_UFFICIO_MAX', 1)),
+    'voto_portiere'  => parametro_numerico($config, 'VOTO_UFFICIO_PORTIERE', 3),
+    'voto_movimento' => parametro_numerico($config, 'VOTO_UFFICIO_MOVIMENTO', 4),
+    'voto_ammonito'  => parametro_numerico($config, 'VOTO_UFFICIO_AMMONITO', 5),
+];
+
+// ID fittizio (NEGATIVO) di una riserva d'ufficio non riferita a un
+// calciatore reale: -(ruolo*1000000 + idSquadra*100 + progressivo).
+// Univoco per squadra/giornata (la PK di NEW_VOTI è id_giocatore +
+// stagione + giornata, senza squadra); il ruolo è ricavabile
+// dall'ID stesso (vedi dettaglio_partita.php).
+function id_riserva_ufficio(int $ruolo, int $idSquadra, int $progressivo): int
+{
+    return -($ruolo * 1000000 + $idSquadra * 100 + $progressivo);
+}
+
+// Statistiche di una riserva d'ufficio nel formato di CalcolatoreVoti:
+// voto fisso, nessun bonus/malus (anche l'eventuale ammonizione è solo
+// registrata, non penalizza: il voto d'ufficio è un valore fisso).
+function crea_stat_ufficio(int $idGiocatore, float $voto, int $ammonizioniRegistrate = 0): array
+{
+    return [
+        'id_giocatore' => $idGiocatore, 'voto' => $voto, 'sv' => false, 'trovato' => true,
+        'rufficio' => true, 'amm_reg' => $ammonizioniRegistrate,
+        'gf' => 0, 'gs' => 0, 'rp' => 0, 'rf' => 0, 'rs' => 0, 'au' => 0, 'amm' => 0, 'esp' => 0, 'ass' => 0,
+    ];
+}
 
 // Ricava i gol fatti di una squadra dal suo punteggio totale finale,
 // secondo le fasce configurate (vedi FASCE_GOL_PUNTEGGIO in
@@ -184,7 +241,7 @@ function carica_stat_giocatore($conn, int $stagione, int $giornata, int $idGioca
 // loro va comunque scritta una riga a zero in NEW_VOTI per completezza
 // storica (il contributo al punteggio squadra arriva dal sostituto).
 // ------------------------------------------------------------
-function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti, int $maxSostituzioniMovimento, int $maxSostituzioniPortiere): array
+function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti, int $maxSostituzioniMovimento, int $maxSostituzioniPortiere, array $configUfficio): array
 {
     $tutti = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
                         FROM NEW_FORMAZIONI f
@@ -212,6 +269,7 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
 
     $sostituzioniMovimento = 0;
     $sostituzioniPortiere  = 0;
+    $riserveUfficio        = 0; // riserve d'ufficio già schierate (max: RISERVE_UFFICIO_MAX)
 
     foreach ($titolari as $t) {
         $ruoloInt = (int) $t['ruolo'];
@@ -231,31 +289,54 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
             $limiteRaggiunto = $ruoloInt === 1
                 ? $sostituzioniPortiere >= $maxSostituzioniPortiere
                 : $sostituzioniMovimento >= $maxSostituzioniMovimento;
+            // La riserva d'ufficio concorre alle sostituzioni consentite
+            // ed è limitata da RISERVE_UFFICIO_MAX
+            $puoUfficio = !$limiteRaggiunto && $riserveUfficio < $configUfficio['max'];
             $sostituto = null;
 
-            if (!$limiteRaggiunto) {
-                foreach ($panchinaPerRuolo[$ruoloInt] ?? [] as $candidato) {
-                    $idCandidato = (int) $candidato['id_giocatore'];
-                    if (isset($panchinariProvati[$idCandidato])) continue;
-                    $panchinariProvati[$idCandidato] = true;
+            if ($puoUfficio && (int) $stat['amm'] > 0) {
+                // Caso 3: senza voto ma ammonito → voto d'ufficio con l'ID
+                // del giocatore stesso (nessuna ricerca in panchina)
+                $stat = crea_stat_ufficio($idGiocatore, $configUfficio['voto_ammonito'], (int) $stat['amm']);
+                $riserveUfficio++;
+                if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
+                $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto ma ammonito, riserva d'ufficio con voto {$configUfficio['voto_ammonito']}";
+            } else {
+                if (!$limiteRaggiunto) {
+                    foreach ($panchinaPerRuolo[$ruoloInt] ?? [] as $candidato) {
+                        $idCandidato = (int) $candidato['id_giocatore'];
+                        if (isset($panchinariProvati[$idCandidato])) continue;
+                        $panchinariProvati[$idCandidato] = true;
 
-                    $statCandidato = carica_stat_giocatore($conn, $stagione, $giornata, $idCandidato);
-                    if (!$statCandidato['sv']) {
-                        $sostituto = $statCandidato;
-                        $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}";
-                        if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
-                        break;
+                        $statCandidato = carica_stat_giocatore($conn, $stagione, $giornata, $idCandidato);
+                        if (!$statCandidato['sv']) {
+                            $sostituto = $statCandidato;
+                            $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}";
+                            if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
+                            break;
+                        }
                     }
                 }
-            }
 
-            if ($sostituto !== null) {
-                $stat = $sostituto;
-            } else {
-                $motivo = $limiteRaggiunto ? 'limite sostituzioni raggiunto' : 'nessun sostituto con voto disponibile nello stesso ruolo';
-                $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, non sostituito ($motivo)";
-                $nonGiocanti[] = ['id_giocatore' => $idGiocatore];
-                continue; // resta fuori dalla formazione effettiva: nessun contributo al punteggio
+                if ($sostituto !== null) {
+                    $stat = $sostituto;
+                } elseif ($puoUfficio) {
+                    // Casi 1 e 2: né il titolare né i panchinari dello
+                    // stesso ruolo hanno voto → riserva d'ufficio con ID
+                    // fittizio; il titolare resta tracciato a zero.
+                    $voto = $ruoloInt === 1 ? $configUfficio['voto_portiere'] : $configUfficio['voto_movimento'];
+                    $riserveUfficio++;
+                    if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
+                    $stat = crea_stat_ufficio(id_riserva_ufficio($ruoloInt, $idSquadra, $riserveUfficio), $voto);
+                    $nonGiocanti[] = ['id_giocatore' => $idGiocatore];
+                    $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto e nessun sostituto, riserva d'ufficio con voto $voto";
+                } else {
+                    $motivo = $limiteRaggiunto ? 'limite sostituzioni raggiunto' : 'nessun sostituto con voto disponibile nello stesso ruolo';
+                    if (!$limiteRaggiunto) $motivo .= ' e limite riserve d\'ufficio raggiunto';
+                    $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, non sostituito ($motivo)";
+                    $nonGiocanti[] = ['id_giocatore' => $idGiocatore];
+                    continue; // resta fuori dalla formazione effettiva: nessun contributo al punteggio
+                }
             }
         }
 
@@ -299,14 +380,18 @@ function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra,
         // Mapping concordato: rigores = Rp + Rf, rigorep = Rs
         $rigores = (int) $stat['rp'] + (int) $stat['rf'];
         $rigorep = (int) $stat['rs'];
+        $rufficio = !empty($stat['rufficio']) ? 1 : 0;
+        // Riserva d'ufficio con ammonizione: si registra l'ammonizione
+        // (informativa), ma il voto d'ufficio resta fisso
+        $ammonizioni = (int) ($stat['amm_reg'] ?? $stat['amm']);
 
         mysqli_query($conn, "INSERT INTO NEW_VOTI
             (id_squadra, id_giocatore, stagione, voto, giornata,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist)
             VALUES ($idSquadra, $idGiocatore, $stagione, $voto, $giornata,
-                    {$stat['gf']}, {$stat['amm']}, {$stat['esp']}, {$stat['au']}, {$stat['gs']},
-                    $rigores, $rigorep, 0, $giocata, $totale, {$stat['ass']})");
+                    {$stat['gf']}, $ammonizioni, {$stat['esp']}, {$stat['au']}, {$stat['gs']},
+                    $rigores, $rigorep, $rufficio, $giocata, $totale, {$stat['ass']})");
     }
 }
 
@@ -364,11 +449,11 @@ try {
             $nonGiocantiOspite = [];
             $formazioneCasa   = carica_formazione(
                 $conn, $stagione, $giornata, $idCasa, $warning, $nonGiocantiCasa,
-                $maxSostituzioniMovimento, $maxSostituzioniPortiere
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio
             );
             $formazioneOspite = carica_formazione(
                 $conn, $stagione, $giornata, $idOspite, $warning, $nonGiocantiOspite,
-                $maxSostituzioniMovimento, $maxSostituzioniPortiere
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio
             );
         } catch (Throwable $e) {
             $partiteSaltate[] = $e->getMessage();

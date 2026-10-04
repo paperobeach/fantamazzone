@@ -461,11 +461,14 @@ export function FormationBuilder({
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownSlot(null)} />
                 <div
-                  className="absolute z-50 min-w-[170px] max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-pitch-900 shadow-2xl py-1"
+                  className="absolute z-50 w-[190px] max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-pitch-900 shadow-2xl py-1"
                   style={{
-                    left: `${slots[dropdownSlot].x}%`,
+                    // Centrato sullo slot ma mai oltre i bordi del campo
+                    // (che ha overflow-hidden): left viene "clampato" tra
+                    // 6px dal bordo sinistro e 6px dal bordo destro.
+                    left: `clamp(6px, calc(${slots[dropdownSlot].x}% - 95px), calc(100% - 196px))`,
                     top: `${slots[dropdownSlot].y}%`,
-                    transform: slots[dropdownSlot].y > 55 ? 'translate(-50%, -110%)' : 'translate(-50%, 30px)',
+                    transform: slots[dropdownSlot].y > 55 ? 'translateY(-110%)' : 'translateY(30px)',
                   }}
                 >
                   {(() => {
@@ -488,8 +491,8 @@ export function FormationBuilder({
                         onClick={() => { placePlayer(p.id, dropdownSlot); setDropdownSlot(null) }}
                         className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors whitespace-nowrap"
                       >
-                        <span className={`stat-pill ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
-                        <span className="flex-1 truncate">{p.descrizione}</span>
+                        <span className={`stat-pill flex-shrink-0 ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
+                        <span className="flex-1 min-w-0 truncate">{p.descrizione}</span>
                         {fromTribuna && (
                           <Armchair className="w-3 h-3 text-slate-500 flex-shrink-0" aria-label="In tribuna" />
                         )}

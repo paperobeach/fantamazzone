@@ -33,6 +33,8 @@ export default function GestioneVoti() {
     if (info?.giornata_corrente) setGiornata(info.giornata_corrente)
   }, [info?.stagione, info?.giornata_corrente])
 
+  // Modalità automatica: la fantagiornata si ricava dalla giornata di Serie A del file
+  const [auto, setAuto] = useState(true)
   const [file,     setFile]     = useState(null)
   const [loading,  setLoading]  = useState(false)
   const [errors,   setErrors]   = useState([])
@@ -84,8 +86,14 @@ export default function GestioneVoti() {
     }
     setLoading(true)
     try {
-      const res = await adminCaricaVotiSerieA(Number(stagione), giornata, file, forza)
+      const res = await adminCaricaVotiSerieA(Number(stagione), auto ? null : giornata, file, forza)
       setResult(res)
+      // Le fasi successive (calcolo, chiusura) lavorano sulla giornata dei voti appena caricati
+      if (res.giornata && res.giornata !== giornata) {
+        resetFeedbackCalcolo()
+        resetFeedbackChiusura()
+        setGiornata(res.giornata)
+      }
       resetFile()
       refetch()
     } catch (err) {
@@ -139,6 +147,8 @@ export default function GestioneVoti() {
   }
 
   const giornate       = info?.giornate ?? []
+  const inizioSerieA   = info?.giornata_serie_a_inizio ?? 1
+  const serieADi       = (g) => g + inizioSerieA - 1
   const giornataInfo   = giornate.find(g => g.giornata === giornata)
   const isCorrente     = giornata !== null && giornata === info?.giornata_corrente
   const giaChiusa      = !!giornataInfo?.chiusa
@@ -185,7 +195,24 @@ export default function GestioneVoti() {
             <form onSubmit={handleSubmit}>
               {/* Giornata di riferimento */}
               <div className="mb-5">
-                <label className="text-xs text-slate-600 mb-1 block">Giornata di riferimento</label>
+                <label className="flex items-start gap-2 text-sm text-slate-300 mb-1 cursor-pointer">
+                  <input
+                    type="checkbox" checked={auto}
+                    onChange={e => { resetFeedback(); setAuto(e.target.checked) }}
+                    className="w-4 h-4 mt-0.5"
+                  />
+                  <span>
+                    Ricava la giornata dal file <span className="text-slate-500">(consigliato)</span>
+                  </span>
+                </label>
+                <p className="text-xs text-slate-600 mb-4 ml-6">
+                  I voti vengono associati alla fantagiornata corrispondente alla giornata di Serie A indicata nel file:
+                  la giornata 1 di fantacampionato corrisponde alla giornata {inizioSerieA} di Serie A
+                  (parametro "Giornata di Serie A di partenza" in Gestisci regole di calcolo).
+                </p>
+                <label className="text-xs text-slate-600 mb-1 block">
+                  {auto ? 'Giornata di riferimento (fasi successive)' : 'Giornata di fantacampionato su cui caricare i voti'}
+                </label>
                 <div className="flex flex-wrap items-center gap-3">
                   <select
                     value={giornata ?? ''}
@@ -194,7 +221,7 @@ export default function GestioneVoti() {
                   >
                     {giornate.map(g => (
                       <option key={g.giornata} value={g.giornata}>
-                        Giornata {g.giornata}
+                        Giornata {g.giornata} (Serie A {g.giornata_serie_a ?? serieADi(g.giornata)})
                         {g.giornata === info.giornata_corrente ? ' (corrente)' : ''}
                         {g.chiusa ? ' · chiusa' : ''}
                         {g.voti_caricati > 0 ? ` · ${g.voti_caricati} voti` : ''}
@@ -216,12 +243,17 @@ export default function GestioneVoti() {
                   )}
                 </div>
 
+                {giornata !== null && (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Giornata {giornata} di fantacampionato = giornata {serieADi(giornata)} di Serie A.
+                  </p>
+                )}
                 {giaChiusa && (
                   <p className="flex items-center gap-1.5 text-xs text-gold-400 mt-2">
                     <Lock className="w-3.5 h-3.5" /> La giornata {giornata} risulta già chiusa.
                   </p>
                 )}
-                {votiPresenti > 0 && (
+                {votiPresenti > 0 && !auto && (
                   <p className="text-xs text-slate-500 mt-2">
                     Per questa giornata sono già presenti {votiPresenti} voti: un nuovo caricamento li sostituirà.
                   </p>
@@ -261,10 +293,10 @@ export default function GestioneVoti() {
                 )}
               </div>
 
-              <button type="submit" disabled={loading || giornata === null} className="btn-primary disabled:opacity-40">
+              <button type="submit" disabled={loading || (!auto && giornata === null)} className="btn-primary disabled:opacity-40">
                 {loading
                   ? <><Spinner size="sm" /> Caricamento in corso...</>
-                  : `Carica voti giornata ${giornata ?? ''}`}
+                  : auto ? 'Carica voti (giornata dal file)' : `Carica voti giornata ${giornata ?? ''}`}
               </button>
             </form>
           </div>
@@ -275,8 +307,9 @@ export default function GestioneVoti() {
               <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">
                 <AlertTriangle className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
                 <span>
-                  Il file si riferisce alla <strong>giornata {mismatch}</strong>, ma hai selezionato la{' '}
-                  <strong>giornata {giornata}</strong>. Nessun dato è stato salvato.
+                  Il file si riferisce alla <strong>giornata {mismatch} di Serie A</strong>, ma la{' '}
+                  <strong>giornata {giornata}</strong> di fantacampionato corrisponde alla giornata{' '}
+                  <strong>{serieADi(giornata)}</strong> di Serie A. Nessun dato è stato salvato.
                 </span>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -335,7 +368,8 @@ export default function GestioneVoti() {
               <div className="flex items-center gap-2 mb-4 text-green-300">
                 <CheckCircle2 className="w-4 h-4" />
                 <span className="font-medium">
-                  Voti della giornata {result.giornata} caricati ({result.squadre} squadre)
+                  Voti caricati sulla giornata {result.giornata} di fantacampionato
+                  {result.giornata_serie_a ? ` (Serie A ${result.giornata_serie_a})` : ''} · {result.squadre} squadre
                 </span>
               </div>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-4 text-center">

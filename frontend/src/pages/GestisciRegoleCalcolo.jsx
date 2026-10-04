@@ -305,14 +305,6 @@ function Sottosezione({ titolo, descrizione, children }) {
   )
 }
 
-// Codici gestiti da controlli dedicati (o obsoleti): non compaiono nell'elenco avanzato
-const CODICI_GESTITI = new Set([
-  'NUMERO_GIORNATE', 'GIORNATA_SERIE_A_INIZIO', 'FASCE_GOL_PUNTEGGIO',
-  'SOSTITUZIONI_MAX_MOVIMENTO', 'SOSTITUZIONI_MAX_PORTIERE', 'ULTIMA_GIORNATA_FATTORE_CASA',
-  'TOPFLOP_SOGLIA_PERCENTUALE', 'MARCATORI_MIN_GIOCATE',
-])
-const isCodiceChampions = (c) => c.startsWith('CHAMP_')
-
 export default function GestisciRegoleCalcolo() {
   const { stagione, ultimaStagione } = useApp()
   const { data: info, loading, error, refetch } = useFetch(
@@ -384,19 +376,6 @@ export default function GestisciRegoleCalcolo() {
     }
   }
   const numeroGiornate = Math.max(1, parseInt(getValoreParametro('NUMERO_GIORNATE', 38), 10) || 38)
-
-  const aggiungiParametro = () => {
-    setParametri([...parametri, { codice: '', etichetta: '', valore: '' }])
-    setSaved(false)
-  }
-  const setCampoParametro = (idx, campo, valore) => {
-    setParametri(parametri.map((p, i) => (i === idx ? { ...p, [campo]: valore } : p)))
-    setSaved(false)
-  }
-  const rimuoviParametro = (idx) => {
-    setParametri(parametri.filter((_, i) => i !== idx))
-    setSaved(false)
-  }
 
   const salva = async () => {
     if (readOnly) return
@@ -605,7 +584,7 @@ export default function GestisciRegoleCalcolo() {
                             className="fanta-input w-28"
                           />
                           <p className="text-[11px] text-slate-700 mt-1 max-w-xs">
-                            Giornata di Serie A a cui corrisponde la 1ª giornata di fantacampionato (che può iniziare dopo la 1ª di Serie A).
+                            Giornata di Serie A a cui corrisponde la 1ª giornata di fantacampionato (che può iniziare dopo la 1ª di Serie A). In Gestione voti i voti Serie A vengono associati automaticamente alla fantagiornata corrispondente.
                           </p>
                         </div>
                       </div>
@@ -687,67 +666,6 @@ export default function GestisciRegoleCalcolo() {
                     <p className="text-[11px] text-slate-700 mt-1">% delle partite giocate dalla squadra (50 = metà)</p>
                   </Sottosezione>
                 )}
-
-                {/* Elenco generico: mostra/permette di aggiungere qualunque altro parametro
-                    non previsto dai controlli dedicati (esclusi quelli già gestiti sopra). */}
-                {parametri.some(p => !CODICI_GESTITI.has(p.codice) && !isCodiceChampions(p.codice)) || !readOnly ? (
-                  <details className="card p-6">
-                    <summary className="text-xs text-slate-500 cursor-pointer">Altri parametri (avanzato)</summary>
-                    <div className="overflow-x-auto mt-4">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-left text-xs text-slate-600 uppercase tracking-widest">
-                            <th className="py-2 pr-3">Codice</th>
-                            <th className="py-2 pr-3">Etichetta</th>
-                            <th className="py-2 pr-3">Valore</th>
-                            {!readOnly && <th className="py-2 w-8" />}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {parametri.map((p, idx) => (
-                            CODICI_GESTITI.has(p.codice) || isCodiceChampions(p.codice) ? null : (
-                              <tr key={idx} className="border-t border-white/[0.03]">
-                                <td className="py-2 pr-3">
-                                  <input
-                                    type="text" value={p.codice}
-                                    onChange={e => setCampoParametro(idx, 'codice', e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
-                                    className="fanta-input w-56 font-mono text-xs"
-                                  />
-                                </td>
-                                <td className="py-2 pr-3">
-                                  <input
-                                    type="text" value={p.etichetta}
-                                    onChange={e => setCampoParametro(idx, 'etichetta', e.target.value)}
-                                    className="fanta-input w-56"
-                                  />
-                                </td>
-                                <td className="py-2 pr-3">
-                                  <input
-                                    type="text" value={p.valore}
-                                    onChange={e => setCampoParametro(idx, 'valore', e.target.value)}
-                                    className="fanta-input w-56 font-mono text-xs"
-                                  />
-                                </td>
-                                {!readOnly && (
-                                  <td className="py-2">
-                                    <button type="button" onClick={() => rimuoviParametro(idx)} className="p-1.5 rounded text-slate-600 hover:text-red-400 transition-colors">
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                )}
-                              </tr>
-                            )
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {!readOnly && (
-                      <button type="button" onClick={aggiungiParametro} className="btn-ghost text-xs mt-4">
-                        <Plus className="w-3.5 h-3.5" /> Aggiungi parametro
-                      </button>
-                    )}
-                  </details>
-                ) : null}
               </div>
             </fieldset>
           )}

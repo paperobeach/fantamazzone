@@ -2,23 +2,56 @@
 // ============================================================
 // api/admin/voti_serie_a.php
 //
+// RACCORDO SERIE A ↔ FANTACAMPIONATO
+//   Il parametro di stagione GIORNATA_SERIE_A_INIZIO (Gestisci regole di
+//   calcolo → Parametri stagione → Struttura stagione, default 1) è la
+//   giornata di Serie A che corrisponde alla 1ª giornata di
+//   fantacampionato. Quindi:
+//       giornata fantacampionato = giornata Serie A - (INIZIO - 1)
+//   Tutto il flusso a valle (NEW_VOTI_SERIE_A, calcolo, chiusura) ragiona
+//   in giornate di FANTACAMPIONATO: la conversione avviene qui.
+//
 // GET  ?stagione=2026
 //      Restituisce la giornata di riferimento (ultima non chiusa),
-//      l'elenco delle giornate del calendario con stato di chiusura e
-//      numero di voti Serie A già caricati.
+//      la giornata di Serie A di partenza (giornata_serie_a_inizio),
+//      l'elenco delle giornate del calendario con la giornata di Serie A
+//      corrispondente, lo stato di chiusura e il numero di voti già caricati.
 //
-// POST multipart/form-data: stagione, giornata, file (.xlsx, sheet "Italia")
+// POST multipart/form-data: stagione, file (.xlsx, sheet "Italia"),
+//      giornata (OPZIONALE, giornata di FANTACAMPIONATO)
 //      [forza=1 per caricare anche se la giornata indicata nel titolo
 //       del file è diversa da quella selezionata]
+//   - Senza "giornata" (modalità automatica): la giornata di Serie A si
+//     ricava dal titolo del file (es. "Voti Italia 7ª giornata di
+//     campionato") e i voti sono associati alla fantagiornata
+//     corrispondente. Se la giornata non si legge dal file, o non ha una
+//     fantagiornata corrispondente, o questa è già chiusa, il
+//     caricamento è rifiutato senza scrivere nulla.
+//   - Con "giornata" (modalità manuale): i voti vanno su quella
+//     fantagiornata; se il titolo del file indica una giornata di Serie A
+//     diversa da quella attesa si risponde GIORNATA_MISMATCH (409), a meno
+//     di forza=1.
 //
 // Fase 1 del flusso "Gestione voti": carica i voti della Serie A su
-// NEW_VOTI_SERIE_A (chiave: stagione, giornata, id_giocatore).
-// Il caricamento è ripetibile: i voti della stessa stagione/giornata
-// vengono sostituiti. Se il file contiene errori non viene scritto nulla.
+// NEW_VOTI_SERIE_A (chiave: stagione, giornata di fantacampionato,
+// id_giocatore). Il caricamento è ripetibile: i voti della stessa
+// stagione/giornata vengono sostituiti. Se il file contiene errori non
+// viene scritto nulla.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 
 mysqli_set_charset($conn, "utf8mb4");
+
+// ------------------------------------------------------------
+// Giornata di Serie A corrispondente alla 1ª di fantacampionato
+// (parametro GIORNATA_SERIE_A_INIZIO, default 1)
+// ------------------------------------------------------------
+function giornata_serie_a_inizio(int $stagione): int {
+    $r = query_one("SELECT valore FROM NEW_PARAMETRI_STAGIONE
+                    WHERE stagione = $stagione AND codice = 'GIORNATA_SERIE_A_INIZIO'");
+    $v = $r ? trim((string) $r["valore"]) : "";
+    return ($v !== "" && ctype_digit($v) && (int) $v >= 1) ? (int) $v : 1;
+}
 
 // ------------------------------------------------------------
 // Giornata di riferimento: prima giornata successiva all'ultima
@@ -62,13 +95,15 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
                                 WHERE stagione = $stagione GROUP BY giornata");
     while ($res && $r = mysqli_fetch_assoc($res)) $caricati[(int) $r["giornata"]] = (int) $r["n"];
 
+    $inizio   = giornata_serie_a_inizio($stagione);
     $giornate = [];
     $res = mysqli_query($conn, "SELECT DISTINCT giornata FROM NEW_CALENDARIO
                                 WHERE stagione = $stagione ORDER BY giornata");
     while ($res && $r = mysqli_fetch_assoc($res)) {
         $g = (int) $r["giornata"];
         $giornate[] = [
-            "giornata"      => $g,
+            "giornata"        => $g,
+            "giornata_serie_a" => $g + $inizio - 1,
             "chiusa"        => isset($chiuse[$g]),
             "voti_caricati" => $caricati[$g] ?? 0,
         ];
@@ -79,6 +114,7 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
         "giornata_corrente" => $giornata,
         "ultima_chiusa"     => $ultima_chiusa,
         "ultima_calendario" => $ultima_calendario,
+        "giornata_serie_a_inizio" => $inizio,
         "giornate"          => $giornate,
     ]);
 }
@@ -91,16 +127,19 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 // POST - upload file
 // ============================================================
 $stagione = post_int("stagione");
-$giornata = post_int("giornata");
+// "giornata" (fantacampionato) è opzionale: se assente la si ricava dal file
+$giornataManuale = (isset($_POST["giornata"]) && $_POST["giornata"] !== "") ? (int) $_POST["giornata"] : null;
 $forza    = !empty($_POST["forza"]);
 
 if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
-if (!$giornata) api_error("Parametro obbligatorio mancante: giornata", 400);
 
 $max_row = query_one("SELECT MAX(giornata) AS ultima FROM NEW_CALENDARIO WHERE stagione = $stagione");
 $ultima_calendario = (int) ($max_row["ultima"] ?? 0);
-if ($giornata < 1 || ($ultima_calendario > 0 && $giornata > $ultima_calendario)) {
-    api_error("Giornata $giornata non valida per la stagione $stagione", 400);
+$inizioSerieA = giornata_serie_a_inizio($stagione);
+$offsetSerieA = $inizioSerieA - 1;
+if ($giornataManuale !== null
+    && ($giornataManuale < 1 || ($ultima_calendario > 0 && $giornataManuale > $ultima_calendario))) {
+    api_error("Giornata $giornataManuale non valida per la stagione $stagione", 400);
 }
 
 if (empty($_FILES["file"]) || $_FILES["file"]["error"] !== UPLOAD_ERR_OK) {
@@ -244,13 +283,46 @@ foreach ($rows as [$nr, $r]) {
         break;
     }
 }
-if ($giornataFile !== null && $giornataFile !== $giornata && !$forza) {
-    json_error(
-        "GIORNATA_MISMATCH",
-        "Il file si riferisce alla giornata $giornataFile, ma è selezionata la giornata $giornata",
-        409,
-        ["giornata_file" => $giornataFile, "giornata_selezionata" => $giornata]
-    );
+// Risoluzione della fantagiornata di destinazione
+if ($giornataManuale === null) {
+    // Modalità automatica: giornata Serie A del file → fantagiornata
+    if ($giornataFile === null) {
+        api_error("Impossibile ricavare la giornata dal file (titolo non riconosciuto): selezionare manualmente la giornata di fantacampionato", 400);
+    }
+    $giornata = $giornataFile - $offsetSerieA;
+    if ($giornata < 1 || ($ultima_calendario > 0 && $giornata > $ultima_calendario)) {
+        api_error(
+            "La giornata $giornataFile di Serie A non corrisponde a nessuna giornata di fantacampionato "
+            . "(la giornata 1 corrisponde alla giornata $inizioSerieA di Serie A, ultima giornata: $ultima_calendario). "
+            . "Nessun dato è stato salvato.",
+            400
+        );
+    }
+    $ck = query_one("SELECT 1 AS x FROM NEW_CALENDARIO_CK
+                     WHERE stagione = $stagione AND giornata = $giornata AND ck_giocata = 'S'");
+    if ($ck) {
+        api_error(
+            "La giornata $giornata di fantacampionato (Serie A $giornataFile) è già chiusa: riaprirla prima di ricaricare i voti. Nessun dato è stato salvato.",
+            409
+        );
+    }
+} else {
+    // Modalità manuale: controllo di coerenza con la giornata indicata nel file
+    $giornata = $giornataManuale;
+    $serieAAttesa = $giornata + $offsetSerieA;
+    if ($giornataFile !== null && $giornataFile !== $serieAAttesa && !$forza) {
+        json_error(
+            "GIORNATA_MISMATCH",
+            "Il file si riferisce alla giornata $giornataFile di Serie A, ma la giornata $giornata di fantacampionato corrisponde alla giornata $serieAAttesa di Serie A",
+            409,
+            [
+                "giornata_file"          => $giornataFile,
+                "giornata_selezionata"   => $giornata,
+                "giornata_serie_a_attesa" => $serieAAttesa,
+                "giornata_fanta_file"    => $giornataFile - $offsetSerieA,
+            ]
+        );
+    }
 }
 
 // ------------------------------------------------------------
@@ -413,7 +485,9 @@ try {
         "ok"            => true,
         "stagione"      => $stagione,
         "giornata"      => $giornata,
+        "giornata_serie_a" => $giornata + $offsetSerieA,
         "giornata_file" => $giornataFile,
+        "automatica"    => $giornataManuale === null,
         "totale"        => count($data),
         "squadre"       => count($squadreViste),
         "per_ruolo"     => $perRuolo,

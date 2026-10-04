@@ -19,7 +19,7 @@
 //
 // Codici parametro:
 //   CHAMP_F1_<girone>_T<n>   Fase 1 (6 giornate), es. CHAMP_F1_A_T1
-//   CHAMP_F2_<girone>_T<n>   Fase 2 (4 giornate), es. CHAMP_F2_B_T3
+//   CHAMP_F2_<girone>_T<n>   Fase 2 (6 giornate), es. CHAMP_F2_B_T3
 //   CHAMP_SF_T1/T2           Semifinali andata/ritorno (senza girone)
 //   CHAMP_FIN_T1             Finale
 //   CHAMP_FIN_REPLAY         Replay finale (opzionale)
@@ -33,7 +33,7 @@ const CHAMPIONS_GIRONI = ['A', 'B'];
  * Ogni fase ha dei turni; ogni turno ha una "cella" per girone
  * (una sola cella con girone null nella fase finale):
  *   Fase 1:      2 gironi da 4 squadre, andata/ritorno = 6 giornate
- *   Fase 2:      2 gironi da 3 squadre, andata/ritorno = 4 giornate
+ *   Fase 2:      2 gironi da 3 squadre, andata/ritorno = 6 giornate
  *   Fase finale: semifinali A/R (2 turni), finale, replay (opzionale)
  *
  * @return array [ ['id','label','gironi'=>[...],'turni'=>[['n','label','celle'=>[['codice','girone','opzionale']]]]] ]
@@ -43,7 +43,7 @@ function champions_fasi(): array
     $fasi = [];
     $defs = [
         ['id' => 'fase1', 'label' => 'Fase 1 · Gironi', 'sigla' => 'F1', 'n' => 6, 'andata' => 3],
-        ['id' => 'fase2', 'label' => 'Fase 2 · Gironi', 'sigla' => 'F2', 'n' => 4, 'andata' => 2],
+        ['id' => 'fase2', 'label' => 'Fase 2 · Gironi', 'sigla' => 'F2', 'n' => 6, 'andata' => 3],
     ];
     foreach ($defs as $d) {
         $turni = [];

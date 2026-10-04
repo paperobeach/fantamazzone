@@ -230,7 +230,9 @@ export const getVotiSerieAInfo = (stagione) =>
 export const adminCaricaVotiSerieA = (stagione, giornata, file, forza = false) => {
   const formData = new FormData()
   formData.append('stagione', stagione)
-  formData.append('giornata', giornata)
+  // giornata (fantacampionato) opzionale: se omessa il backend la ricava dalla
+  // giornata di Serie A indicata nel file, tramite GIORNATA_SERIE_A_INIZIO
+  if (giornata != null) formData.append('giornata', giornata)
   if (forza) formData.append('forza', '1')
   formData.append('file', file)
   return postFile('admin/voti_serie_a.php', formData)

@@ -1,7 +1,9 @@
 <?php
 // ============================================================
 // api/live_dettaglio.php
-// GET ?stagione=2026&id_squadra=3&fonte=reale|simulazione
+// GET ?stagione=2026&id_squadra=3[&fonte=auto|reale|simulazione]
+// (default auto: NEW_RISULTATI se presente, altrimenti simulazione;
+//  la risposta riporta la fonte effettivamente usata)
 //
 // Dettaglio voti di UNA partita della giornata in corso (id_squadra =
 // squadra di casa). Stessa struttura di dettaglio_partita.php, ma:
@@ -16,12 +18,20 @@ require_once __DIR__ . "/lib/StatoGiornata.php";
 
 $stagione   = param_int("stagione");
 $id_squadra = param_int("id_squadra");
-$fonte      = param_str("fonte", false) ?: "simulazione";
-if (!in_array($fonte, ["reale", "simulazione"], true)) api_error("Parametro fonte non valido", 400);
+$fonte      = param_str("fonte", false) ?: "auto";
+if (!in_array($fonte, ["auto", "reale", "simulazione"], true)) api_error("Parametro fonte non valido", 400);
 
 $stato = sg_stato_corrente($stagione);
 if (!$stato["in_corso"]) api_success(null);
 $giornata = $stato["giornata"];
+
+// auto: se la partita ha dati su NEW_RISULTATI si usano quelli,
+// altrimenti la simulazione
+if ($fonte === "auto") {
+    $n = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI
+                    WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $id_squadra");
+    $fonte = (int) ($n["n"] ?? 0) > 0 ? "reale" : "simulazione";
+}
 
 $tRis  = $fonte === "reale" ? "NEW_RISULTATI" : "NEW_SIMULAZIONE_RISULTATI";
 $tVoti = $fonte === "reale" ? "NEW_VOTI"      : "NEW_SIMULAZIONE_VOTI";

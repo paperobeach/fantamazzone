@@ -100,8 +100,8 @@ export const getGiornataCorrente = (stagione) => get('giornata_corrente.php', { 
 export const getLiveGiornata = (stagione) => get('live_giornata.php', { stagione })
 
 // Dettaglio voti di una partita live (id_squadra = squadra di casa);
-// fonte: 'reale' | 'simulazione'
-export const getLiveDettaglio = (stagione, id_squadra, fonte = 'simulazione') =>
+// fonte: 'auto' (default: NEW_RISULTATI se presente, altrimenti simulazione) | 'reale' | 'simulazione'
+export const getLiveDettaglio = (stagione, id_squadra, fonte = 'auto') =>
   get('live_dettaglio.php', { stagione, id_squadra, fonte })
 
 // Giocatori in formazione di una squadra con il dato usato dalla simulazione

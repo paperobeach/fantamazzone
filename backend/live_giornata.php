@@ -4,7 +4,9 @@
 // GET ?stagione=2026
 //
 // Pagina "LIVE Giornata in corso": per ogni partita della giornata
-// non ancora chiusa restituisce
+// non ancora chiusa restituisce un unico "risultato" (con "fonte"):
+// i dati di NEW_RISULTATI se esistono, altrimenti la simulazione. Restano
+// disponibili anche entrambi i risultati separati:
 //   - "reale":        risultato già calcolato in NEW_RISULTATI
 //                     (calcolo fase 2, non ancora definitivo);
 //   - "simulazione":  risultato di NEW_SIMULAZIONE_RISULTATI (ultima
@@ -80,14 +82,21 @@ foreach ($partite as $p) {
     if (!$idCasa || !isset($p["ospite"])) continue;
     $s = $sim[$idCasa] ?? null;
     if ($s !== null && ($calcolatoIl === null || $s["calcolato_il"] > $calcolatoIl)) $calcolatoIl = $s["calcolato_il"];
+    // Rappresentazione unica: se la partita ha i dati sulle tabelle NON
+    // simulate (NEW_RISULTATI) si mostrano quelli, altrimenti la simulazione
+    $reale = live_risultato($reali[$idCasa] ?? null);
+    $simul = live_risultato($s);
+    $fonte = $reale !== null ? "reale" : ($simul !== null ? "simulazione" : null);
     $out[] = [
         "casa"        => $p["casa"],
         "ospite"      => $p["ospite"],
-        "reale"       => live_risultato($reali[$idCasa] ?? null),
-        "simulazione" => live_risultato($s),
+        "fonte"       => $fonte,                      // reale | simulazione | null
+        "risultato"   => $fonte === "reale" ? $reale : $simul,
+        "reale"       => $reale,
+        "simulazione" => $simul,
         // Giocatori con 6 provvisorio / voto manuale nella simulazione (casa + ospite)
-        "provvisori"  => ($flag[$idCasa]["p"] ?? 0) + ($flag[$p["ospite"]["id"]]["p"] ?? 0),
-        "manuali"     => ($flag[$idCasa]["m"] ?? 0) + ($flag[$p["ospite"]["id"]]["m"] ?? 0),
+        "provvisori"  => $fonte !== "simulazione" ? 0 : ($flag[$idCasa]["p"] ?? 0) + ($flag[$p["ospite"]["id"]]["p"] ?? 0),
+        "manuali"     => $fonte !== "simulazione" ? 0 : ($flag[$idCasa]["m"] ?? 0) + ($flag[$p["ospite"]["id"]]["m"] ?? 0),
     ];
 }
 

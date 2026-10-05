@@ -10,7 +10,7 @@ import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } 
 import { MatchDetailPanel } from '../components/MatchDetail'
 import TeamLogo from '../components/TeamLogo'
 import {
-  ChevronDown, Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle,
+  ChevronDown, Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator,
 } from 'lucide-react'
 
 // Nome dell'utente registrato come autore delle simulazioni
@@ -196,18 +196,18 @@ function EditorPartita({ stagione, partita, onChanged }) {
 // ── Riga partita ────────────────────────────────────────────
 function MatchRow({ partita, stagione, versione, onChanged }) {
   const { utente } = useApp()
-  const { casa, ospite, reale, simulazione, provvisori = 0, manuali = 0 } = partita
+  const { casa, ospite, fonte, risultato, simulazione, provvisori = 0, manuali = 0 } = partita
   const [open, setOpen]     = useState(false)
-  const [fonte, setFonte]   = useState(simulazione ? 'simulazione' : 'reale')
   const [editing, setEdit]  = useState(false)
   const [busy, setBusy]    = useState(false)
   const [msg, setMsg]      = useState(null)   // { tipo: 'ok' | 'err', testo }
-  const disponibile = !!(reale || simulazione)
-  const fonteEff = fonte === 'simulazione' && !simulazione ? 'reale' : fonte === 'reale' && !reale ? 'simulazione' : fonte
+  const isReale = fonte === 'reale'
+  const isSim   = fonte === 'simulazione'
 
+  // Rappresentazione unica: il backend sceglie NEW_RISULTATI se presente, altrimenti la simulazione
   const { data: det, loading, error } = useFetch(
-    () => (open && disponibile) ? getLiveDettaglio(Number(stagione), casa.id, fonteEff) : Promise.resolve(null),
-    [open, disponibile, stagione, casa.id, fonteEff, versione]
+    () => (open && fonte) ? getLiveDettaglio(Number(stagione), casa.id, 'auto') : Promise.resolve(null),
+    [open, fonte, stagione, casa.id, versione]
   )
 
   const stop = (e) => e.stopPropagation()
@@ -245,35 +245,29 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
           <TeamLogo logo={casa.logo} nome={casa.nome} size="sm" />
         </Link>
 
-        <div className="flex-shrink-0 flex flex-col gap-1.5 items-center">
-          <div className="flex items-center gap-2" title="Risultato calcolato (non definitivo)">
-            <span className="flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider text-grass-400">
-              <Radio className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span>
+        {/* Risultato unico: calcolato se presente, altrimenti simulato */}
+        <div className="flex-shrink-0 flex items-center gap-2"
+             title={isReale ? 'Risultato calcolato (non definitivo)' : isSim ? 'Risultato simulato con i voti disponibili' : 'Nessun risultato disponibile'}>
+          <span className={`flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
+            {isReale && <><Calculator className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span></>}
+            {isSim && <><Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span></>}
+          </span>
+          <Gol r={risultato} />
+          <span className="hidden sm:inline w-24 text-left"><Punti r={risultato} /></span>
+          {isSim && (provvisori > 0 || manuali > 0) && (
+            <span className="flex items-center gap-1.5 text-[10px] font-mono">
+              {provvisori > 0 && (
+                <span className="flex items-center gap-0.5 text-sky-400" title={`${provvisori} giocatori con 6 provvisorio`}>
+                  <Clock className="w-3 h-3" aria-hidden="true" />{provvisori}
+                </span>
+              )}
+              {manuali > 0 && (
+                <span className="flex items-center gap-0.5 text-violet-400" title={`${manuali} voti inseriti manualmente`}>
+                  <Pencil className="w-3 h-3" aria-hidden="true" />{manuali}
+                </span>
+              )}
             </span>
-            <Gol r={reale} />
-            <span className="hidden sm:inline w-24 text-left"><Punti r={reale} /></span>
-          </div>
-          <div className="flex items-center gap-2" title="Simulazione con i voti disponibili">
-            <span className="flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider text-sky-400">
-              <Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span>
-            </span>
-            <Gol r={simulazione} />
-            <span className="hidden sm:inline w-24 text-left"><Punti r={simulazione} /></span>
-            {(provvisori > 0 || manuali > 0) && (
-              <span className="flex items-center gap-1.5 text-[10px] font-mono">
-                {provvisori > 0 && (
-                  <span className="flex items-center gap-0.5 text-sky-400" title={`${provvisori} giocatori con 6 provvisorio`}>
-                    <Clock className="w-3 h-3" aria-hidden="true" />{provvisori}
-                  </span>
-                )}
-                {manuali > 0 && (
-                  <span className="flex items-center gap-0.5 text-violet-400" title={`${manuali} voti inseriti manualmente`}>
-                    <Pencil className="w-3 h-3" aria-hidden="true" />{manuali}
-                  </span>
-                )}
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
         <Link onClick={stop} to={`/squadre/${ospite.id}`} className="flex items-center gap-2 flex-1 group min-w-0">
@@ -284,7 +278,8 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
         <ChevronDown className={`w-4 h-4 flex-shrink-0 text-slate-600 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
 
-      {simulazione && (
+      {/* Data/ora e utente dell'ultima simulazione: solo se si sta mostrando la simulazione */}
+      {isSim && simulazione && (
         <p className="px-4 pb-2 -mt-1 flex items-center justify-center gap-x-3 gap-y-0.5 flex-wrap text-[10px] font-mono text-slate-500"
            title="Ultima simulazione di questa partita">
           <span className="flex items-center gap-1 text-sky-400">
@@ -299,36 +294,43 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
       {open && (
         <>
           <div className="px-4 py-2 flex items-center gap-2 flex-wrap border-t border-white/5">
-            {['reale', 'simulazione'].map(f => (
-              <button key={f} onClick={() => setFonte(f)} disabled={f === 'reale' ? !reale : !simulazione}
-                className={`px-3 py-1 rounded-md text-xs disabled:opacity-30 ${
-                  fonteEff === f ? 'bg-grass-500 text-pitch-950 font-semibold' : 'bg-pitch-800 text-slate-400 hover:text-slate-200'}`}>
-                {f === 'reale' ? 'Calcolato' : 'Simulazione'}
-              </button>
-            ))}
+            <span className={`flex items-center gap-1.5 text-xs font-semibold ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
+              {isReale ? <Calculator className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+              {isReale ? 'Risultato calcolato' : isSim ? 'Risultato simulato' : 'Nessun risultato'}
+            </span>
+            {/* Con dati calcolati la simulazione non viene mostrata: simula/modifica solo se serve */}
             <div className="ml-auto flex items-center gap-2 flex-wrap">
-              <button onClick={simulaQui} disabled={busy}
-                className="px-3 py-1 rounded-md text-xs flex items-center gap-1.5 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 disabled:opacity-40">
-                {busy ? <Spinner size="sm" /> : <Play className="w-3 h-3" />} Simula partita
-              </button>
+              {!isReale && (
+                <button onClick={simulaQui} disabled={busy}
+                  className="px-3 py-1 rounded-md text-xs flex items-center gap-1.5 bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 disabled:opacity-40">
+                  {busy ? <Spinner size="sm" /> : <Play className="w-3 h-3" />} Simula partita
+                </button>
+              )}
               <button onClick={eliminaQui} disabled={busy || !simulazione}
                 className="px-3 py-1 rounded-md text-xs flex items-center gap-1.5 bg-pitch-800 text-slate-400 hover:text-red-400 disabled:opacity-30">
                 <Trash2 className="w-3 h-3" /> Cancella simulazione
               </button>
-              <button onClick={() => setEdit(e => !e)}
-                className={`px-3 py-1 rounded-md text-xs flex items-center gap-1.5 ${
-                  editing ? 'bg-violet-500/20 text-violet-300' : 'bg-pitch-800 text-slate-400 hover:text-slate-200'}`}>
-                <Pencil className="w-3 h-3" /> Modifica voti
-              </button>
+              {!isReale && (
+                <button onClick={() => setEdit(e => !e)}
+                  className={`px-3 py-1 rounded-md text-xs flex items-center gap-1.5 ${
+                    editing ? 'bg-violet-500/20 text-violet-300' : 'bg-pitch-800 text-slate-400 hover:text-slate-200'}`}>
+                  <Pencil className="w-3 h-3" /> Modifica voti
+                </button>
+              )}
             </div>
           </div>
+          {isReale && simulazione && (
+            <p className="px-4 pb-2 text-[11px] text-slate-600">
+              Esistono dati calcolati per questa partita: la simulazione salvata non viene mostrata.
+            </p>
+          )}
           {msg && (
             <p className={`px-4 pb-2 text-xs ${msg.tipo === 'ok' ? 'text-green-400' : 'text-red-400'}`}>{msg.testo}</p>
           )}
-          {disponibile
+          {fonte
             ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} loading={loading} error={error} />
-            : <p className="px-4 py-6 text-center text-xs text-slate-600">Nessun calcolo disponibile: usare "Simula giornata".</p>}
-          {editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} />}
+            : <p className="px-4 py-6 text-center text-xs text-slate-600">Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".</p>}
+          {!isReale && editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} />}
         </>
       )}
     </div>
@@ -409,8 +411,8 @@ export default function LiveGiornata() {
 
       {/* Legenda */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-4 text-[11px] text-slate-500">
-        <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-grass-400" /> Calc. = voti calcolati (NEW_VOTI)</span>
-        <span className="flex items-center gap-1.5"><Play className="w-3.5 h-3.5 text-sky-400" /> Sim. = simulazione con i voti disponibili</span>
+        <span className="flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5 text-grass-400" /> Calc. = risultato già calcolato (se presente)</span>
+        <span className="flex items-center gap-1.5"><Play className="w-3.5 h-3.5 text-sky-400" /> Sim. = simulazione, mostrata solo se manca il calcolato</span>
         <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-sky-400" /> 6 provvisorio: partita di Serie A da giocare</span>
         <span className="flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5 text-violet-400" /> voto inserito manualmente</span>
         <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-grass-400" /> voto reale (Serie A)</span>

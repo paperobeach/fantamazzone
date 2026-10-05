@@ -193,6 +193,20 @@ export const getStatoRiapertura = (stagione) =>
 export const adminRiapriGiornata = (stagione, giornata) =>
   post('admin/riapertura_giornata.php', { stagione, giornata })
 
+// ── Reset stagione (admin/reset_stagione.php) ─────────────────
+// GET  → stato: stagione resettabile (o motivi di blocco), righe per
+//        tabella (gruppo 'backup' = salvate in BK_* prima della
+//        cancellazione, 'derivati' = solo cancellate), avvisi, backup
+//        già eseguiti, frase di conferma da digitare.
+// POST → Body { stagione, utenza, password, conferma }: credenziali di
+//        un amministratore (verificate lato server) e frase "RESET <stagione>".
+//        Esegue backup verificato e poi cancella tutti i dati della stagione.
+export const getStatoResetStagione = (stagione) =>
+  get('admin/reset_stagione.php', { stagione })
+
+export const adminResetStagione = (stagione, { utenza, password, conferma }) =>
+  post('admin/reset_stagione.php', { stagione, utenza, password, conferma })
+
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
 //        Allenatori + Utenze). Se la stagione non ha ancora dati,

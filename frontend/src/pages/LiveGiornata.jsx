@@ -10,8 +10,19 @@ import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } 
 import { MatchDetailPanel } from '../components/MatchDetail'
 import TeamLogo from '../components/TeamLogo'
 import {
-  ChevronDown, Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2,
+  ChevronDown, Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle,
 } from 'lucide-react'
+
+// Nome dell'utente registrato come autore delle simulazioni
+function nomeUtente(utente) {
+  return utente?.descrizione || utente?.utenza || 'Ospite'
+}
+
+function fmtDataOra(v) {
+  if (!v) return null
+  const d = new Date(String(v).replace(' ', 'T'))
+  return isNaN(d) ? String(v) : d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
+}
 
 // ── Punteggio (gol) di una partita; null = non disponibile ──
 function Gol({ r }) {
@@ -48,6 +59,7 @@ const TITOLI_CAMPI = {
 }
 
 function RigaEdit({ g, stagione, onChanged }) {
+  const { utente } = useApp()
   const [form, setForm] = useState(() => ({
     voto: g.voto ?? 6, gf: g.gf, gs: g.gs, rp: g.rp, rs: g.rs, rf: g.rf, au: g.au, amm: g.amm, esp: g.esp, ass: g.ass,
   }))
@@ -70,11 +82,12 @@ function RigaEdit({ g, stagione, onChanged }) {
 
   const salva = () => run(() => salvaEditLive(Number(stagione), {
     id_giocatore: g.id_giocatore,
+    utente: nomeUtente(utente),
     voto: Number(form.voto),
     ...Object.fromEntries(CAMPI.map(([k]) => [k, Number(form[k]) || 0])),
   }))
   const reset = () => run(async () => {
-    await eliminaEditLive(Number(stagione), g.id_giocatore)
+    await eliminaEditLive(Number(stagione), g.id_giocatore, nomeUtente(utente))
     setForm(f => ({ ...f, voto: 6, gf: 0, gs: 0, rp: 0, rs: 0, rf: 0, au: 0, amm: 0, esp: 0, ass: 0 }))
   })
 
@@ -182,6 +195,7 @@ function EditorPartita({ stagione, partita, onChanged }) {
 
 // ── Riga partita ────────────────────────────────────────────
 function MatchRow({ partita, stagione, versione, onChanged }) {
+  const { utente } = useApp()
   const { casa, ospite, reale, simulazione, provvisori = 0, manuali = 0 } = partita
   const [open, setOpen]     = useState(false)
   const [fonte, setFonte]   = useState(simulazione ? 'simulazione' : 'reale')
@@ -212,7 +226,7 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
     }
   }
   const simulaQui = () => esegui(
-    () => simulaGiornata(Number(stagione), casa.id),
+    () => simulaGiornata(Number(stagione), casa.id, nomeUtente(utente)),
     (r) => r.partite_elaborate > 0 ? 'Partita simulata e salvata' : (r.partite_saltate?.[0] ?? 'Nessuna partita elaborata'))
   const eliminaQui = () => {
     if (!window.confirm(`Cancellare la simulazione di ${casa.nome} - ${ospite.nome}?\nVerranno rimossi anche i voti inseriti manualmente per questa partita.`)) return
@@ -270,6 +284,18 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
         <ChevronDown className={`w-4 h-4 flex-shrink-0 text-slate-600 transition-transform ${open ? 'rotate-180' : ''}`} />
       </div>
 
+      {simulazione && (
+        <p className="px-4 pb-2 -mt-1 flex items-center justify-center gap-x-3 gap-y-0.5 flex-wrap text-[10px] font-mono text-slate-500"
+           title="Ultima simulazione di questa partita">
+          <span className="flex items-center gap-1 text-sky-400">
+            <CalendarClock className="w-3 h-3" aria-hidden="true" />{fmtDataOra(simulazione.calcolato_il) ?? '—'}
+          </span>
+          <span className="flex items-center gap-1 text-slate-400">
+            <User className="w-3 h-3" aria-hidden="true" />{simulazione.simulato_da || 'utente non registrato'}
+          </span>
+        </p>
+      )}
+
       {open && (
         <>
           <div className="px-4 py-2 flex items-center gap-2 flex-wrap border-t border-white/5">
@@ -311,7 +337,7 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
 
 // ── Pagina ──────────────────────────────────────────────────
 export default function LiveGiornata() {
-  const { stagione } = useApp()
+  const { stagione, utente } = useApp()
   const [versione, setVersione] = useState(0)
   const [simulando, setSimulando] = useState(false)
   const [esito, setEsito] = useState(null)
@@ -325,7 +351,7 @@ export default function LiveGiornata() {
   const simula = async () => {
     setSimulando(true); setErrSim(null); setEsito(null)
     try {
-      setEsito(await simulaGiornata(Number(stagione)))
+      setEsito(await simulaGiornata(Number(stagione), null, nomeUtente(utente)))
       aggiorna()
     } catch (e) {
       setErrSim(e.message)
@@ -349,8 +375,7 @@ export default function LiveGiornata() {
     )
   }
 
-  const calcolatoIl = data.simulazione_calcolata_il
-    ? new Date(String(data.simulazione_calcolata_il).replace(' ', 'T')).toLocaleString('it-IT') : null
+  const calcolatoIl = fmtDataOra(data.simulazione_calcolata_il)
 
   return (
     <div className="animate-fade-up">
@@ -388,8 +413,10 @@ export default function LiveGiornata() {
         <span className="flex items-center gap-1.5"><Play className="w-3.5 h-3.5 text-sky-400" /> Sim. = simulazione con i voti disponibili</span>
         <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-sky-400" /> 6 provvisorio: partita di Serie A da giocare</span>
         <span className="flex items-center gap-1.5"><Pencil className="w-3.5 h-3.5 text-violet-400" /> voto inserito manualmente</span>
+        <span className="flex items-center gap-1.5"><Radio className="w-3.5 h-3.5 text-grass-400" /> voto reale (Serie A)</span>
+        <span className="flex items-center gap-1.5"><MinusCircle className="w-3.5 h-3.5 text-slate-500" /> senza voto / sostituito</span>
       </div>
-      {calcolatoIl && <p className="text-[11px] font-mono text-slate-600 mb-3">Ultima simulazione: {calcolatoIl}</p>}
+      {calcolatoIl && <p className="text-[11px] font-mono text-slate-600 mb-3">Ultima simulazione (qualsiasi partita): {calcolatoIl}</p>}
 
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-white/5">

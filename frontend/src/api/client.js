@@ -110,16 +110,17 @@ export const getLiveGiocatori = (stagione, id_squadra) =>
 
 // Simulazione libera (nessun ruolo richiesto). Senza id_squadra simula
 // l'intera giornata; con id_squadra (casa o ospite) SOLO quella partita.
-export const simulaGiornata = (stagione, id_squadra) =>
-  post('live_simulazione.php', { stagione, azione: 'simula', ...(id_squadra ? { id_squadra } : {}) })
+export const simulaGiornata = (stagione, id_squadra, utente) =>
+  post('live_simulazione.php', { stagione, azione: 'simula', utente, ...(id_squadra ? { id_squadra } : {}) })
 
 // Editing manuale di un giocatore la cui partita non si è ancora giocata;
 // il backend ricalcola e salva la sola partita del giocatore
+// (dati.utente = chi opera, registrato come autore della simulazione)
 export const salvaEditLive = (stagione, dati) =>
   post('live_simulazione.php', { stagione, azione: 'salva_edit', ...dati })
 
-export const eliminaEditLive = (stagione, id_giocatore) =>
-  post('live_simulazione.php', { stagione, azione: 'elimina_edit', id_giocatore })
+export const eliminaEditLive = (stagione, id_giocatore, utente) =>
+  post('live_simulazione.php', { stagione, azione: 'elimina_edit', id_giocatore, utente })
 
 // Cancella la simulazione di una singola partita (voti, risultati ed editing manuali)
 export const eliminaSimulazionePartita = (stagione, id_squadra) =>

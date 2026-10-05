@@ -376,20 +376,23 @@ function sim_salva_riga_risultato(
     $conn, int $stagione, int $giornata, int $idSquadra, int $idSquadraA,
     float $ftotale, float $ftotaleA, int $golf, int $gols,
     int $modificatore, int $modificatoreA, float $modAtt,
-    int $numCc, float $totCc, float $modCc, int $fattoreCampo
+    int $numCc, float $totCc, float $modCc, int $fattoreCampo, ?string $utente = null
 ): void {
     if ($golf > $gols)       { $punti = 3; $segno = 'V'; }
     elseif ($golf === $gols) { $punti = 1; $segno = 'N'; }
     else                     { $punti = 0; $segno = 'P'; }
 
     $f  = fn(float $v) => sprintf('%.2f', $v);
+    $utenteSql = ($utente === null || trim($utente) === '')
+        ? 'NULL'
+        : "'" . mysqli_real_escape_string($conn, mb_substr(trim($utente), 0, 50)) . "'";
     $ok = mysqli_query($conn, "INSERT INTO NEW_SIMULAZIONE_RISULTATI
         (giornata, stagione, id_squadra, id_squadra_a, ftotale, ftotale_a, golf, gols,
          modificatore, modificatore_a, punti, fattore_campo, segno,
-         mod_att, num_cc, tot_cc, mod_cc, calcolato_il)
+         mod_att, num_cc, tot_cc, mod_cc, calcolato_il, simulato_da)
         VALUES ($giornata, $stagione, $idSquadra, $idSquadraA, {$f($ftotale)}, {$f($ftotaleA)}, $golf, $gols,
                 $modificatore, $modificatoreA, $punti, $fattoreCampo, '$segno',
-                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)}, NOW(3))");
+                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)}, NOW(3), $utenteSql)");
     if (!$ok) throw new Exception("Scrittura NEW_SIMULAZIONE_RISULTATI: " . mysqli_error($conn));
 }
 
@@ -401,10 +404,12 @@ function sim_salva_riga_risultato(
 // Se $soloSquadra è valorizzato (id di una delle due squadre della
 // partita) viene simulata e salvata SOLO quella partita: le righe delle
 // altre partite restano invariate.
+// $utente: nome dell'utente che esegue la simulazione (salvato in
+// NEW_SIMULAZIONE_RISULTATI.simulato_da).
 // Ritorna: partite_elaborate, partite_saltate[], warning[],
 //          provvisori, manuali
 // ------------------------------------------------------------
-function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = null): array
+function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = null, ?string $utente = null): array
 {
     mysqli_set_charset($conn, "utf8mb4");
 
@@ -502,7 +507,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['ospite']['modificatori']['difesa']), (int) round(-$ris['casa']['modificatori']['difesa']),
                 $ris['casa']['modificatori']['attacco'],
                 $ris['casa']['numero_centrocampisti'], $ris['casa']['somma_centrocampisti'], $ris['casa']['modificatori']['centrocampo'],
-                $fattoreCampoCasa
+                $fattoreCampoCasa, $utente
             );
             sim_salva_riga_risultato(
                 $conn, $stagione, $giornata, $idOspite, $idCasa,
@@ -511,7 +516,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['casa']['modificatori']['difesa']), (int) round(-$ris['ospite']['modificatori']['difesa']),
                 $ris['ospite']['modificatori']['attacco'],
                 $ris['ospite']['numero_centrocampisti'], $ris['ospite']['somma_centrocampisti'], $ris['ospite']['modificatori']['centrocampo'],
-                0
+                0, $utente
             );
 
             $elaborate++;

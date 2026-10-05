@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS `NEW_SIMULAZIONE_RISULTATI` (
   `tot_cc`         decimal(6,2)  NOT NULL DEFAULT '0.00',
   `mod_cc`         decimal(5,2)  NOT NULL DEFAULT '0.00',
   `calcolato_il`   datetime(3)   NOT NULL,
+  `simulato_da`    varchar(50)   DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione',
   PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_squadra_a`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

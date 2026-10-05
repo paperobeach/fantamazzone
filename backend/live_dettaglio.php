@@ -25,6 +25,7 @@ $giornata = $stato["giornata"];
 
 $tRis  = $fonte === "reale" ? "NEW_RISULTATI" : "NEW_SIMULAZIONE_RISULTATI";
 $tVoti = $fonte === "reale" ? "NEW_VOTI"      : "NEW_SIMULAZIONE_VOTI";
+$extraRis = $fonte === "reale" ? "NULL AS calcolato_il, NULL AS simulato_da" : "r.calcolato_il, r.simulato_da";
 $extra = $fonte === "reale" ? "0 AS provvisorio, 0 AS manuale" : "v.provvisorio, v.manuale";
 
 $r = query_one("SELECT
@@ -32,6 +33,7 @@ $r = query_one("SELECT
         s1.nome AS nome_casa,  s1.logo AS logo_casa,
         s2.nome AS nome_ospite, s2.logo AS logo_ospite,
         r.ftotale, r.ftotale_a, r.golf, r.gols, r.modificatore, r.modificatore_a, r.punti, r.segno,
+        $extraRis,
         r.mod_att AS mod_att_casa, r.mod_cc AS mod_cc_casa, r.num_cc AS num_cc_casa, r.tot_cc AS tot_cc_casa,
         r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
         r2.num_cc AS num_cc_ospite, r2.tot_cc AS tot_cc_ospite,
@@ -72,6 +74,11 @@ foreach ($voti_raw as $v) {
     $v["ufficio_fittizio"] = (int) $v["ufficio_fittizio"] === 1;
     $v["provvisorio"]      = (int) $v["provvisorio"] === 1;
     $v["manuale"]          = (int) $v["manuale"] === 1;
+    // Origine del voto, mostrata come icona nel dettaglio per giocatore
+    $v["origine"] = $v["riserva_ufficio"] ? "ufficio"
+                  : ($v["provvisorio"] ? "provvisorio"
+                  : ($v["manuale"] ? "manuale"
+                  : ((int) $v["giocata"] === 1 ? "reale" : "senza_voto")));
     $per_squadra[(int) $v["id_squadra"]][] = $v;
 }
 
@@ -97,6 +104,7 @@ api_success([
         "num_cc"  => $int($r["num_cc_ospite"]),  "tot_cc"  => $num($r["tot_cc_ospite"]),
         "giocatori" => $per_squadra[$id_ospite] ?? [],
     ],
+    "calcolato_il" => $r["calcolato_il"], "simulato_da" => $r["simulato_da"],
     "golf" => (int) $r["golf"], "gols" => (int) $r["gols"],
     "punti_casa" => (int) $r["punti"], "segno" => $r["segno"],
 ]);

@@ -1,4 +1,4 @@
-import { Briefcase, Clock, Pencil } from 'lucide-react'
+import { Briefcase, Clock, Pencil, Radio, MinusCircle } from 'lucide-react'
 import { RoleBadge } from './ui'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
@@ -20,6 +20,25 @@ export function VotoBox({ voto, totale, giocata }) {
 //  - ID fittizio (ufficio_fittizio): nessun calciatore reale → solo la dicitura "Riserva d'ufficio";
 //  - ID reale (dati storici o ammonito senza voto): nome del calciatore + dicitura.
 export function NomeGiocatore({ g }) {
+  // Pagina LIVE: g.origine indica da dove arriva il voto
+  //   reale = voto Serie A, senza_voto = nessun voto (sostituito / a zero)
+  // (provvisorio, manuale e ufficio sono gestiti sotto)
+  if (g.origine === 'reale') {
+    return (
+      <span className="inline-flex items-center gap-1.5" title="Voto reale (Serie A)">
+        <Radio className="w-3.5 h-3.5 text-grass-400 shrink-0" aria-hidden="true" />
+        <span>{g.giocatore}</span>
+      </span>
+    )
+  }
+  if (g.origine === 'senza_voto') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-slate-500" title="Senza voto: sostituito o a zero">
+        <MinusCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        <span>{g.giocatore}</span>
+      </span>
+    )
+  }
   // Simulazione live: 6 provvisorio (partita di Serie A non ancora giocata)
   // o voto inserito a mano
   if (g.provvisorio) {

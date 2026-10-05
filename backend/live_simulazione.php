@@ -13,6 +13,9 @@
 //      flag "modificabile" (squadra di Serie A non ancora scesa in
 //      campo e nessun voto reale).
 //
+// In tutte le POST è accettato "utente" (nome di chi opera), salvato
+// come autore dell'ultima simulazione di ogni partita.
+//
 // POST { stagione, azione: "simula" [, id_squadra] }
 //      Ricostruisce la simulazione dell'intera giornata in corso.
 //      Con id_squadra (una delle due squadre della partita) simula e
@@ -113,6 +116,12 @@ if ($metodo !== "POST") api_error("Metodo non consentito. Usare GET o POST.", 40
 
 $azione = (string) ($input["azione"] ?? "");
 
+// Utente che esegue l'operazione (registrato come autore della
+// simulazione). Indicato dal client: l'applicazione non ha
+// autenticazione lato server, quindi è un dato informativo.
+$utente = trim((string) ($input["utente"] ?? ""));
+$utente = $utente !== "" ? mb_substr($utente, 0, 50) : "Ospite";
+
 // Lock applicativo: una sola scrittura alla volta per stagione
 $lockName = "fantamazzone_live_$stagione";
 $lockRes  = mysqli_query($conn, "SELECT GET_LOCK('$lockName', 5) AS l");
@@ -125,7 +134,7 @@ $rilascia = function () use ($conn, $lockName) { mysqli_query($conn, "SELECT REL
 try {
     if ($azione === "simula") {
         $solo = (int) ($input["id_squadra"] ?? 0) ?: null;
-        $res = sim_esegui($conn, $stagione, $giornata, $solo);
+        $res = sim_esegui($conn, $stagione, $giornata, $solo, $utente);
         $rilascia();
         api_success(array_merge(["ok" => true, "stagione" => $stagione, "giornata" => $giornata], $res));
     }
@@ -143,7 +152,7 @@ try {
         if ($azione === "elimina_edit") {
             mysqli_query($conn, "DELETE FROM NEW_SIMULAZIONE_EDIT
                                  WHERE stagione = $stagione AND giornata = $giornata AND id_giocatore = $idG");
-            $res = sim_esegui($conn, $stagione, $giornata, $squadraG);
+            $res = sim_esegui($conn, $stagione, $giornata, $squadraG, $utente);
             $rilascia();
             api_success(array_merge(["ok" => true, "giornata" => $giornata, "id_giocatore" => $idG], $res));
         }
@@ -168,7 +177,7 @@ try {
                     {$campi['gf']}, {$campi['gs']}, {$campi['rp']}, {$campi['rs']}, {$campi['rf']},
                     {$campi['au']}, {$campi['amm']}, {$campi['esp']}, {$campi['ass']}, NOW(3))");
         if (!$ok) throw new Exception(mysqli_error($conn));
-        $res = sim_esegui($conn, $stagione, $giornata, $squadraG);
+        $res = sim_esegui($conn, $stagione, $giornata, $squadraG, $utente);
         $rilascia();
         api_success(array_merge(["ok" => true, "giornata" => $giornata, "id_giocatore" => $idG], $res));
     }

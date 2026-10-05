@@ -45,7 +45,7 @@ function live_indicizza(array $righe): array
 
 $reali = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno
                                    FROM NEW_RISULTATI WHERE stagione = $stagione AND giornata = $giornata"));
-$sim   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il
+$sim   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il, simulato_da
                                    FROM NEW_SIMULAZIONE_RISULTATI WHERE stagione = $stagione AND giornata = $giornata"));
 
 // Voti provvisori (6) e manuali della simulazione, per squadra
@@ -67,6 +67,9 @@ function live_risultato(?array $r): ?array
         "gols"           => (int) $r["gols"],
         "punti_casa"     => (int) $r["punti"],
         "segno"          => $r["segno"],
+        // Solo per la simulazione: quando e da chi è stata eseguita
+        "calcolato_il"   => $r["calcolato_il"] ?? null,
+        "simulato_da"    => $r["simulato_da"] ?? null,
     ];
 }
 

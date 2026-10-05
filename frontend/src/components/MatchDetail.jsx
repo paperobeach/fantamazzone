@@ -1,4 +1,4 @@
-import { Briefcase } from 'lucide-react'
+import { Briefcase, Clock, Pencil } from 'lucide-react'
 import { RoleBadge } from './ui'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
@@ -20,6 +20,26 @@ export function VotoBox({ voto, totale, giocata }) {
 //  - ID fittizio (ufficio_fittizio): nessun calciatore reale → solo la dicitura "Riserva d'ufficio";
 //  - ID reale (dati storici o ammonito senza voto): nome del calciatore + dicitura.
 export function NomeGiocatore({ g }) {
+  // Simulazione live: 6 provvisorio (partita di Serie A non ancora giocata)
+  // o voto inserito a mano
+  if (g.provvisorio) {
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto 6 provvisorio: la partita di Serie A non è ancora stata giocata">
+        <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden="true" />
+        <span>{g.giocatore}</span>
+        <span className="text-[10px] font-mono uppercase tracking-wide text-sky-400">6 provvisorio</span>
+      </span>
+    )
+  }
+  if (g.manuale) {
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto inserito manualmente">
+        <Pencil className="w-3.5 h-3.5 text-violet-400 shrink-0" aria-hidden="true" />
+        <span>{g.giocatore}</span>
+        <span className="text-[10px] font-mono uppercase tracking-wide text-violet-400">manuale</span>
+      </span>
+    )
+  }
   if (!g.riserva_ufficio) return <span>{g.giocatore}</span>
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto assegnato d'ufficio">
@@ -55,7 +75,7 @@ export function GiocatoriTable({ giocatori }) {
       </thead>
       <tbody>
         {(giocatori ?? []).map((g, i) => (
-          <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : ''}`}>
+          <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : g.provvisorio ? 'bg-sky-400/[0.05]' : g.manuale ? 'bg-violet-400/[0.05]' : ''}`}>
             <td className="px-3 py-2"><RoleBadge ruolo={g.ruolo} /></td>
             <td className="px-3 py-2 text-slate-300 font-medium"><NomeGiocatore g={g} /></td>
             <td className="px-3 py-2 text-center">

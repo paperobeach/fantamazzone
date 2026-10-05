@@ -93,6 +93,38 @@ export const getCalendario = (stagione) => get('calendario.php', { stagione })
 // giornata successiva all'ultima giornata già chiusa della stagione.
 export const getGiornataCorrente = (stagione) => get('giornata_corrente.php', { stagione })
 
+// ── LIVE Giornata in corso ───────────────────────────────────
+// Partite della giornata non ancora chiusa, con risultato "reale"
+// (NEW_RISULTATI, non definitivo) e risultato della "simulazione"
+// (NEW_SIMULAZIONE_RISULTATI).
+export const getLiveGiornata = (stagione) => get('live_giornata.php', { stagione })
+
+// Dettaglio voti di una partita live (id_squadra = squadra di casa);
+// fonte: 'reale' | 'simulazione'
+export const getLiveDettaglio = (stagione, id_squadra, fonte = 'simulazione') =>
+  get('live_dettaglio.php', { stagione, id_squadra, fonte })
+
+// Giocatori in formazione di una squadra con il dato usato dalla simulazione
+export const getLiveGiocatori = (stagione, id_squadra) =>
+  get('live_simulazione.php', { stagione, id_squadra })
+
+// Simulazione libera (nessun ruolo richiesto). Senza id_squadra simula
+// l'intera giornata; con id_squadra (casa o ospite) SOLO quella partita.
+export const simulaGiornata = (stagione, id_squadra) =>
+  post('live_simulazione.php', { stagione, azione: 'simula', ...(id_squadra ? { id_squadra } : {}) })
+
+// Editing manuale di un giocatore la cui partita non si è ancora giocata;
+// il backend ricalcola e salva la sola partita del giocatore
+export const salvaEditLive = (stagione, dati) =>
+  post('live_simulazione.php', { stagione, azione: 'salva_edit', ...dati })
+
+export const eliminaEditLive = (stagione, id_giocatore) =>
+  post('live_simulazione.php', { stagione, azione: 'elimina_edit', id_giocatore })
+
+// Cancella la simulazione di una singola partita (voti, risultati ed editing manuali)
+export const eliminaSimulazionePartita = (stagione, id_squadra) =>
+  post('live_simulazione.php', { stagione, azione: 'elimina_simulazione', id_squadra })
+
 // ── Squadre ──────────────────────────────────────────────────
 
 export const getSquadre = (stagione)      => get('squadre.php', { stagione })

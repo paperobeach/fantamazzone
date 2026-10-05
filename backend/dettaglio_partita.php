@@ -11,10 +11,17 @@
 // Risposta: dettaglio voti giocatori per ogni partita
 // ============================================================
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/lib/StatoGiornata.php";
 
 $stagione    = param_int("stagione");
 $giornata    = param_int("giornata");
 $id_squadra  = param_int("id_squadra", false);
+
+// I dettagli sono visibili solo per le giornate chiuse (la giornata in
+// corso è consultabile da "LIVE Giornata in corso", live_dettaglio.php)
+if (!sg_risultati_pubblici($stagione, $giornata)) {
+    api_success([]);
+}
 
 $where_squadra = $id_squadra !== null
     ? "AND (r.id_squadra = $id_squadra OR r.id_squadra_a = $id_squadra)"

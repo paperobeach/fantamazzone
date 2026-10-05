@@ -4,12 +4,13 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio
 } from 'lucide-react'
 
 const NAV = [
   { to: '/',              icon: Trophy,       label: 'Classifica'    },
   { to: '/calendario',   icon: Calendar,     label: 'Calendario'    },
+  { to: '/live',         icon: Radio,        label: 'LIVE Giornata in corso' },
   { to: '/squadre',      icon: Users,        label: 'Squadre'       },
   { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },

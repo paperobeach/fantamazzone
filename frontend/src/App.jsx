@@ -10,6 +10,7 @@ import { lazy, Suspense, useState } from 'react'
 
 const Classifica  = lazy(() => import('./pages/Classifica'))
 const Calendario  = lazy(() => import('./pages/Calendario'))
+const LiveGiornata = lazy(() => import('./pages/LiveGiornata'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
@@ -84,6 +85,7 @@ function AppShell() {
                 <Routes>
                   <Route path="/"              element={<Classifica />} />
                   <Route path="/calendario"   element={<Calendario />} />
+                  <Route path="/live"         element={<LiveGiornata />} />
                   <Route path="/squadre"      element={<Squadre />} />
                   <Route path="/squadre/:id"  element={<SquadraDetail />} />
                   {/* Pagina "Incontri" rimossa: i dettagli partita sono ora

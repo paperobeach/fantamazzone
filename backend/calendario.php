@@ -4,9 +4,14 @@
 // GET ?stagione=2024
 //
 // Risposta: array di giornate, ciascuna con le partite e
-//           i risultati se già giocata
+//           i risultati SOLO se la giornata è chiusa
+//           (NEW_CALENDARIO_CK.ck_giocata = 'S'); i risultati della
+//           giornata in corso sono nella pagina "LIVE Giornata in
+//           corso" (live_giornata.php). Le stagioni storiche (non
+//           l'ultima) mostrano sempre tutti i risultati.
 // ============================================================
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/lib/StatoGiornata.php";
 
 $stagione = param_int("stagione");
 
@@ -46,6 +51,15 @@ foreach ($risultati_raw as $r) {
     $risultati[$r["giornata"]][$r["id_squadra"]] = $r;
 }
 
+// Giornate chiuse: i risultati sono visibili solo per queste (per le
+// stagioni storiche, non più gestite, sono sempre visibili)
+$stagione_storica = $stagione !== sg_ultima_stagione();
+$chiuse = [];
+foreach (query_all("SELECT giornata FROM NEW_CALENDARIO_CK
+                    WHERE stagione = $stagione AND ck_giocata = 'S'") as $c) {
+    $chiuse[(int)$c["giornata"]] = true;
+}
+
 // Raggruppo il calendario per giornata e accoppio le squadre a 2 a 2
 $giornate = [];
 foreach ($rows as $row) {
@@ -77,9 +91,11 @@ foreach ($rows as $row) {
 // Aggiungo i risultati alle partite
 foreach ($giornate as &$giornata) {
     $g = $giornata["giornata"];
+    $visibile = $stagione_storica || isset($chiuse[(int)$g]);
+    $giornata["chiusa"] = $visibile;
     foreach ($giornata["partite"] as &$partita) {
         $id_casa = $partita["casa"]["id"] ?? null;
-        if ($id_casa && isset($risultati[$g][$id_casa])) {
+        if ($visibile && $id_casa && isset($risultati[$g][$id_casa])) {
             $r = $risultati[$g][$id_casa];
             $partita["risultato"] = [
                 "ftotale_casa"   => (float)$r["ftotale"],

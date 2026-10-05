@@ -182,7 +182,7 @@ function EditorPartita({ stagione, partita, onChanged }) {
 
 // ── Riga partita ────────────────────────────────────────────
 function MatchRow({ partita, stagione, versione, onChanged }) {
-  const { casa, ospite, reale, simulazione } = partita
+  const { casa, ospite, reale, simulazione, provvisori = 0, manuali = 0 } = partita
   const [open, setOpen]     = useState(false)
   const [fonte, setFonte]   = useState(simulazione ? 'simulazione' : 'reale')
   const [editing, setEdit]  = useState(false)
@@ -233,14 +233,32 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
 
         <div className="flex-shrink-0 flex flex-col gap-1.5 items-center">
           <div className="flex items-center gap-2" title="Risultato calcolato (non definitivo)">
-            <span className="text-[9px] font-mono uppercase tracking-wider text-slate-600 w-8 text-right hidden sm:inline">Calc.</span>
+            <span className="flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider text-grass-400">
+              <Radio className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span>
+            </span>
             <Gol r={reale} />
             <span className="hidden sm:inline w-24 text-left"><Punti r={reale} /></span>
           </div>
           <div className="flex items-center gap-2" title="Simulazione con i voti disponibili">
-            <span className="text-[9px] font-mono uppercase tracking-wider text-sky-500 w-8 text-right hidden sm:inline">Sim.</span>
+            <span className="flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider text-sky-400">
+              <Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span>
+            </span>
             <Gol r={simulazione} />
             <span className="hidden sm:inline w-24 text-left"><Punti r={simulazione} /></span>
+            {(provvisori > 0 || manuali > 0) && (
+              <span className="flex items-center gap-1.5 text-[10px] font-mono">
+                {provvisori > 0 && (
+                  <span className="flex items-center gap-0.5 text-sky-400" title={`${provvisori} giocatori con 6 provvisorio`}>
+                    <Clock className="w-3 h-3" aria-hidden="true" />{provvisori}
+                  </span>
+                )}
+                {manuali > 0 && (
+                  <span className="flex items-center gap-0.5 text-violet-400" title={`${manuali} voti inseriti manualmente`}>
+                    <Pencil className="w-3 h-3" aria-hidden="true" />{manuali}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         </div>
 

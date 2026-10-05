@@ -48,6 +48,15 @@ $reali = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, 
 $sim   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il
                                    FROM NEW_SIMULAZIONE_RISULTATI WHERE stagione = $stagione AND giornata = $giornata"));
 
+// Voti provvisori (6) e manuali della simulazione, per squadra
+$flag = [];
+foreach (query_all("SELECT id_squadra, SUM(provvisorio) AS p, SUM(manuale) AS m
+                    FROM NEW_SIMULAZIONE_VOTI
+                    WHERE stagione = $stagione AND giornata = $giornata
+                    GROUP BY id_squadra") as $r) {
+    $flag[(int) $r["id_squadra"]] = ["p" => (int) $r["p"], "m" => (int) $r["m"]];
+}
+
 function live_risultato(?array $r): ?array
 {
     if ($r === null) return null;
@@ -73,6 +82,9 @@ foreach ($partite as $p) {
         "ospite"      => $p["ospite"],
         "reale"       => live_risultato($reali[$idCasa] ?? null),
         "simulazione" => live_risultato($s),
+        // Giocatori con 6 provvisorio / voto manuale nella simulazione (casa + ospite)
+        "provvisori"  => ($flag[$idCasa]["p"] ?? 0) + ($flag[$p["ospite"]["id"]]["p"] ?? 0),
+        "manuali"     => ($flag[$idCasa]["m"] ?? 0) + ($flag[$p["ospite"]["id"]]["m"] ?? 0),
     ];
 }
 

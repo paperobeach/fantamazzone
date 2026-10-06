@@ -1,17 +1,19 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getStatoResetStagione, adminResetStagione } from '../api/client'
 import { PageHeader, Spinner, ErrorState } from '../components/ui'
 import {
-  Trash2, CheckCircle2, XCircle, AlertTriangle, Lock, DatabaseBackup, ArrowRight,
+  Trash2, CheckCircle2, XCircle, AlertTriangle, Lock, DatabaseBackup, ArrowRight, ArchiveRestore,
 } from 'lucide-react'
 
 // ============================================================
 // "Reset stagione" — elimina tutti i dati della stagione corrente per
 // ripartire da zero. Prima della cancellazione il backend salva in
-// tabelle di backup (BK_*) i dati più onerosi da reinserire (squadre e
-// utenze, rose, import Serie A, regole di calcolo, formazioni, ...).
+// tabelle di backup (BK_*) quasi tutta la stagione (squadre e utenze,
+// rose, import Serie A, regole, calendari, formazioni, risultati,
+// classifiche, ...): si ripristina dalla pagina "Ripristino stagione".
 //
 // Operazione distruttiva, quindi tre protezioni:
 //   1. si può resettare solo la stagione più recente (controllo server);
@@ -21,6 +23,14 @@ import {
 // ============================================================
 
 const fmt = (n) => Number(n).toLocaleString('it-IT')
+
+const ETICHETTE_STATO = {
+  RESET_COMPLETATO: 'reset completato',
+  RESET_PARZIALE:   'reset interrotto',
+  RESET_ANNULLATO:  'reset annullato da un ripristino',
+  PRE_RIPRISTINO:   'sicurezza prima di un ripristino',
+  BACKUP_IN_CORSO:  'backup incompleto',
+}
 
 function ElencoTabelle({ titolo, descrizione, righe }) {
   const visibili = righe.filter(t => t.presente && t.righe > 0)
@@ -107,7 +117,7 @@ export default function ResetStagione() {
   }
 
   const gruppoBackup   = stato?.tabelle.filter(t => t.gruppo === 'backup')   ?? []
-  const gruppoDerivati = stato?.tabelle.filter(t => t.gruppo === 'derivati') ?? []
+  const gruppoNonSalvate = stato?.tabelle.filter(t => t.gruppo === 'non_salvate') ?? []
   const completato     = risultato?.ok === true
 
   return (
@@ -143,10 +153,17 @@ export default function ResetStagione() {
           <p className="text-xs text-slate-500 mb-4">
             La stagione non compare più nell'elenco. Per ripartire usa "Inizializzazione stagione":
             indicando l'anno, la tabella viene precompilata con i dati dell'ultima stagione disponibile.
+            Per tornare indietro usa "Ripristino stagione".
           </p>
-          <button type="button" onClick={vaiAInizializzazione} className="btn-primary">
-            Vai a Inizializzazione stagione <ArrowRight className="w-4 h-4" />
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={vaiAInizializzazione} className="btn-primary">
+              Vai a Inizializzazione stagione <ArrowRight className="w-4 h-4" />
+            </button>
+            <Link to="/ripristino-stagione" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg
+                  border border-white/10 text-slate-300 hover:bg-white/5 text-sm transition-colors">
+              <ArchiveRestore className="w-4 h-4" /> Ripristino stagione
+            </Link>
+          </div>
         </div>
       ) : stato && (
         <div className="space-y-6 max-w-3xl">
@@ -171,13 +188,13 @@ export default function ResetStagione() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <ElencoTabelle
                     titolo="Salvati nel backup, poi cancellati"
-                    descrizione="Dati inseriti dagli utenti: restano consultabili nelle tabelle BK_*."
+                    descrizione="Quasi tutta la stagione: si rimette com'era da Ripristino stagione."
                     righe={gruppoBackup}
                   />
                   <ElencoTabelle
-                    titolo="Cancellati"
-                    descrizione="Dati calcolati o rigenerabili (voti, risultati, classifiche, calendari...)."
-                    righe={gruppoDerivati}
+                    titolo="Solo cancellati"
+                    descrizione="Dati temporanei o di log: simulazioni LIVE e registro accessi."
+                    righe={gruppoNonSalvate}
                   />
                 </div>
 
@@ -201,8 +218,7 @@ export default function ResetStagione() {
                       <li key={b.bk_id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
                         <span className="text-slate-300">n. {b.bk_id} — {b.creato_il}{b.creato_da ? ` (${b.creato_da})` : ''}</span>
                         <span className="text-xs text-slate-500">
-                          {b.stato === 'RESET_COMPLETATO' ? 'reset completato'
-                            : b.stato === 'RESET_PARZIALE' ? 'reset interrotto' : 'backup incompleto'}
+                          {ETICHETTE_STATO[b.stato] ?? b.stato}
                           {b.righe_backup > 0 && ` · ${fmt(b.righe_backup)} righe`}
                         </span>
                       </li>

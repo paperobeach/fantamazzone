@@ -207,6 +207,24 @@ export const getStatoResetStagione = (stagione) =>
 export const adminResetStagione = (stagione, { utenza, password, conferma }) =>
   post('admin/reset_stagione.php', { stagione, utenza, password, conferma })
 
+// ── Ripristino stagione (admin/ripristino_stagione.php) ───────
+// GET            → elenco backup (tutte le stagioni) con stato, righe salvate,
+//                  se ripristinabili e perché no.
+// GET ?bk_id=N   → dettaglio: righe nel backup vs righe attuali per tabella,
+//                  avvisi, motivi di blocco, frase di conferma.
+// POST           → Body { bk_id, utenza, password, conferma }: credenziali di un
+//                  amministratore (verificate lato server) e frase "RIPRISTINA <stagione>".
+//                  Se la stagione contiene già dati, li salva prima in un backup
+//                  di sicurezza (annullabile) e li sostituisce con quelli del backup.
+export const getBackupStagioni = () =>
+  get('admin/ripristino_stagione.php')
+
+export const getDettaglioBackup = (bk_id) =>
+  get('admin/ripristino_stagione.php', { bk_id })
+
+export const adminRipristinaStagione = (bk_id, { utenza, password, conferma }) =>
+  post('admin/ripristino_stagione.php', { bk_id, utenza, password, conferma })
+
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
 //        Allenatori + Utenze). Se la stagione non ha ancora dati,

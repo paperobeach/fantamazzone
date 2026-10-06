@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore
 } from 'lucide-react'
 
 const NAV = [
@@ -33,6 +33,7 @@ const ADMIN_NAV = [
   { to: '/riapertura-giornata',          icon: RotateCcw, label: 'Riapri giornata' },
   { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
   { to: '/reset-stagione',              icon: Eraser,    label: 'Reset stagione' },
+  { to: '/ripristino-stagione',         icon: ArchiveRestore, label: 'Ripristino stagione' },
 ]
 
 export default function Sidebar({ open = false, onClose = () => {} }) {

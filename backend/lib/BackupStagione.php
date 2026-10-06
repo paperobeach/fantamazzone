@@ -467,14 +467,26 @@ function bks_ripristina_tabella($conn, string $tab, int $bkId, int $stagione, ?a
  * L'utenza è un amministratore della stagione? Si cerca in NEW_UTENZE
  * e, se la stagione è stata già svuotata da un reset, anche nel backup
  * indicato (bk_id) o, in mancanza, nell'ultimo reset interrotto.
+ * Con $ammettiUltimaStagione vale anche un amministratore dell'ultima
+ * stagione presente (usato per l'eliminazione dei backup).
  */
-function bks_verifica_admin($conn, int $stagione, string $utenza, string $password, ?int $bkId = null): bool
+function bks_verifica_admin($conn, int $stagione, string $utenza, string $password, ?int $bkId = null,
+                            bool $ammettiUltimaStagione = false): bool
 {
     if ($utenza === "" || $password === "") return false;
     $esc = mysqli_real_escape_string($conn, $utenza);
 
     $candidati = query_all("SELECT PASSWORD, amministratore FROM NEW_UTENZE
                             WHERE stagione = $stagione AND utenza = '$esc'");
+
+    // Stagione svuotata e backup non più utilizzabile per le credenziali
+    // (es. eliminazione di un backup interrotta a metà): vale anche un
+    // amministratore dell'ultima stagione presente.
+    if ($ammettiUltimaStagione && ($ultima = bks_ultima_stagione()) !== null && $ultima !== $stagione) {
+        $candidati = array_merge($candidati, query_all(
+            "SELECT PASSWORD, amministratore FROM NEW_UTENZE
+             WHERE stagione = $ultima AND utenza = '$esc'"));
+    }
 
     if ($bkId === null && bks_tabella_esiste(BKS_REGISTRO)) {
         $p = query_one("SELECT bk_id FROM " . BKS_REGISTRO . "

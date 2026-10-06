@@ -30,7 +30,23 @@
 //           ognuna verificata (righe inserite = righe del backup),
 //           NEW_SQUADRE per ultima.
 //
-// BLOCCHI
+// POST { azione: "elimina", bk_ids: [3, 5], utenza, password, conferma, accetta_perdita? }
+//      Elimina definitivamente uno o più backup (righe nelle BK_* e voce
+//      di registro) per liberare spazio.
+//      - conferma: "ELIMINA <n> BACKUP", con n = numero di backup indicati.
+//      - utenza/password: amministratore, verificato lato server per ogni
+//        stagione coinvolta.
+//      - Un backup in stato RESET_PARZIALE non si elimina: serve per
+//        completare il reset interrotto.
+//      - Se l'eliminazione toglie l'ULTIMA copia ripristinabile di una
+//        stagione che oggi non ha più dati, i dati andrebbero persi per
+//        sempre: serve accetta_perdita = true.
+//      - Ogni backup viene prima marcato BACKUP_IN_CORSO (quindi non
+//        ripristinabile) e poi svuotato: se la cancellazione si interrompe
+//        resta un backup "incompleto" che si può eliminare di nuovo.
+//      Risposta: { ok, eliminati: [{bk_id, stagione, righe}], errori: [{bk_id, errore}], avvisi }
+//
+// BLOCCHI (ripristino)
 //   - backup non completo (BACKUP_IN_CORSO) o vuoto;
 //   - esistono stagioni più recenti: si ripristina solo la più recente;
 //   - le righe di una BK_* non corrispondono a quanto registrato al
@@ -127,6 +143,41 @@ function ripr_analizza(array $bk): array
     ];
 }
 
+/**
+ * Analisi dell'eliminazione di un gruppo di backup (righe di bks_leggi_backup()).
+ * @return array [bloccati: [{bk_id, motivo}], perdite: [stagioni che resterebbero senza dati né backup]]
+ */
+function ripr_analizza_eliminazione(array $bks): array
+{
+    $bloccati = [];
+    $perStag  = [];
+    foreach ($bks as $b) {
+        if ($b["stato"] === "RESET_PARZIALE") {
+            $bloccati[] = ["bk_id" => $b["bk_id"],
+                           "motivo" => "il backup n. " . $b["bk_id"] . " serve per completare un reset interrotto"];
+            continue;
+        }
+        $perStag[$b["stagione"]][] = $b;
+    }
+
+    $stati = "'" . implode("','", bks_stati_ripristinabili()) . "'";
+    $perdite = [];
+    foreach ($perStag as $stagione => $elenco) {
+        $tocca = false;
+        $ids   = [];
+        foreach ($elenco as $b) {
+            $ids[] = $b["bk_id"];
+            if (in_array($b["stato"], bks_stati_ripristinabili(), true)) $tocca = true;
+        }
+        if (!$tocca || bks_righe_totali((int) $stagione) > 0) continue;
+        $r = query_one("SELECT COUNT(*) AS n FROM " . BKS_REGISTRO . "
+                        WHERE stagione = $stagione AND stato IN ($stati)
+                          AND bk_id NOT IN (" . implode(",", $ids) . ")");
+        if ((int) ($r["n"] ?? 0) === 0) $perdite[] = (int) $stagione;
+    }
+    return [$bloccati, $perdite];
+}
+
 /** Dati comuni di un backup per l'elenco/dettaglio. */
 function ripr_scheda(array $bk): array
 {
@@ -161,7 +212,18 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
     $out = [];
     if (bks_tabella_esiste(BKS_REGISTRO)) {
         $ultima = bks_ultima_stagione();
-        $ids = query_all("SELECT bk_id FROM " . BKS_REGISTRO . " ORDER BY bk_id DESC LIMIT 50");
+
+        // Backup ripristinabili per stagione e stagioni oggi senza dati: servono a
+        // riconoscere l'"ultima copia" (eliminarla farebbe perdere i dati per sempre)
+        $stati = "'" . implode("','", bks_stati_ripristinabili()) . "'";
+        $nRip = [];
+        foreach (query_all("SELECT stagione, COUNT(*) AS n FROM " . BKS_REGISTRO . "
+                            WHERE stato IN ($stati) GROUP BY stagione") as $r) {
+            $nRip[(int) $r["stagione"]] = (int) $r["n"];
+        }
+        $vuota = [];
+
+        $ids = query_all("SELECT bk_id FROM " . BKS_REGISTRO . " ORDER BY bk_id DESC LIMIT 200");
         foreach ($ids as $i) {
             $bk = bks_leggi_backup((int) $i["bk_id"]);
             $s  = ripr_scheda($bk);
@@ -175,6 +237,15 @@ if ($_SERVER["REQUEST_METHOD"] === "GET") {
             }
             $s["ripristinabile"] = $motivo === null;
             $s["motivo_blocco"]  = $motivo;
+
+            $s["eliminabile"] = $bk["stato"] !== "RESET_PARZIALE";
+            $s["motivo_eliminazione"] = $s["eliminabile"] ? null
+                : "serve per completare un reset interrotto";
+            $st = $bk["stagione"];
+            if (!isset($vuota[$st])) $vuota[$st] = bks_righe_totali($st) === 0;
+            $s["stagione_vuota"] = $vuota[$st];
+            $s["ultima_copia"] = in_array($bk["stato"], bks_stati_ripristinabili(), true)
+                && ($nRip[$st] ?? 0) === 1 && $vuota[$st];
             $out[] = $s;
         }
     }
@@ -193,6 +264,103 @@ $bkId     = (int) ($input["bk_id"] ?? 0);
 $utenza   = trim((string) ($input["utenza"] ?? ""));
 $password = (string) ($input["password"] ?? "");
 $conferma = strtoupper(trim((string) ($input["conferma"] ?? "")));
+
+// ============================================================
+// POST azione "elimina" - cancellazione di uno o più backup
+// ============================================================
+if (($input["azione"] ?? "ripristina") === "elimina") {
+    $ids = [];
+    foreach ((array) ($input["bk_ids"] ?? []) as $i) {
+        if ((int) $i > 0) $ids[(int) $i] = (int) $i;
+    }
+    $ids = array_values($ids);
+    if (count($ids) === 0)   api_error("Indicare almeno un backup da eliminare (bk_ids)", 400);
+    if (count($ids) > 200)   api_error("Troppi backup in una volta (massimo 200)", 400);
+    if ($conferma !== "ELIMINA " . count($ids) . " BACKUP") {
+        api_error("Frase di conferma errata: digitare esattamente \"ELIMINA " . count($ids) . " BACKUP\"", 400);
+    }
+
+    $bks = [];
+    $perStagione = [];
+    foreach ($ids as $i) {
+        $b = bks_leggi_backup($i);
+        if (!$b) api_error("Backup n. $i non trovato", 404);
+        $bks[] = $b;
+        $perStagione[$b["stagione"]][] = $i;
+    }
+
+    // Credenziali: amministratore di ogni stagione coinvolta
+    foreach ($perStagione as $st => $idsSt) {
+        $ok = false;
+        foreach ($idsSt as $i) {
+            if (bks_verifica_admin($conn, (int) $st, $utenza, $password, $i, true)) { $ok = true; break; }
+        }
+        if (!$ok) api_error("Credenziali amministratore non valide", 403);
+    }
+
+    // Lock di tutte le stagioni coinvolte
+    $rilasci = [];
+    $rilasciaTutti = function () use (&$rilasci) { foreach ($rilasci as $r) $r(); };
+    foreach (array_keys($perStagione) as $st) {
+        $r = bks_prendi_lock($conn, (int) $st);
+        if ($r === null) {
+            $rilasciaTutti();
+            api_error("Un'altra operazione sulla stagione $st è già in corso", 409);
+        }
+        $rilasci[] = $r;
+    }
+
+    // Controlli rivalutati DENTRO il lock
+    [$bloccati, $perdite] = ripr_analizza_eliminazione($bks);
+    if ($bloccati) {
+        $rilasciaTutti();
+        api_error(implode(". ", array_column($bloccati, "motivo")), 409);
+    }
+    if ($perdite && empty($input["accetta_perdita"])) {
+        $rilasciaTutti();
+        api_error("L'eliminazione toglierebbe l'ultima copia dei dati della stagione "
+                . implode(", ", $perdite) . ", che oggi non ha più dati: andrebbero persi per sempre. "
+                . "Confermare esplicitamente la perdita dei dati.", 409);
+    }
+
+    ignore_user_abort(true);
+    @set_time_limit(300);
+
+    $eliminati = [];
+    $errori    = [];
+    foreach ($bks as $b) {
+        $id = $b["bk_id"];
+        try {
+            // Da qui il backup non è più ripristinabile: se la cancellazione si
+            // interrompe resta "incompleto" e si può eliminare di nuovo
+            bks_imposta_stato($conn, $id, "BACKUP_IN_CORSO");
+            $righe = 0;
+            // BK_NEW_UTENZE per ultima: finché esiste, le credenziali dell'admin
+            // restano verificabili e un'eliminazione interrotta si può rilanciare
+            $tabs = array_keys(bks_tabelle_backup());
+            $tabs = array_merge(array_diff($tabs, ["NEW_UTENZE"]), ["NEW_UTENZE"]);
+            foreach ($tabs as $tab) {
+                $bkTab = BKS_PREFISSO . $tab;
+                if (!bks_tabella_esiste($bkTab)) continue;
+                bks_esegui($conn, "DELETE FROM `$bkTab` WHERE bk_id = $id");
+                $righe += (int) mysqli_affected_rows($conn);
+            }
+            bks_esegui($conn, "DELETE FROM " . BKS_REGISTRO . " WHERE bk_id = $id");
+            $eliminati[] = ["bk_id" => $id, "stagione" => $b["stagione"], "righe" => $righe];
+        } catch (Throwable $e) {
+            $errori[] = ["bk_id" => $id, "errore" => $e->getMessage()];
+        }
+    }
+    $rilasciaTutti();
+
+    api_success([
+        "ok"        => count($errori) === 0,
+        "eliminati" => $eliminati,
+        "errori"    => $errori,
+        "avvisi"    => ($perdite && !$errori)
+            ? ["Dati della stagione " . implode(", ", $perdite) . " eliminati definitivamente"] : [],
+    ]);
+}
 
 if ($bkId <= 0) api_error("Parametro 'bk_id' obbligatorio", 400);
 $bk = bks_leggi_backup($bkId);

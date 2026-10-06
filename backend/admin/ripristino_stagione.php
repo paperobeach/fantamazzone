@@ -199,7 +199,7 @@ function ripr_scheda(array $bk): array
 // GET
 // ============================================================
 if ($_SERVER["REQUEST_METHOD"] === "GET") {
-    $bkId = param_int("bk_id");
+    $bkId = param_int("bk_id", false);   // facoltativo: assente = elenco, presente = dettaglio
 
     // ---- dettaglio ----
     if ($bkId) {

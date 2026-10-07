@@ -1,0 +1,37 @@
+# ============================================================
+# .htaccess — cartella /nuovo/ (dove sta index.html di React)
+# Vite lo copia da public/ a dist/ e il deploy FTP lo carica
+# insieme al resto dell'app.
+# Permette il refresh (F5) e l'apertura diretta di qualsiasi
+# URL del sito (es. /nuovo/calendario, /nuovo/squadre/3):
+# le richieste che non corrispondono a un file reale vengono
+# servite da index.html e il routing lo gestisce React Router.
+# ============================================================
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Deve coincidere con "base" in vite.config.js
+    RewriteBase /nuovo/
+
+    # Non riscrivere index.html stesso (evita loop)
+    RewriteRule ^index\.html$ - [L]
+
+    # Non riscrivere file e cartelle che esistono fisicamente
+    # (js, css, logos, ecc.)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    # Tutto il resto -> index.html
+    RewriteRule . /nuovo/index.html [L]
+</IfModule>
+
+# index.html non deve essere messo in cache, così dopo ogni
+# deploy gli utenti ricevono subito i nuovi file JS/CSS
+<IfModule mod_headers.c>
+    <FilesMatch "\.html$">
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+    </FilesMatch>
+</IfModule>

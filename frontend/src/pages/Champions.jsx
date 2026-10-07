@@ -1,7 +1,7 @@
 // ── Champions ──────────────────────────────────────────────────────────────
 // Struttura della coppa:
 //   Fase 1 · due gironi da 4 squadre, andata e ritorno
-//   Fase 2 · due gironi da 3 squadre (via le ultime della fase 1)
+//   Fase 2 · due gironi da 3 squadre, 4 turni (via le ultime della fase 1)
 //   Fase finale · semifinali A/R (1A-2B, 1B-2A), finale con replay,
 //                 supplementari e calci di rigore in caso di parità
 import { useState } from 'react'
@@ -18,7 +18,7 @@ const FASI = [
 ]
 
 // ── Fase 1 ────────────────────────────────────────────────────────────────
-function ClassificaGirone({ squadre }) {
+function ClassificaGirone({ squadre, qualificano }) {
   return (
     <div className="overflow-x-auto">
       <table className="fanta-table min-w-[420px]">
@@ -36,9 +36,9 @@ function ClassificaGirone({ squadre }) {
         </thead>
         <tbody>
           {squadre.map((sq, i) => {
-            const qualificata = i < 3          // l'ultima viene eliminata
+            const qualificata = i < qualificano
             return (
-              <tr key={sq.id_squadra} className={i === 3 ? 'opacity-60' : ''}>
+              <tr key={sq.id_squadra} className={qualificata ? '' : 'opacity-60'}>
                 <td className="px-4 py-2.5 text-slate-600 font-mono text-xs">
                   <span className={qualificata ? 'text-grass-400' : 'text-red-400'}>{i + 1}</span>
                 </td>
@@ -94,33 +94,37 @@ function Partita({ p }) {
 }
 
 function CalendarioGirone({ turni }) {
-  // andata = prima metà dei turni, ritorno = seconda metà
-  const meta = Math.ceil(turni.length / 2)
   return (
     <div>
-      {turni.map((t, idx) => (
+      {turni.map(t => (
         <div key={`${t.giornata_camp}-${t.giornata}`} className="border-t border-white/5">
           <div className="px-4 py-1.5 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 flex justify-between">
-            <span>Turno {t.giornata_camp} · {idx < meta ? 'andata' : 'ritorno'}</span>
+            <span>{t.label}</span>
             <span>Giornata {t.giornata}</span>
           </div>
           {t.partite.map((p, i) => <Partita key={i} p={p} />)}
+          {t.riposa?.map(r => (
+            <div key={r.id} className="px-4 py-1.5 text-xs text-slate-600 text-center">
+              Riposa: {r.nome}
+            </div>
+          ))}
         </div>
       ))}
     </div>
   )
 }
 
-function Fase1({ stagione }) {
+// Fase a gironi (fase1 / fase2): stessa struttura, cambia la sezione richiesta.
+function FaseGironi({ stagione, sezione, vuoto, nota }) {
   const { data, loading, error, refetch } = useFetch(
-    () => getChampions(stagione, 'fase1'),
-    [stagione]
+    () => getChampions(stagione, sezione),
+    [stagione, sezione]
   )
   const gironi = Array.isArray(data) ? data : []
 
   if (loading) return <LoadingState />
   if (error) return <ErrorState message={error} onRetry={refetch} />
-  if (!gironi.length) return <EmptyState label="Nessun girone della prima fase per questa stagione" />
+  if (!gironi.length) return <EmptyState label={vuoto} />
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -129,54 +133,100 @@ function Fase1({ stagione }) {
           <div className="px-4 py-3 border-b border-white/5">
             <h3 className="font-semibold text-slate-300">Girone {g.girone}</h3>
           </div>
-          <ClassificaGirone squadre={g.squadre} />
+          <ClassificaGirone squadre={g.squadre} qualificano={g.qualificano} />
           <CalendarioGirone turni={g.turni} />
         </div>
       ))}
       <p className="text-xs text-slate-600 lg:col-span-2">
-        Le prime tre di ogni girone accedono alla Fase 2; l'ultima classificata è eliminata.
-        Parità in classifica: differenza reti, gol fatti, fantapunti totali.
+        {nota} Parità in classifica: differenza reti, gol fatti, fantapunti totali.
       </p>
     </div>
   )
 }
 
-// ── Fase 2 e finale (dati non ancora collegati) ───────────────────────────
-function Segnaposto({ titolo, righe }) {
+// ── Fase finale ───────────────────────────────────────────────────────────
+function Semifinale({ t }) {
+  const [a, b] = t.aggregato
   return (
-    <div className="card p-5 space-y-2">
-      <h3 className="font-semibold text-slate-300">{titolo}</h3>
-      <ul className="text-sm text-slate-400 space-y-1 list-disc pl-5">
-        {righe.map((r, i) => <li key={i}>{r}</li>)}
-      </ul>
-      <p className="text-xs text-slate-600 pt-2">Dati di questa fase non ancora disponibili.</p>
+    <div className="card overflow-hidden">
+      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500">Andata</div>
+      {t.andata && <Partita p={t.andata} />}
+      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 border-t border-white/5">Ritorno</div>
+      {t.ritorno ? <Partita p={t.ritorno} /> : <p className="px-4 py-2.5 text-xs text-slate-600 text-center">Da definire</p>}
+      {t.completa && a && b && (
+        <div className="px-4 py-2.5 border-t border-white/5 text-center text-sm">
+          <span className="text-slate-500">Aggregato </span>
+          <span className="font-bold text-white text-display">{a.golf} - {b.golf}</span>
+          {t.vincente
+            ? <span className="text-grass-400"> · passa {t.vincente.nome}</span>
+            : <span className="text-amber-400"> · parità</span>}
+        </div>
+      )}
     </div>
   )
 }
 
-function Fase2() {
+function PartitaFinale({ titolo, p }) {
+  if (!p) return null
   return (
-    <Segnaposto
-      titolo="Fase 2 · Gironi"
-      righe={[
-        'Due gironi da 3 squadre ciascuno.',
-        "Accedono le prime tre classificate di ciascun girone della Fase 1.",
-        'Le prime due di ogni girone passano alla fase finale.',
-      ]}
-    />
+    <div className="card overflow-hidden">
+      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 flex justify-between">
+        <span>{titolo}</span>
+        {p.giornata && <span>Giornata {p.giornata}</span>}
+      </div>
+      <Partita p={p} />
+    </div>
   )
 }
 
-function FaseFinale() {
+function FaseFinale({ stagione }) {
+  const { data, loading, error, refetch } = useFetch(
+    () => getChampions(stagione, 'finale'),
+    [stagione]
+  )
+  if (loading) return <LoadingState />
+  if (error) return <ErrorState message={error} onRetry={refetch} />
+  if (!data || (!data.semifinali?.length && !data.finale)) {
+    return <EmptyState label="Fase finale non ancora definita per questa stagione" />
+  }
+
   return (
-    <Segnaposto
-      titolo="Fase finale"
-      righe={[
-        'Semifinali di andata e ritorno: 1ª girone A vs 2ª girone B e 1ª girone B vs 2ª girone A.',
-        'Finale in gara unica.',
-        'In caso di parità: replay della finale; se ancora pari, supplementari e calci di rigore.',
-      ]}
-    />
+    <div className="space-y-6">
+      {data.campione && (
+        <div className="card p-5 flex items-center gap-4 border border-grass-500/40">
+          <TeamLogo logo={data.campione.logo} nome={data.campione.nome} size="lg" />
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-slate-500">Vincitore Champions</div>
+            <div className="text-xl font-bold text-white text-display">{data.campione.nome}</div>
+          </div>
+        </div>
+      )}
+
+      {data.semifinali?.length > 0 && (
+        <section>
+          <h3 className="font-semibold text-slate-300 mb-3">Semifinali</h3>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {data.semifinali.map((t, i) => <Semifinale key={i} t={t} />)}
+          </div>
+        </section>
+      )}
+
+      {data.finale && (
+        <section>
+          <h3 className="font-semibold text-slate-300 mb-3">Finale</h3>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PartitaFinale titolo="Finale" p={data.finale} />
+            <PartitaFinale titolo="Replay" p={data.replay} />
+          </div>
+          {data.nota && <p className="text-sm text-amber-400 mt-3">{data.nota}</p>}
+        </section>
+      )}
+
+      <p className="text-xs text-slate-600">
+        Semifinali andata e ritorno (1ª girone A vs 2ª girone B, 1ª girone B vs 2ª girone A). In caso di parità
+        nella finale si gioca il replay; se persiste, supplementari e calci di rigore.
+      </p>
+    </div>
   )
 }
 
@@ -216,9 +266,17 @@ export default function Champions() {
         ))}
       </div>
 
-      {fase === 'fase1' && <Fase1 stagione={stagione} />}
-      {fase === 'fase2' && <Fase2 />}
-      {fase === 'finale' && <FaseFinale />}
+      {fase === 'fase1' && (
+        <FaseGironi stagione={stagione} sezione="fase1"
+          vuoto="Nessun girone della prima fase per questa stagione"
+          nota="Le prime tre di ogni girone accedono alla Fase 2; l'ultima classificata è eliminata." />
+      )}
+      {fase === 'fase2' && (
+        <FaseGironi stagione={stagione} sezione="fase2"
+          vuoto="Nessun girone della seconda fase per questa stagione"
+          nota="Le prime due di ogni girone accedono alle semifinali; la terza è eliminata." />
+      )}
+      {fase === 'finale' && <FaseFinale stagione={stagione} />}
 
       <Note stagione={stagione} />
     </div>

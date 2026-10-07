@@ -141,9 +141,9 @@ function RigaEdit({ g, stagione, onChanged }) {
   )
 }
 
-function EditorSquadra({ stagione, squadra, onChanged }) {
+function EditorSquadra({ stagione, squadra, onChanged, competizione = 'CAMP' }) {
   const { data, loading, error, refetch } = useFetch(
-    () => getLiveGiocatori(Number(stagione), squadra.id), [stagione, squadra.id])
+    () => getLiveGiocatori(Number(stagione), squadra.id, competizione), [stagione, squadra.id, competizione])
 
   if (loading && !data) return <div className="py-6 text-center"><Spinner /></div>
   if (error) return <p className="px-3 py-4 text-xs text-red-400">{error}</p>
@@ -173,7 +173,7 @@ function EditorSquadra({ stagione, squadra, onChanged }) {
   )
 }
 
-function EditorPartita({ stagione, partita, onChanged }) {
+function EditorPartita({ stagione, partita, onChanged, competizione = 'CAMP' }) {
   const [lato, setLato] = useState('casa')
   const sq = partita[lato]
   return (
@@ -188,15 +188,15 @@ function EditorPartita({ stagione, partita, onChanged }) {
           </button>
         ))}
       </div>
-      <EditorSquadra key={sq.id} stagione={stagione} squadra={sq} onChanged={onChanged} />
+      <EditorSquadra key={`${competizione}-${sq.id}`} stagione={stagione} squadra={sq} onChanged={onChanged} competizione={competizione} />
     </div>
   )
 }
 
 // ── Riga partita ────────────────────────────────────────────
-function MatchRow({ partita, stagione, versione, onChanged }) {
+function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP' }) {
   const { utente } = useApp()
-  const { casa, ospite, fonte, risultato, simulazione, provvisori = 0, manuali = 0 } = partita
+  const { casa, ospite, fonte, risultato, simulazione, provvisori = 0, manuali = 0, formazione_distinta } = partita
   const [open, setOpen]     = useState(false)
   const [editing, setEdit]  = useState(false)
   const [busy, setBusy]    = useState(false)
@@ -206,8 +206,8 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
 
   // Rappresentazione unica: il backend sceglie NEW_RISULTATI se presente, altrimenti la simulazione
   const { data: det, loading, error } = useFetch(
-    () => (open && fonte) ? getLiveDettaglio(Number(stagione), casa.id, 'auto') : Promise.resolve(null),
-    [open, fonte, stagione, casa.id, versione]
+    () => (open && fonte) ? getLiveDettaglio(Number(stagione), casa.id, 'auto', competizione) : Promise.resolve(null),
+    [open, fonte, stagione, casa.id, versione, competizione]
   )
 
   const stop = (e) => e.stopPropagation()
@@ -226,11 +226,11 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
     }
   }
   const simulaQui = () => esegui(
-    () => simulaGiornata(Number(stagione), casa.id, nomeUtente(utente)),
+    () => simulaGiornata(Number(stagione), casa.id, nomeUtente(utente), competizione),
     (r) => r.partite_elaborate > 0 ? 'Partita simulata e salvata' : (r.partite_saltate?.[0] ?? 'Nessuna partita elaborata'))
   const eliminaQui = () => {
     if (!window.confirm(`Cancellare la simulazione di ${casa.nome} - ${ospite.nome}?\nVerranno rimossi anche i voti inseriti manualmente per questa partita.`)) return
-    esegui(() => eliminaSimulazionePartita(Number(stagione), casa.id),
+    esegui(() => eliminaSimulazionePartita(Number(stagione), casa.id, competizione),
       (r) => `Simulazione cancellata${r.edit_rimossi ? ` (${r.edit_rimossi} voti manuali rimossi)` : ''}`)
   }
 
@@ -327,10 +327,17 @@ function MatchRow({ partita, stagione, versione, onChanged }) {
           {msg && (
             <p className={`px-4 pb-2 text-xs ${msg.tipo === 'ok' ? 'text-green-400' : 'text-red-400'}`}>{msg.testo}</p>
           )}
+          {competizione === 'CHAMP' && (formazione_distinta?.casa || formazione_distinta?.ospite) && (
+            <p className="px-4 pb-2 text-[11px] text-slate-500">
+              Formazione Champions distinta:{' '}
+              {[formazione_distinta.casa && casa.nome, formazione_distinta.ospite && ospite.nome].filter(Boolean).join(', ')}
+              {' '}(le altre squadre schierano la formazione di campionato).
+            </p>
+          )}
           {fonte
             ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} loading={loading} error={error} />
             : <p className="px-4 py-6 text-center text-xs text-slate-600">Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".</p>}
-          {!isReale && editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} />}
+          {!isReale && editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} competizione={competizione} />}
         </>
       )}
     </div>
@@ -366,7 +373,7 @@ export default function LiveGiornata() {
   if (error) return <ErrorState message={error} onRetry={refetch} />
   if (!data) return null
 
-  const { stato, partite } = data
+  const { stato, partite, champions } = data
 
   if (!stato.in_corso) {
     return (
@@ -397,7 +404,8 @@ export default function LiveGiornata() {
       {esito && (
         <div className="card p-3 mb-4 text-xs text-slate-400">
           <p className="flex items-center gap-2 text-green-400">
-            <CheckCircle2 className="w-4 h-4" /> Simulazione completata: {esito.partite_elaborate} partite
+            <CheckCircle2 className="w-4 h-4" /> Simulazione completata: {esito.partite_elaborate} partite di campionato
+            {esito.champions_elaborate > 0 && ` e ${esito.champions_elaborate} di Champions`}
             {esito.provvisori > 0 && `, ${esito.provvisori} voti provvisori`}
             {esito.manuali > 0 && `, ${esito.manuali} manuali`}.
           </p>
@@ -431,6 +439,34 @@ export default function LiveGiornata() {
                 versione={versione} onChanged={aggiorna} />
             ))}
       </div>
+
+      {/* Turno di Champions della giornata: stesse funzioni del campionato */}
+      {champions?.partite?.length > 0 && (
+        <div className="card overflow-hidden mt-6">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h2 className="text-sm font-semibold text-slate-300">Champions — Giornata {stato.giornata}</h2>
+            {champions.turno && <p className="text-[11px] text-slate-500 mt-0.5">{champions.turno}</p>}
+          </div>
+          {[...new Set(champions.partite.map(p => p.girone))].map(girone => (
+            <div key={girone || '_'}>
+              {girone && (
+                <div className="px-4 py-1.5 bg-white/[0.02] text-[10px] font-mono uppercase tracking-widest text-slate-500">
+                  Girone {girone}
+                </div>
+              )}
+              {champions.partite.filter(p => p.girone === girone).map(p => (
+                <MatchRow key={`champ-${p.casa.id}`} partita={p} stagione={stagione}
+                  versione={versione} onChanged={aggiorna} competizione="CHAMP" />
+              ))}
+            </div>
+          ))}
+          {champions.riposa?.length > 0 && (
+            <p className="px-4 py-2 border-t border-white/5 text-[11px] text-slate-600">
+              Riposa: {champions.riposa.map(r => `${r.nome}${r.girone ? ` (girone ${r.girone})` : ''}`).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }

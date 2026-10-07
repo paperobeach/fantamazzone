@@ -99,19 +99,28 @@ export const getGiornataCorrente = (stagione) => get('giornata_corrente.php', { 
 // (NEW_SIMULAZIONE_RISULTATI).
 export const getLiveGiornata = (stagione) => get('live_giornata.php', { stagione })
 
+// La risposta contiene anche "champions" (partite del turno di Champions della
+// giornata, stessa struttura di "partite" + girone), se la giornata ne prevede uno.
+//
 // Dettaglio voti di una partita live (id_squadra = squadra di casa);
 // fonte: 'auto' (default: NEW_RISULTATI se presente, altrimenti simulazione) | 'reale' | 'simulazione'
-export const getLiveDettaglio = (stagione, id_squadra, fonte = 'auto') =>
-  get('live_dettaglio.php', { stagione, id_squadra, fonte })
+// competizione: 'CAMP' (default) | 'CHAMP' (partita di Champions)
+export const getLiveDettaglio = (stagione, id_squadra, fonte = 'auto', competizione = 'CAMP') =>
+  get('live_dettaglio.php', { stagione, id_squadra, fonte, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
 // Giocatori in formazione di una squadra con il dato usato dalla simulazione
-export const getLiveGiocatori = (stagione, id_squadra) =>
-  get('live_simulazione.php', { stagione, id_squadra })
+// (competizione 'CHAMP': formazione effettiva di Champions)
+export const getLiveGiocatori = (stagione, id_squadra, competizione = 'CAMP') =>
+  get('live_simulazione.php', { stagione, id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
 // Simulazione libera (nessun ruolo richiesto). Senza id_squadra simula
-// l'intera giornata; con id_squadra (casa o ospite) SOLO quella partita.
-export const simulaGiornata = (stagione, id_squadra, utente) =>
-  post('live_simulazione.php', { stagione, azione: 'simula', utente, ...(id_squadra ? { id_squadra } : {}) })
+// l'intera giornata (campionato + Champions); con id_squadra (casa o ospite)
+// SOLO quella partita, di campionato o di Champions (competizione 'CHAMP').
+export const simulaGiornata = (stagione, id_squadra, utente, competizione = 'CAMP') =>
+  post('live_simulazione.php', {
+    stagione, azione: 'simula', utente,
+    ...(id_squadra ? { id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) } : {}),
+  })
 
 // Editing manuale di un giocatore la cui partita non si è ancora giocata;
 // il backend ricalcola e salva la sola partita del giocatore
@@ -123,8 +132,11 @@ export const eliminaEditLive = (stagione, id_giocatore, utente) =>
   post('live_simulazione.php', { stagione, azione: 'elimina_edit', id_giocatore, utente })
 
 // Cancella la simulazione di una singola partita (voti, risultati ed editing manuali)
-export const eliminaSimulazionePartita = (stagione, id_squadra) =>
-  post('live_simulazione.php', { stagione, azione: 'elimina_simulazione', id_squadra })
+export const eliminaSimulazionePartita = (stagione, id_squadra, competizione = 'CAMP') =>
+  post('live_simulazione.php', {
+    stagione, azione: 'elimina_simulazione', id_squadra,
+    ...(competizione !== 'CAMP' ? { competizione } : {}),
+  })
 
 // ── Squadre ──────────────────────────────────────────────────
 

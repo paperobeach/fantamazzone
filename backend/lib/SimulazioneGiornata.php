@@ -14,6 +14,14 @@
 //   - NEW_SIMULAZIONE_EDIT
 // (vedi Script DB/NEW_SIMULAZIONE.sql).
 //
+// CHAMPIONS: le partite del turno di Champions della giornata si simulano
+// con lo stesso motore ($competizione = 'CHAMP'), con la formazione
+// Champions distinta se ammessa e salvata (altrimenti quella di
+// campionato), e salvano su NEW_SIMULAZIONE_VOTI_CHAMP /
+// NEW_SIMULAZIONE_RISULTATI_CHAMP. L'editing manuale dei voti
+// (NEW_SIMULAZIONE_EDIT) è unico: riguarda il giocatore e vale per
+// entrambe le competizioni.
+//
 // Le regole di sostituzione/riserva d'ufficio/fattore casa/fasce gol
 // sono quelle di backend/admin/calcolo_giornata.php (le funzioni sono
 // riscritte qui con prefisso sim_ per non modificare il calcolo reale).
@@ -41,8 +49,17 @@
 // ============================================================
 require_once __DIR__ . "/CalcolatoreVoti.php";
 require_once __DIR__ . "/RegoleCalcolo.php";
+require_once __DIR__ . "/FormazioniChampions.php";
 
 const SIM_VOTO_PROVVISORIO = 6.0;
+
+// Tabelle di simulazione per competizione ('CAMP' | 'CHAMP')
+function sim_tabelle(string $competizione): array
+{
+    return $competizione === 'CHAMP'
+        ? ['voti' => 'NEW_SIMULAZIONE_VOTI_CHAMP', 'ris' => 'NEW_SIMULAZIONE_RISULTATI_CHAMP']
+        : ['voti' => 'NEW_SIMULAZIONE_VOTI',       'ris' => 'NEW_SIMULAZIONE_RISULTATI'];
+}
 
 // Nome squadra normalizzato per i confronti (maiuscolo, senza spazi ai lati)
 function sim_norm(?string $s): string
@@ -211,10 +228,10 @@ function sim_stat_giocatore(array $ctx, int $idGiocatore, array &$warning, strin
 // della simulazione.
 // ------------------------------------------------------------
 function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti,
-                               int $maxSostMovimento, int $maxSostPortiere, array $configUfficio): array
+                               int $maxSostMovimento, int $maxSostPortiere, array $configUfficio, string $tabFormazioni = "NEW_FORMAZIONI"): array
 {
     $tutti = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
-                        FROM NEW_FORMAZIONI f
+                        FROM $tabFormazioni f
                         JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                         WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra AND f.GIORNATA = $giornata
                         ORDER BY f.MAGLIA");
@@ -315,7 +332,7 @@ function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $id
 // ------------------------------------------------------------
 // Scrittura su NEW_SIMULAZIONE_VOTI
 // ------------------------------------------------------------
-function sim_salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra, array $formazione, array $risultatoSquadra): void
+function sim_salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra, array $formazione, array $risultatoSquadra, string $tabVoti = 'NEW_SIMULAZIONE_VOTI'): void
 {
     $statistiche = [];
     foreach (['portiere', 'difensori', 'centrocampisti', 'attaccanti'] as $r) {
@@ -342,29 +359,29 @@ function sim_salva_voti_squadra($conn, int $stagione, int $giornata, int $idSqua
 
         $votoS   = sprintf('%.1f', $voto);
         $totaleS = sprintf('%.2f', $totale);
-        $ok = mysqli_query($conn, "INSERT INTO NEW_SIMULAZIONE_VOTI
+        $ok = mysqli_query($conn, "INSERT INTO $tabVoti
             (stagione, giornata, id_squadra, id_giocatore, voto,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist, provvisorio, manuale)
             VALUES ($stagione, $giornata, $idSquadra, $idGiocatore, $votoS,
                     {$stat['gf']}, $amm, {$stat['esp']}, {$stat['au']}, {$stat['gs']},
                     $rigores, $rigorep, $rufficio, $giocata, $totaleS, {$stat['ass']}, $prov, $man)");
-        if (!$ok) throw new Exception("Scrittura NEW_SIMULAZIONE_VOTI: " . mysqli_error($conn));
+        if (!$ok) throw new Exception("Scrittura $tabVoti: " . mysqli_error($conn));
     }
 }
 
 // Titolari rimasti a zero (sostituiti o senza sostituto): tracciati a zero
-function sim_salva_non_giocanti($conn, int $stagione, int $giornata, int $idSquadra, array $nonGiocanti): void
+function sim_salva_non_giocanti($conn, int $stagione, int $giornata, int $idSquadra, array $nonGiocanti, string $tabVoti = 'NEW_SIMULAZIONE_VOTI'): void
 {
     foreach ($nonGiocanti as $ng) {
         $idGiocatore = (int) $ng['id_giocatore'];
-        $ok = mysqli_query($conn, "INSERT IGNORE INTO NEW_SIMULAZIONE_VOTI
+        $ok = mysqli_query($conn, "INSERT IGNORE INTO $tabVoti
             (stagione, giornata, id_squadra, id_giocatore, voto,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist, provvisorio, manuale)
             VALUES ($stagione, $giornata, $idSquadra, $idGiocatore, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)");
-        if (!$ok) throw new Exception("Scrittura NEW_SIMULAZIONE_VOTI: " . mysqli_error($conn));
+        if (!$ok) throw new Exception("Scrittura $tabVoti: " . mysqli_error($conn));
     }
 }
 
@@ -376,7 +393,8 @@ function sim_salva_riga_risultato(
     $conn, int $stagione, int $giornata, int $idSquadra, int $idSquadraA,
     float $ftotale, float $ftotaleA, int $golf, int $gols,
     int $modificatore, int $modificatoreA, float $modAtt,
-    int $numCc, float $totCc, float $modCc, int $fattoreCampo, ?string $utente = null
+    int $numCc, float $totCc, float $modCc, int $fattoreCampo, ?string $utente = null,
+    string $tabRis = 'NEW_SIMULAZIONE_RISULTATI'
 ): void {
     if ($golf > $gols)       { $punti = 3; $segno = 'V'; }
     elseif ($golf === $gols) { $punti = 1; $segno = 'N'; }
@@ -386,32 +404,41 @@ function sim_salva_riga_risultato(
     $utenteSql = ($utente === null || trim($utente) === '')
         ? 'NULL'
         : "'" . mysqli_real_escape_string($conn, mb_substr(trim($utente), 0, 50)) . "'";
-    $ok = mysqli_query($conn, "INSERT INTO NEW_SIMULAZIONE_RISULTATI
+    $ok = mysqli_query($conn, "INSERT INTO $tabRis
         (giornata, stagione, id_squadra, id_squadra_a, ftotale, ftotale_a, golf, gols,
          modificatore, modificatore_a, punti, fattore_campo, segno,
          mod_att, num_cc, tot_cc, mod_cc, calcolato_il, simulato_da)
         VALUES ($giornata, $stagione, $idSquadra, $idSquadraA, {$f($ftotale)}, {$f($ftotaleA)}, $golf, $gols,
                 $modificatore, $modificatoreA, $punti, $fattoreCampo, '$segno',
                 {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)}, NOW(3), $utenteSql)");
-    if (!$ok) throw new Exception("Scrittura NEW_SIMULAZIONE_RISULTATI: " . mysqli_error($conn));
+    if (!$ok) throw new Exception("Scrittura $tabRis: " . mysqli_error($conn));
 }
 
 // ------------------------------------------------------------
-// Esegue la simulazione dell'intera giornata e ricostruisce
-// NEW_SIMULAZIONE_VOTI / NEW_SIMULAZIONE_RISULTATI.
+// Esegue la simulazione dell'intera giornata per UNA competizione
+// ('CAMP' = campionato, 'CHAMP' = turno di Champions) e ricostruisce
+// le relative tabelle di simulazione (vedi sim_tabelle()).
 // Le precondizioni (giornata in corso, non chiusa) sono a carico del
 // chiamante. Solleva eccezioni (config mancante, errori SQL).
 // Se $soloSquadra è valorizzato (id di una delle due squadre della
 // partita) viene simulata e salvata SOLO quella partita: le righe delle
 // altre partite restano invariate.
 // $utente: nome dell'utente che esegue la simulazione (salvato in
-// NEW_SIMULAZIONE_RISULTATI.simulato_da).
+// simulato_da).
+// Per la Champions ogni squadra schiera la formazione Champions
+// distinta se ammessa e salvata, altrimenti quella di campionato; se
+// nella giornata non c'è alcun turno (e non è richiesta una squadra)
+// non fa nulla.
 // Ritorna: partite_elaborate, partite_saltate[], warning[],
 //          provvisori, manuali
 // ------------------------------------------------------------
-function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = null, ?string $utente = null): array
+function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = null, ?string $utente = null, string $competizione = 'CAMP'): array
 {
     mysqli_set_charset($conn, "utf8mb4");
+
+    $champ = $competizione === 'CHAMP';
+    $tab   = sim_tabelle($competizione);
+    $nomeCompetizione = $champ ? 'Champions' : 'Campionato';
 
     $config = caricaConfigurazioneCalcolo($conn, $stagione);
 
@@ -430,18 +457,28 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
         'voto_ammonito'  => sim_parametro_numerico($config, 'VOTO_UFFICIO_AMMONITO', 5),
     ];
 
-    $righeCalendario = query_all("SELECT posizione, squadra AS id_squadra
-                                  FROM NEW_CALENDARIO
-                                  WHERE stagione = $stagione AND giornata = $giornata
-                                  ORDER BY posizione");
-    if (empty($righeCalendario)) {
-        throw new Exception("Nessuna partita a calendario per la giornata $giornata");
-    }
-    $partite = [];
-    foreach ($righeCalendario as $r) {
-        $indice = (int) (($r['posizione'] - 1) / 2);
-        if ($r['posizione'] % 2 === 1) $partite[$indice]['casa'] = (int) $r['id_squadra'];
-        else                           $partite[$indice]['ospite'] = (int) $r['id_squadra'];
+    if ($champ) {
+        $partite = array_map(
+            fn($p) => ['casa' => $p['casa'], 'ospite' => $p['ospite']],
+            champions_partite_giornata($stagione, $giornata)['partite']
+        );
+        if (empty($partite) && $soloSquadra === null) {
+            return ['partite_elaborate' => 0, 'partite_saltate' => [], 'warning' => [], 'provvisori' => 0, 'manuali' => 0];
+        }
+    } else {
+        $righeCalendario = query_all("SELECT posizione, squadra AS id_squadra
+                                      FROM NEW_CALENDARIO
+                                      WHERE stagione = $stagione AND giornata = $giornata
+                                      ORDER BY posizione");
+        if (empty($righeCalendario)) {
+            throw new Exception("Nessuna partita a calendario per la giornata $giornata");
+        }
+        $partite = [];
+        foreach ($righeCalendario as $r) {
+            $indice = (int) (($r['posizione'] - 1) / 2);
+            if ($r['posizione'] % 2 === 1) $partite[$indice]['casa'] = (int) $r['id_squadra'];
+            else                           $partite[$indice]['ospite'] = (int) $r['id_squadra'];
+        }
     }
 
     // Simulazione di una singola partita: tengo solo quella
@@ -450,7 +487,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
         $partite = array_values(array_filter($partite, fn($p) =>
             ($p['casa'] ?? null) === $soloSquadra || ($p['ospite'] ?? null) === $soloSquadra));
         if (empty($partite) || !isset($partite[0]['casa'], $partite[0]['ospite'])) {
-            throw new Exception("La squadra $soloSquadra non gioca alla giornata $giornata");
+            throw new Exception("La squadra $soloSquadra non gioca alla giornata $giornata ($nomeCompetizione)");
         }
         $filtroSquadre = " AND id_squadra IN ({$partite[0]['casa']}, {$partite[0]['ospite']})";
     }
@@ -463,9 +500,9 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
 
     mysqli_begin_transaction($conn);
     try {
-        foreach (['NEW_SIMULAZIONE_VOTI', 'NEW_SIMULAZIONE_RISULTATI'] as $tab) {
-            if (!mysqli_query($conn, "DELETE FROM $tab WHERE stagione = $stagione AND giornata = $giornata$filtroSquadre")) {
-                throw new Exception("Pulizia $tab: " . mysqli_error($conn));
+        foreach ([$tab['voti'], $tab['ris']] as $t) {
+            if (!mysqli_query($conn, "DELETE FROM $t WHERE stagione = $stagione AND giornata = $giornata$filtroSquadre")) {
+                throw new Exception("Pulizia $t: " . mysqli_error($conn));
             }
         }
 
@@ -474,21 +511,25 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
             $idOspite = $partita['ospite'] ?? null;
             if (!$idCasa || !$idOspite) continue;
 
+            $warnPartita = [];
             try {
                 $ngCasa = []; $ngOspite = [];
-                $formCasa   = sim_carica_formazione($ctx, $stagione, $giornata, $idCasa, $warning, $ngCasa, $maxSostMovimento, $maxSostPortiere, $configUfficio);
-                $formOspite = sim_carica_formazione($ctx, $stagione, $giornata, $idOspite, $warning, $ngOspite, $maxSostMovimento, $maxSostPortiere, $configUfficio);
+                $tabCasa   = $champ ? formazione_tabella_champions($stagione, $giornata, $idCasa)   : 'NEW_FORMAZIONI';
+                $tabOspite = $champ ? formazione_tabella_champions($stagione, $giornata, $idOspite) : 'NEW_FORMAZIONI';
+                $formCasa   = sim_carica_formazione($ctx, $stagione, $giornata, $idCasa, $warnPartita, $ngCasa, $maxSostMovimento, $maxSostPortiere, $configUfficio, $tabCasa);
+                $formOspite = sim_carica_formazione($ctx, $stagione, $giornata, $idOspite, $warnPartita, $ngOspite, $maxSostMovimento, $maxSostPortiere, $configUfficio, $tabOspite);
             } catch (Throwable $e) {
-                $partiteSaltate[] = $e->getMessage();
+                $partiteSaltate[] = ($champ ? 'Champions: ' : '') . $e->getMessage();
                 continue;
             }
+            foreach ($warnPartita as $w) $warning[] = ($champ ? 'Champions - ' : '') . $w;
 
             $ris = CalcolatoreVoti::calcolaPartita($formCasa, $formOspite, $config);
 
-            sim_salva_voti_squadra($conn, $stagione, $giornata, $idCasa,   $formCasa,   $ris['casa']);
-            sim_salva_voti_squadra($conn, $stagione, $giornata, $idOspite, $formOspite, $ris['ospite']);
-            sim_salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $ngCasa);
-            sim_salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $ngOspite);
+            sim_salva_voti_squadra($conn, $stagione, $giornata, $idCasa,   $formCasa,   $ris['casa'],   $tab['voti']);
+            sim_salva_voti_squadra($conn, $stagione, $giornata, $idOspite, $formOspite, $ris['ospite'], $tab['voti']);
+            sim_salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $ngCasa,   $tab['voti']);
+            sim_salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $ngOspite, $tab['voti']);
 
             $fattoreCampoCasa = 0;
             $applicaFattoreCasa = $ultimaGiornataFattoreCasa === '' || $giornata <= (int) $ultimaGiornataFattoreCasa;
@@ -507,7 +548,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['ospite']['modificatori']['difesa']), (int) round(-$ris['casa']['modificatori']['difesa']),
                 $ris['casa']['modificatori']['attacco'],
                 $ris['casa']['numero_centrocampisti'], $ris['casa']['somma_centrocampisti'], $ris['casa']['modificatori']['centrocampo'],
-                $fattoreCampoCasa, $utente
+                $fattoreCampoCasa, $utente, $tab['ris']
             );
             sim_salva_riga_risultato(
                 $conn, $stagione, $giornata, $idOspite, $idCasa,
@@ -516,7 +557,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['casa']['modificatori']['difesa']), (int) round(-$ris['ospite']['modificatori']['difesa']),
                 $ris['ospite']['modificatori']['attacco'],
                 $ris['ospite']['numero_centrocampisti'], $ris['ospite']['somma_centrocampisti'], $ris['ospite']['modificatori']['centrocampo'],
-                0, $utente
+                0, $utente, $tab['ris']
             );
 
             $elaborate++;
@@ -529,7 +570,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
     }
 
     $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
-                      FROM NEW_SIMULAZIONE_VOTI WHERE stagione = $stagione AND giornata = $giornata");
+                      FROM {$tab['voti']} WHERE stagione = $stagione AND giornata = $giornata");
 
     return [
         'partite_elaborate' => $elaborate,
@@ -540,13 +581,47 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
     ];
 }
 
+// ------------------------------------------------------------
+// Simula campionato E Champions della giornata (se nella giornata c'è
+// un turno di Champions). Con $soloSquadra ricalcola solo le partite
+// di quella squadra: quella di campionato e, se la squadra gioca la
+// Champions, anche quella di Champions. Ritorna lo stesso formato di
+// sim_esegui(), con i totali sommati e in più champions_elaborate.
+// ------------------------------------------------------------
+function sim_esegui_giornata($conn, int $stagione, int $giornata, ?int $soloSquadra = null, ?string $utente = null): array
+{
+    $res = sim_esegui($conn, $stagione, $giornata, $soloSquadra, $utente, 'CAMP');
+    $res['champions_elaborate'] = 0;
+
+    if ($soloSquadra !== null && !champions_squadra_gioca_in_giornata($stagione, $giornata, $soloSquadra)) {
+        return $res;
+    }
+    $ch = sim_esegui($conn, $stagione, $giornata, $soloSquadra, $utente, 'CHAMP');
+
+    $res['champions_elaborate'] = $ch['partite_elaborate'];
+    $res['partite_saltate']     = array_merge($res['partite_saltate'], $ch['partite_saltate']);
+    $res['warning']             = array_merge($res['warning'], $ch['warning']);
+    $res['provvisori']         += $ch['provvisori'];
+    $res['manuali']            += $ch['manuali'];
+    return $res;
+}
+
 
 // ------------------------------------------------------------
 // Partita (casa/ospite) a cui partecipa una squadra nella giornata.
 // Ritorna [idCasa, idOspite] oppure null.
+// Per la Champions ($competizione = 'CHAMP') la partita è quella del
+// turno di Champions della giornata.
 // ------------------------------------------------------------
-function sim_partita_di_squadra(int $stagione, int $giornata, int $idSquadra): ?array
+function sim_partita_di_squadra(int $stagione, int $giornata, int $idSquadra, string $competizione = 'CAMP'): ?array
 {
+    if ($competizione === 'CHAMP') {
+        foreach (champions_partite_giornata($stagione, $giornata)['partite'] as $p) {
+            if ($p['casa'] === $idSquadra || $p['ospite'] === $idSquadra) return [$p['casa'], $p['ospite']];
+        }
+        return null;
+    }
+
     $r = query_one("SELECT posizione FROM NEW_CALENDARIO
                     WHERE stagione = $stagione AND giornata = $giornata AND squadra = $idSquadra");
     if ($r === null) return null;
@@ -567,24 +642,41 @@ function sim_partita_di_squadra(int $stagione, int $giornata, int $idSquadra): ?
 // delle due squadre + editing manuale dei giocatori schierati dalle
 // due squadre nella giornata. Le altre partite non vengono toccate.
 // Ritorna il numero di editing manuali rimossi.
+//
+// Champions: l'editing manuale è per giocatore e vale anche per la
+// partita di campionato; si rimuove quindi solo quello dei giocatori
+// schierati SOLO nella formazione Champions (non in una formazione di
+// campionato della giornata), per non alterare la simulazione del
+// campionato.
 // ------------------------------------------------------------
-function sim_elimina_partita($conn, int $stagione, int $giornata, int $idSquadra): int
+function sim_elimina_partita($conn, int $stagione, int $giornata, int $idSquadra, string $competizione = 'CAMP'): int
 {
-    $p = sim_partita_di_squadra($stagione, $giornata, $idSquadra);
+    $p = sim_partita_di_squadra($stagione, $giornata, $idSquadra, $competizione);
     if ($p === null) throw new Exception("La squadra $idSquadra non gioca alla giornata $giornata");
     [$casa, $ospite] = $p;
+    $tab = sim_tabelle($competizione);
+
+    if ($competizione === 'CHAMP') {
+        $eff = formazione_champions_sql_effettiva($stagione, $giornata, [$casa, $ospite]);
+        $sqlEdit = "DELETE FROM NEW_SIMULAZIONE_EDIT WHERE stagione = $stagione AND giornata = $giornata
+                      AND id_giocatore IN (SELECT ID_GIOCATORE FROM $eff x)
+                      AND id_giocatore NOT IN (SELECT ID_GIOCATORE FROM NEW_FORMAZIONI
+                                               WHERE STAGIONE = $stagione AND GIORNATA = $giornata)";
+    } else {
+        $sqlEdit = "DELETE FROM NEW_SIMULAZIONE_EDIT WHERE stagione = $stagione AND giornata = $giornata
+                      AND id_giocatore IN (SELECT ID_GIOCATORE FROM NEW_FORMAZIONI
+                                           WHERE STAGIONE = $stagione AND GIORNATA = $giornata
+                                             AND ID_SQUADRA IN ($casa, $ospite))";
+    }
 
     mysqli_begin_transaction($conn);
     try {
         $q = [
-            "DELETE FROM NEW_SIMULAZIONE_VOTI WHERE stagione = $stagione AND giornata = $giornata
+            "DELETE FROM {$tab['voti']} WHERE stagione = $stagione AND giornata = $giornata
                AND id_squadra IN ($casa, $ospite)",
-            "DELETE FROM NEW_SIMULAZIONE_RISULTATI WHERE stagione = $stagione AND giornata = $giornata
+            "DELETE FROM {$tab['ris']} WHERE stagione = $stagione AND giornata = $giornata
                AND id_squadra IN ($casa, $ospite)",
-            "DELETE FROM NEW_SIMULAZIONE_EDIT WHERE stagione = $stagione AND giornata = $giornata
-               AND id_giocatore IN (SELECT ID_GIOCATORE FROM NEW_FORMAZIONI
-                                    WHERE STAGIONE = $stagione AND GIORNATA = $giornata
-                                      AND ID_SQUADRA IN ($casa, $ospite))",
+            $sqlEdit,
         ];
         $edit = 0;
         foreach ($q as $i => $sql) {

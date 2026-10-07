@@ -81,6 +81,12 @@
 //     l'ID del calciatore titolare: dettaglio_partita.php gestisce
 //     entrambe le forme.
 //
+// CHAMPIONS: se la giornata ospita un turno di Champions (NEW_CALENDARIO_CHAMP)
+// il calcolo elabora anche quelle partite, con la formazione Champions
+// distinta se ammessa e salvata (lib/FormazioniChampions.php), altrimenti
+// con quella di campionato. Voti in NEW_VOTI_CHAMP, risultati in
+// NEW_RISULTATI_CHAMP (stessi parametri di calcolo, fattore casa incluso).
+//
 // Tutti i parametri di stagione non riconducibili a bonus/malus o
 // modificatori (sostituzioni, fattore casa, fasce gol) vivono in
 // NEW_PARAMETRI_STAGIONE, generica (codice => valore testuale): questo
@@ -91,6 +97,7 @@ require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
 require_once __DIR__ . "/../lib/RegoleCalcolo.php";
 require_once __DIR__ . "/../lib/RisultatoPartita.php";
+require_once __DIR__ . "/../lib/FormazioniChampions.php";
 
 mysqli_set_charset($conn, "utf8mb4");
 
@@ -241,10 +248,10 @@ function carica_stat_giocatore($conn, int $stagione, int $giornata, int $idGioca
 // loro va comunque scritta una riga a zero in NEW_VOTI per completezza
 // storica (il contributo al punteggio squadra arriva dal sostituto).
 // ------------------------------------------------------------
-function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti, int $maxSostituzioniMovimento, int $maxSostituzioniPortiere, array $configUfficio): array
+function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, array &$warning, array &$nonGiocanti, int $maxSostituzioniMovimento, int $maxSostituzioniPortiere, array $configUfficio, string $tabellaFormazioni = "NEW_FORMAZIONI"): array
 {
     $tutti = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
-                        FROM NEW_FORMAZIONI f
+                        FROM $tabellaFormazioni f
                         JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                         WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra AND f.GIORNATA = $giornata
                         ORDER BY f.MAGLIA");
@@ -354,9 +361,9 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
 // ------------------------------------------------------------
 // Salva in NEW_VOTI i punteggi calcolati per una squadra
 // ------------------------------------------------------------
-function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra, array $formazione, array $risultatoSquadra): void
+function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra, array $formazione, array $risultatoSquadra, string $tabellaVoti = "NEW_VOTI"): void
 {
-    mysqli_query($conn, "DELETE FROM NEW_VOTI
+    mysqli_query($conn, "DELETE FROM $tabellaVoti
                          WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $idSquadra");
 
     // Indicizza le statistiche originali per id_giocatore (servono i
@@ -385,7 +392,7 @@ function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra,
         // (informativa), ma il voto d'ufficio resta fisso
         $ammonizioni = (int) ($stat['amm_reg'] ?? $stat['amm']);
 
-        mysqli_query($conn, "INSERT INTO NEW_VOTI
+        mysqli_query($conn, "INSERT INTO $tabellaVoti
             (id_squadra, id_giocatore, stagione, voto, giornata,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist)
@@ -398,11 +405,11 @@ function salva_voti_squadra($conn, int $stagione, int $giornata, int $idSquadra,
 // Righe a zero per i titolari rimasti senza voto e senza sostituto
 // idoneo (vedi carica_formazione): non contribuiscono al punteggio, ma
 // restano tracciati in NEW_VOTI per completezza storica.
-function salva_non_giocanti($conn, int $stagione, int $giornata, int $idSquadra, array $nonGiocanti): void
+function salva_non_giocanti($conn, int $stagione, int $giornata, int $idSquadra, array $nonGiocanti, string $tabellaVoti = "NEW_VOTI"): void
 {
     foreach ($nonGiocanti as $ng) {
         $idGiocatore = (int) $ng['id_giocatore'];
-        mysqli_query($conn, "INSERT INTO NEW_VOTI
+        mysqli_query($conn, "INSERT INTO $tabellaVoti
             (id_squadra, id_giocatore, stagione, voto, giornata,
              reti, ammonizioni, espulsioni, autogol, retis,
              rigores, rigorep, rufficio, giocata, totale, assist)
@@ -436,6 +443,8 @@ foreach ($righeCalendario as $r) {
 $warning          = [];
 $partiteElaborate = 0;
 $partiteSaltate    = [];
+$championsElaborate = 0;
+$championsSaltate   = [];
 
 mysqli_begin_transaction($conn);
 try {
@@ -506,6 +515,82 @@ try {
         $partiteElaborate++;
     }
 
+    // --------------------------------------------------------
+    // CHAMPIONS: se nella giornata si gioca un turno, si calcolano
+    // anche le sue partite. Ogni squadra schiera la formazione
+    // Champions distinta, se ammessa e salvata (parametro di stagione
+    // FORMAZIONE_CHAMPIONS_DIVERSA + NEW_FORMAZIONI_CHAMP), altrimenti
+    // quella di campionato. Voti e risultati vanno in NEW_VOTI_CHAMP e
+    // NEW_RISULTATI_CHAMP: statistiche, Top/Flop 11 e classifica del
+    // campionato non ne sono influenzati. Stessi parametri di calcolo
+    // del campionato, fattore casa incluso (casa = prima squadra della
+    // coppia in NEW_CALENDARIO_CHAMP).
+    // --------------------------------------------------------
+    foreach (champions_partite_giornata($stagione, $giornata)['partite'] as $pc) {
+        $idCasa   = $pc['casa'];
+        $idOspite = $pc['ospite'];
+        $girone   = $pc['girone'];
+
+        $warnChamp = [];
+        try {
+            $tabCasa   = formazione_tabella_champions($stagione, $giornata, $idCasa);
+            $tabOspite = formazione_tabella_champions($stagione, $giornata, $idOspite);
+            $nonGiocantiCasa   = [];
+            $nonGiocantiOspite = [];
+            $formazioneCasa   = carica_formazione(
+                $conn, $stagione, $giornata, $idCasa, $warnChamp, $nonGiocantiCasa,
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio, $tabCasa
+            );
+            $formazioneOspite = carica_formazione(
+                $conn, $stagione, $giornata, $idOspite, $warnChamp, $nonGiocantiOspite,
+                $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio, $tabOspite
+            );
+        } catch (Throwable $e) {
+            $championsSaltate[] = "Champions (girone $girone): " . $e->getMessage();
+            continue;
+        }
+        foreach ($warnChamp as $w) $warning[] = "Champions - $w";
+
+        $risultato = CalcolatoreVoti::calcolaPartita($formazioneCasa, $formazioneOspite, $config);
+
+        salva_voti_squadra($conn, $stagione, $giornata, $idCasa,   $formazioneCasa,   $risultato['casa'],   'NEW_VOTI_CHAMP');
+        salva_voti_squadra($conn, $stagione, $giornata, $idOspite, $formazioneOspite, $risultato['ospite'], 'NEW_VOTI_CHAMP');
+        salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $nonGiocantiCasa,   'NEW_VOTI_CHAMP');
+        salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $nonGiocantiOspite, 'NEW_VOTI_CHAMP');
+
+        $applicaFattoreCasa = $ultimaGiornataFattoreCasa === '' || $giornata <= (int) $ultimaGiornataFattoreCasa;
+        $fattoreCampoCasa   = 0;
+        if ($applicaFattoreCasa && $fattoreCasaValore != 0) {
+            $fattoreCampoCasa = (int) round($fattoreCasaValore);
+            $risultato['casa']['totale_squadra'] = round($risultato['casa']['totale_squadra'] + $fattoreCasaValore, 2);
+            $warning[] = "Champions - Squadra $idCasa: fattore casa (+$fattoreCasaValore) applicato alla giornata $giornata";
+        }
+
+        $golfCasa   = gol_da_punteggio($risultato['casa']['totale_squadra'], $fasceGolPunteggio);
+        $golfOspite = gol_da_punteggio($risultato['ospite']['totale_squadra'], $fasceGolPunteggio);
+
+        salvaRigaRisultatoChampions(
+            $conn, $stagione, $giornata, $girone, $idCasa, $idOspite,
+            $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+            $golfCasa, $golfOspite,
+            (int) round(-$risultato['ospite']['modificatori']['difesa']), (int) round(-$risultato['casa']['modificatori']['difesa']),
+            $risultato['casa']['modificatori']['attacco'],
+            $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo'],
+            $fattoreCampoCasa
+        );
+        salvaRigaRisultatoChampions(
+            $conn, $stagione, $giornata, $girone, $idOspite, $idCasa,
+            $risultato['ospite']['totale_squadra'], $risultato['casa']['totale_squadra'],
+            $golfOspite, $golfCasa,
+            (int) round(-$risultato['casa']['modificatori']['difesa']), (int) round(-$risultato['ospite']['modificatori']['difesa']),
+            $risultato['ospite']['modificatori']['attacco'],
+            $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo'],
+            0
+        );
+
+        $championsElaborate++;
+    }
+
     mysqli_commit($conn);
 } catch (Throwable $e) {
     mysqli_rollback($conn);
@@ -518,5 +603,7 @@ api_success([
     "giornata"          => $giornata,
     "partite_elaborate" => $partiteElaborate,
     "partite_saltate"   => $partiteSaltate,
+    "champions_elaborate" => $championsElaborate,
+    "champions_saltate"   => $championsSaltate,
     "warning"           => $warning,
 ]);

@@ -82,6 +82,7 @@ function bks_tabelle_backup(): array
         "NEW_FORMAZIONI_CK"         => "Conferme formazioni",
         // risultati delle giornate chiuse
         "NEW_VOTI"                  => "Voti dei giocatori",
+        "NEW_VOTI_CHAMP"            => "Voti dei giocatori (Champions)",
         "NEW_RISULTATI"             => "Risultati partite",
         "NEW_RISULTATI_CHAMP"       => "Risultati Champions",
         "NEW_GENERALE"              => "Classifica generale",
@@ -102,6 +103,8 @@ function bks_tabelle_non_salvate(): array
     return [
         "NEW_SIMULAZIONE_VOTI"      => "Simulazione LIVE: voti",
         "NEW_SIMULAZIONE_RISULTATI" => "Simulazione LIVE: risultati",
+        "NEW_SIMULAZIONE_VOTI_CHAMP"      => "Simulazione LIVE Champions: voti",
+        "NEW_SIMULAZIONE_RISULTATI_CHAMP" => "Simulazione LIVE Champions: risultati",
         "NEW_SIMULAZIONE_EDIT"      => "Simulazione LIVE: modifiche manuali",
         "NEW_ACCESSI"               => "Registro accessi",
     ];

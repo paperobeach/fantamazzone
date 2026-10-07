@@ -11,17 +11,22 @@
 //                     (calcolo fase 2, non ancora definitivo);
 //   - "simulazione":  risultato di NEW_SIMULAZIONE_RISULTATI (ultima
 //                     simulazione con i voti disponibili).
+// Oltre alle partite di campionato ("partite"), se nella giornata si gioca
+// un turno di Champions restituisce "champions": le sue partite, con la
+// stessa struttura (reale = NEW_RISULTATI_CHAMP, simulazione =
+// NEW_SIMULAZIONE_RISULTATI_CHAMP), il girone e l'elenco di chi riposa.
 // Se la giornata non è in corso (stagione storica, tutte le giornate
 // chiuse, nessun calendario) "in_corso" = false e "partite" è vuoto.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
+require_once __DIR__ . "/lib/FormazioniChampions.php";
 
 $stagione = param_int("stagione");
 $stato    = sg_stato_corrente($stagione);
 
 if (!$stato["in_corso"]) {
-    api_success(["stato" => $stato, "partite" => [], "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
+    api_success(["stato" => $stato, "partite" => [], "champions" => null, "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
 }
 $giornata = $stato["giornata"];
 
@@ -100,13 +105,87 @@ foreach ($partite as $p) {
     ];
 }
 
+// ------------------------------------------------------------
+// CHAMPIONS: partite del turno della giornata (se presente)
+// ------------------------------------------------------------
+$champions = null;
+$pc = champions_partite_giornata($stagione, $giornata);
+if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
+    $nomi = [];
+    foreach (query_all("SELECT s.id, s.nome, s.logo
+                        FROM NEW_CALENDARIO_CHAMP cc
+                        JOIN NEW_SQUADRE s ON s.id = cc.squadra AND s.stagione = cc.stagione
+                        WHERE cc.stagione = $stagione AND cc.giornata = $giornata") as $r) {
+        $nomi[(int) $r["id"]] = ["id" => (int) $r["id"], "nome" => $r["nome"], "logo" => $r["logo"]];
+    }
+
+    $realiC = live_indicizza(query_all("SELECT squadra AS id_squadra, ftotale, ftotale_a, golf, gols, punti, segno
+                                        FROM NEW_RISULTATI_CHAMP WHERE stagione = $stagione AND giornata = $giornata"));
+    $simC   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il, simulato_da
+                                        FROM NEW_SIMULAZIONE_RISULTATI_CHAMP WHERE stagione = $stagione AND giornata = $giornata"));
+    $flagC = [];
+    foreach (query_all("SELECT id_squadra, SUM(provvisorio) AS p, SUM(manuale) AS m
+                        FROM NEW_SIMULAZIONE_VOTI_CHAMP
+                        WHERE stagione = $stagione AND giornata = $giornata
+                        GROUP BY id_squadra") as $r) {
+        $flagC[(int) $r["id_squadra"]] = ["p" => (int) $r["p"], "m" => (int) $r["m"]];
+    }
+
+    $partiteC = [];
+    foreach ($pc["partite"] as $p) {
+        $idCasa = $p["casa"]; $idOsp = $p["ospite"];
+        $s = $simC[$idCasa] ?? null;
+        if ($s !== null && ($calcolatoIl === null || $s["calcolato_il"] > $calcolatoIl)) $calcolatoIl = $s["calcolato_il"];
+        $reale = live_risultato($realiC[$idCasa] ?? null);
+        $simul = live_risultato($s);
+        $fonte = $reale !== null ? "reale" : ($simul !== null ? "simulazione" : null);
+        $partiteC[] = [
+            "girone"      => $p["girone"],
+            "casa"        => $nomi[$idCasa],
+            "ospite"      => $nomi[$idOsp],
+            "fonte"       => $fonte,
+            "risultato"   => $fonte === "reale" ? $reale : $simul,
+            "reale"       => $reale,
+            "simulazione" => $simul,
+            "provvisori"  => $fonte !== "simulazione" ? 0 : ($flagC[$idCasa]["p"] ?? 0) + ($flagC[$idOsp]["p"] ?? 0),
+            "manuali"     => $fonte !== "simulazione" ? 0 : ($flagC[$idCasa]["m"] ?? 0) + ($flagC[$idOsp]["m"] ?? 0),
+            // La squadra schiera una formazione Champions distinta (se ammessa e salvata)
+            "formazione_distinta" => [
+                "casa"   => formazione_tabella_champions($stagione, $giornata, $idCasa)   === FORMAZIONE_TAB_CHAMPIONS,
+                "ospite" => formazione_tabella_champions($stagione, $giornata, $idOsp) === FORMAZIONE_TAB_CHAMPIONS,
+            ],
+        ];
+    }
+
+    // Etichetta del turno (es. "Fase 1 · Gironi - Turno 2"), se ricavabile
+    $etichetta = null;
+    try {
+        if (function_exists("champions_giornate_calendario") && function_exists("champions_turni_piatti")) {
+            $idx = array_search($giornata, champions_giornate_calendario($stagione), true);
+            $slot = $idx !== false ? (champions_turni_piatti()[$idx] ?? null) : null;
+            if ($slot) $etichetta = ($slot["fase_label"] ?? "") . " - " . ($slot["label"] ?? "");
+        }
+    } catch (Throwable $e) { /* etichetta facoltativa */ }
+
+    $champions = [
+        "turno"   => $etichetta,
+        "partite" => $partiteC,
+        "riposa"  => array_values(array_filter(array_map(
+            fn($r) => isset($nomi[$r["id"]]) ? $nomi[$r["id"]] + ["girone" => $r["girone"]] : null,
+            $pc["riposa"]))),
+    ];
+}
+
 $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
                   FROM NEW_SIMULAZIONE_VOTI WHERE stagione = $stagione AND giornata = $giornata");
+$totC = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
+                   FROM NEW_SIMULAZIONE_VOTI_CHAMP WHERE stagione = $stagione AND giornata = $giornata");
 
 api_success([
     "stato"                    => $stato,
     "partite"                  => $out,
+    "champions"                => $champions,
     "simulazione_calcolata_il" => $calcolatoIl,
-    "provvisori"               => (int) ($tot["p"] ?? 0),
-    "manuali"                  => (int) ($tot["m"] ?? 0),
+    "provvisori"               => (int) ($tot["p"] ?? 0) + (int) ($totC["p"] ?? 0),
+    "manuali"                  => (int) ($tot["m"] ?? 0) + (int) ($totC["m"] ?? 0),
 ]);

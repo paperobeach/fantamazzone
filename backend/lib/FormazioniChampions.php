@@ -35,28 +35,44 @@ function formazione_champions_separata_attiva(int $stagione): bool
 }
 
 /**
+ * Partite di Champions della giornata di campionato.
+ * Come in champions.php, in ogni girone le righe di NEW_CALENDARIO_CHAMP
+ * ordinate per posizione formano le partite a coppie (dispari = casa,
+ * pari = ospite); l'eventuale ultima riga spaiata è la squadra che riposa.
+ *
+ * @return array ['partite' => [['girone', 'casa' => id, 'ospite' => id], ...],
+ *                'riposa'  => [['girone', 'id'], ...]]
+ */
+function champions_partite_giornata(int $stagione, int $giornata): array
+{
+    $righe = query_all("SELECT squadra, TRIM(girone) AS girone FROM NEW_CALENDARIO_CHAMP
+                        WHERE stagione = $stagione AND giornata = $giornata
+                        ORDER BY girone, posizione");
+    $perGirone = [];
+    foreach ($righe as $r) $perGirone[$r["girone"]][] = (int) $r["squadra"];
+
+    $partite = [];
+    $riposa  = [];
+    foreach ($perGirone as $girone => $squadre) {
+        foreach (array_chunk($squadre, 2) as $coppia) {
+            if (count($coppia) < 2) {
+                $riposa[] = ["girone" => (string) $girone, "id" => $coppia[0]];
+            } else {
+                $partite[] = ["girone" => (string) $girone, "casa" => $coppia[0], "ospite" => $coppia[1]];
+            }
+        }
+    }
+    return ["partite" => $partite, "riposa" => $riposa];
+}
+
+/**
  * La squadra gioca un turno di Champions in questa giornata?
- * Come in champions.php, in ogni girone le righe ordinate per posizione
- * formano le partite a coppie; l'eventuale ultima riga spaiata è la
- * squadra che riposa (non gioca, quindi non è "coinvolta").
+ * La squadra che riposa non è "coinvolta".
  */
 function champions_squadra_gioca_in_giornata(int $stagione, int $giornata, int $idSquadra): bool
 {
-    $mia = query_one("SELECT girone FROM NEW_CALENDARIO_CHAMP
-                      WHERE stagione = $stagione AND giornata = $giornata AND squadra = $idSquadra");
-    if (!$mia) return false;
-
-    $girone = mysqli_real_escape_string($GLOBALS["conn"], trim((string) $mia["girone"]));
-    $righe  = query_all("SELECT squadra FROM NEW_CALENDARIO_CHAMP
-                         WHERE stagione = $stagione AND giornata = $giornata
-                           AND TRIM(girone) = '$girone'
-                         ORDER BY posizione");
-    $n = count($righe);
-    foreach ($righe as $i => $r) {
-        if ((int) $r["squadra"] === $idSquadra) {
-            $riposa = ($n % 2 === 1) && ($i === $n - 1);
-            return !$riposa;
-        }
+    foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
+        if ($p["casa"] === $idSquadra || $p["ospite"] === $idSquadra) return true;
     }
     return false;
 }
@@ -86,4 +102,25 @@ function formazione_tabella_champions(int $stagione, int $giornata, int $idSquad
     $r = query_one("SELECT COUNT(*) AS n FROM " . FORMAZIONE_TAB_CHAMPIONS . "
                     WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_SQUADRA = $idSquadra");
     return ($r && (int) $r["n"] > 0) ? FORMAZIONE_TAB_CHAMPIONS : FORMAZIONE_TAB_CAMPIONATO;
+}
+
+/**
+ * Sotto-query SQL (da usare come tabella derivata, con alias a scelta)
+ * con le formazioni EFFETTIVE di Champions delle squadre indicate:
+ * per ciascuna, la formazione distinta se ammessa e salvata, altrimenti
+ * quella di campionato. Colonne: STAGIONE, ID_SQUADRA, ID_GIOCATORE,
+ * GIORNATA, MAGLIA.
+ */
+function formazione_champions_sql_effettiva(int $stagione, int $giornata, array $idSquadre): string
+{
+    $parti = [];
+    foreach (array_unique(array_map('intval', $idSquadre)) as $id) {
+        $tab = formazione_tabella_champions($stagione, $giornata, $id);
+        $parti[] = "SELECT STAGIONE, ID_SQUADRA, ID_GIOCATORE, GIORNATA, MAGLIA FROM $tab
+                    WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_SQUADRA = $id";
+    }
+    if (!$parti) {
+        return "(SELECT STAGIONE, ID_SQUADRA, ID_GIOCATORE, GIORNATA, MAGLIA FROM " . FORMAZIONE_TAB_CAMPIONATO . " WHERE 1 = 0)";
+    }
+    return "(" . implode(" UNION ALL ", $parti) . ")";
 }

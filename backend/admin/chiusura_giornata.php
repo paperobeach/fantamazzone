@@ -34,6 +34,7 @@
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/AggiornamentiGiornata.php";
+require_once __DIR__ . "/../lib/FormazioniChampions.php";
 
 // ------------------------------------------------------------
 // Stato della chiusura di una giornata
@@ -71,6 +72,13 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
     $righeRisultato   = (int) $r['n'];
     $partiteCalcolate = intdiv($righeRisultato, 2);
 
+    // Champions: se nella giornata si gioca un turno, anche le sue partite
+    // devono essere calcolate (a giornata chiusa non si può più ricalcolare)
+    $champAttese = count(champions_partite_giornata($stagione, $giornata)['partite']);
+    $r = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI_CHAMP
+                    WHERE stagione = $stagione AND giornata = $giornata");
+    $champCalcolate = intdiv((int) $r['n'], 2);
+
     $r = query_one("SELECT COUNT(*) AS n FROM NEW_VOTI_SERIE_A
                     WHERE stagione = $stagione AND giornata = $giornata");
     $votiSerieA = (int) $r['n'];
@@ -93,6 +101,9 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
         if ($righeRisultato < $righeCalendario) {
             $blocchi[] = "Calcolo non completo: $partiteCalcolate partite calcolate su $partiteAttese (eseguire la fase 2)";
         }
+        if ($champCalcolate < $champAttese) {
+            $blocchi[] = "Calcolo Champions non completo: $champCalcolate partite calcolate su $champAttese (eseguire la fase 2)";
+        }
     }
 
     $avvisi = [];
@@ -111,6 +122,8 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
         "voti_serie_a"       => $votiSerieA,
         "partite_attese"     => $partiteAttese,
         "partite_calcolate"  => $partiteCalcolate,
+        "champions_attese"   => $champAttese,
+        "champions_calcolate" => $champCalcolate,
         "senza_contributo"   => $senzaContributo,
         "chiudibile"         => empty($blocchi),
         "motivi_blocco"      => $blocchi,

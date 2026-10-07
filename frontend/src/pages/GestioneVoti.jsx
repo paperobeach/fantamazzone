@@ -430,14 +430,15 @@ export default function GestioneVoti() {
                   <CheckCircle2 className="w-4 h-4" />
                   <span className="font-medium text-sm">
                     {calcRisultato.partite_elaborate} partite calcolate per la giornata {calcRisultato.giornata}
+                    {calcRisultato.champions_elaborate > 0 && ` (più ${calcRisultato.champions_elaborate} di Champions)`}
                   </span>
                 </div>
 
-                {calcRisultato.partite_saltate?.length > 0 && (
+                {(calcRisultato.partite_saltate?.length > 0 || calcRisultato.champions_saltate?.length > 0) && (
                   <div className="rounded-lg px-4 py-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm mb-2">
                     <p className="font-medium mb-1">Partite non calcolate:</p>
                     <ul className="list-disc list-inside space-y-0.5">
-                      {calcRisultato.partite_saltate.map((m, i) => <li key={i}>{m}</li>)}
+                      {[...(calcRisultato.partite_saltate ?? []), ...(calcRisultato.champions_saltate ?? [])].map((m, i) => <li key={i}>{m}</li>)}
                     </ul>
                   </div>
                 )}

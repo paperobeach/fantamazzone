@@ -76,3 +76,52 @@ function salvaRigaRisultato(
 
     return ["punti" => $punti, "segno" => $segno, "fattore_campo" => $fc];
 }
+
+
+/**
+ * Upsert di UNA riga di NEW_RISULTATI_CHAMP (prospettiva di UNA squadra)
+ * per una partita di Champions. Stessa formula punti/segno di
+ * salvaRigaRisultato(); chiave (stagione, giornata, squadra), dove
+ * giornata = giornata di campionato in cui si gioca il turno.
+ * Come per il campionato, una partita occupa DUE righe (una per squadra,
+ * con i valori invertiti): vedi calcolo_giornata.php.
+ */
+function salvaRigaRisultatoChampions(
+    $conn,
+    int $stagione,
+    int $giornata,
+    string $girone,
+    int $idSquadra,
+    int $idSquadraA,
+    float $ftotale,
+    float $ftotaleA,
+    int $golf,
+    int $gols,
+    int $modificatore,
+    int $modificatoreA,
+    float $modAtt,
+    int $numCc,
+    float $totCc,
+    float $modCc,
+    int $fattoreCampo
+): array {
+    if ($golf > $gols)       { $punti = 3; $segno = "V"; }
+    elseif ($golf === $gols) { $punti = 1; $segno = "N"; }
+    else                     { $punti = 0; $segno = "P"; }
+
+    $f   = fn(float $v) => sprintf("%.2f", $v);
+    $gir = mysqli_real_escape_string($conn, mb_substr(trim($girone), 0, 2));
+
+    mysqli_query($conn, "DELETE FROM NEW_RISULTATI_CHAMP
+                         WHERE stagione = $stagione AND giornata = $giornata AND squadra = $idSquadra");
+    $ok = mysqli_query($conn, "INSERT INTO NEW_RISULTATI_CHAMP
+        (stagione, giornata, squadra, ftotale, golf, gols, punti, segno, girone,
+         id_squadra_a, ftotale_a, modificatore, modificatore_a, fattore_campo,
+         mod_att, num_cc, tot_cc, mod_cc)
+        VALUES ($stagione, $giornata, $idSquadra, {$f($ftotale)}, $golf, $gols, $punti, '$segno', '$gir',
+                $idSquadraA, {$f($ftotaleA)}, $modificatore, $modificatoreA, $fattoreCampo,
+                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)})");
+    if (!$ok) throw new Exception("Scrittura NEW_RISULTATI_CHAMP: " . mysqli_error($conn));
+
+    return ["punti" => $punti, "segno" => $segno];
+}

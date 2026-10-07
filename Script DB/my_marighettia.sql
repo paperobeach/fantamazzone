@@ -383,6 +383,20 @@ CREATE TABLE `NEW_FORMAZIONI_BCK2026` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_FORMAZIONI_CHAMP`
+--
+
+CREATE TABLE `NEW_FORMAZIONI_CHAMP` (
+  `STAGIONE` int NOT NULL DEFAULT '0',
+  `ID_SQUADRA` int NOT NULL DEFAULT '0',
+  `ID_GIOCATORE` int NOT NULL DEFAULT '0',
+  `GIORNATA` int NOT NULL DEFAULT '0',
+  `MAGLIA` int NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_FORMAZIONI_CK`
 --
 
@@ -621,7 +635,16 @@ CREATE TABLE `NEW_RISULTATI_CHAMP` (
   `gols` int NOT NULL DEFAULT '0',
   `punti` int NOT NULL DEFAULT '0',
   `segno` char(1) NOT NULL DEFAULT '',
-  `girone` varchar(2) NOT NULL DEFAULT ''
+  `girone` varchar(2) NOT NULL DEFAULT '',
+  `id_squadra_a` int NOT NULL DEFAULT '0',
+  `ftotale_a` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `modificatore` int NOT NULL DEFAULT '0',
+  `modificatore_a` int NOT NULL DEFAULT '0',
+  `fattore_campo` int NOT NULL DEFAULT '0',
+  `mod_att` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `num_cc` int NOT NULL DEFAULT '0',
+  `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00'
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
@@ -678,10 +701,65 @@ CREATE TABLE `NEW_SIMULAZIONE_RISULTATI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_SIMULAZIONE_RISULTATI_CHAMP`
+--
+
+CREATE TABLE `NEW_SIMULAZIONE_RISULTATI_CHAMP` (
+  `giornata` int NOT NULL,
+  `stagione` int NOT NULL,
+  `id_squadra` int NOT NULL,
+  `id_squadra_a` int NOT NULL,
+  `ftotale` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `ftotale_a` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `golf` int NOT NULL DEFAULT '0',
+  `gols` int NOT NULL DEFAULT '0',
+  `modificatore` int NOT NULL DEFAULT '0',
+  `modificatore_a` int NOT NULL DEFAULT '0',
+  `punti` int NOT NULL DEFAULT '0',
+  `fattore_campo` int NOT NULL DEFAULT '0',
+  `segno` char(1) NOT NULL DEFAULT '',
+  `mod_att` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `num_cc` int NOT NULL DEFAULT '0',
+  `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `calcolato_il` datetime(3) NOT NULL,
+  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_SIMULAZIONE_VOTI`
 --
 
 CREATE TABLE `NEW_SIMULAZIONE_VOTI` (
+  `stagione` int NOT NULL,
+  `giornata` int NOT NULL,
+  `id_squadra` int NOT NULL,
+  `id_giocatore` int NOT NULL COMMENT 'Negativo = riserva d''ufficio fittizia (come NEW_VOTI)',
+  `voto` decimal(3,1) NOT NULL DEFAULT '0.0',
+  `reti` int NOT NULL DEFAULT '0',
+  `ammonizioni` int NOT NULL DEFAULT '0',
+  `espulsioni` int NOT NULL DEFAULT '0',
+  `autogol` int NOT NULL DEFAULT '0',
+  `retis` int NOT NULL DEFAULT '0',
+  `rigores` int NOT NULL DEFAULT '0' COMMENT 'Rp + Rf (come NEW_VOTI)',
+  `rigorep` int NOT NULL DEFAULT '0' COMMENT 'Rs (come NEW_VOTI)',
+  `rufficio` int NOT NULL DEFAULT '0',
+  `giocata` int NOT NULL DEFAULT '0',
+  `totale` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `assist` int NOT NULL DEFAULT '0',
+  `provvisorio` tinyint NOT NULL DEFAULT '0',
+  `manuale` tinyint NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_SIMULAZIONE_VOTI_CHAMP`
+--
+
+CREATE TABLE `NEW_SIMULAZIONE_VOTI_CHAMP` (
   `stagione` int NOT NULL,
   `giornata` int NOT NULL,
   `id_squadra` int NOT NULL,
@@ -843,6 +921,31 @@ CREATE TABLE `NEW_VOTI` (
   `totale` decimal(6,2) NOT NULL DEFAULT '0.00',
   `assist` int NOT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_VOTI_CHAMP`
+--
+
+CREATE TABLE `NEW_VOTI_CHAMP` (
+  `id_squadra` int NOT NULL DEFAULT '0',
+  `id_giocatore` int NOT NULL DEFAULT '0' COMMENT 'Negativo = riserva d''ufficio fittizia (come NEW_VOTI)',
+  `stagione` int NOT NULL DEFAULT '0',
+  `voto` decimal(3,1) NOT NULL DEFAULT '0.0',
+  `giornata` int NOT NULL DEFAULT '0',
+  `reti` int DEFAULT '0',
+  `ammonizioni` int DEFAULT '0',
+  `espulsioni` int DEFAULT '0',
+  `autogol` int DEFAULT '0',
+  `retis` int DEFAULT '0',
+  `rigores` int DEFAULT '0',
+  `rigorep` int DEFAULT '0',
+  `rufficio` int DEFAULT '0',
+  `giocata` int NOT NULL DEFAULT '0',
+  `totale` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `assist` int NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -1268,6 +1371,12 @@ ALTER TABLE `NEW_FORMAZIONI`
   ADD PRIMARY KEY (`STAGIONE`,`ID_SQUADRA`,`ID_GIOCATORE`,`GIORNATA`);
 
 --
+-- Indici per le tabelle `NEW_FORMAZIONI_CHAMP`
+--
+ALTER TABLE `NEW_FORMAZIONI_CHAMP`
+  ADD PRIMARY KEY (`STAGIONE`,`ID_SQUADRA`,`GIORNATA`,`ID_GIOCATORE`);
+
+--
 -- Indici per le tabelle `NEW_GENERALE`
 --
 ALTER TABLE `NEW_GENERALE`
@@ -1353,9 +1462,21 @@ ALTER TABLE `NEW_SIMULAZIONE_RISULTATI`
   ADD PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_squadra_a`);
 
 --
+-- Indici per le tabelle `NEW_SIMULAZIONE_RISULTATI_CHAMP`
+--
+ALTER TABLE `NEW_SIMULAZIONE_RISULTATI_CHAMP`
+  ADD PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_squadra_a`);
+
+--
 -- Indici per le tabelle `NEW_SIMULAZIONE_VOTI`
 --
 ALTER TABLE `NEW_SIMULAZIONE_VOTI`
+  ADD PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_giocatore`);
+
+--
+-- Indici per le tabelle `NEW_SIMULAZIONE_VOTI_CHAMP`
+--
+ALTER TABLE `NEW_SIMULAZIONE_VOTI_CHAMP`
   ADD PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_giocatore`);
 
 --
@@ -1381,6 +1502,12 @@ ALTER TABLE `NEW_UTENZE`
 --
 ALTER TABLE `NEW_VOTI`
   ADD PRIMARY KEY (`id_giocatore`,`stagione`,`giornata`,`id_squadra`) USING BTREE;
+
+--
+-- Indici per le tabelle `NEW_VOTI_CHAMP`
+--
+ALTER TABLE `NEW_VOTI_CHAMP`
+  ADD PRIMARY KEY (`stagione`,`giornata`,`id_squadra`,`id_giocatore`);
 
 --
 -- Indici per le tabelle `NEW_VOTI_SERIE_A`

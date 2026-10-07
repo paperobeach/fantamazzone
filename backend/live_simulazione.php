@@ -7,24 +7,29 @@
 // NEW_SIMULAZIONE_RISULTATI e NEW_SIMULAZIONE_EDIT: non tocca mai
 // NEW_VOTI / NEW_RISULTATI.
 //
-// GET  ?stagione=2026&id_squadra=3
+// GET  ?stagione=2026&id_squadra=3[&competizione=CAMP|CHAMP]
 //      Giocatori in formazione (titolari + panchina) della squadra per
 //      la giornata in corso, con il dato usato dalla simulazione e il
 //      flag "modificabile" (squadra di Serie A non ancora scesa in
-//      campo e nessun voto reale).
+//      campo e nessun voto reale). Con competizione=CHAMP la formazione
+//      è quella effettiva di Champions (distinta se ammessa e salvata).
 //
 // In tutte le POST è accettato "utente" (nome di chi opera), salvato
 // come autore dell'ultima simulazione di ogni partita.
 //
 // POST { stagione, azione: "simula" [, id_squadra] }
-//      Ricostruisce la simulazione dell'intera giornata in corso.
+//      Ricostruisce la simulazione dell'intera giornata in corso:
+//      campionato e, se previsto, turno di Champions.
 //      Con id_squadra (una delle due squadre della partita) simula e
-//      salva SOLO quella partita.
+//      salva SOLO quella partita: di campionato, oppure di Champions
+//      con "competizione": "CHAMP".
 //
 // POST { stagione, azione: "salva_edit", id_giocatore,
 //        voto, gf, gs, rp, rs, rf, au, amm, esp, ass }
 //      Salva l'editing manuale di un giocatore (prevale sul 6
-//      provvisorio) e ricalcola/salva la SOLA partita del giocatore.
+//      provvisorio) e ricalcola/salva la SOLA partita del giocatore
+//      (campionato e, se la sua squadra gioca la Champions, anche
+//      quella di Champions: l'editing vale per entrambe).
 //      Rifiutato se il giocatore ha già un voto reale o la sua squadra
 //      di Serie A ha già giocato.
 //
@@ -33,9 +38,10 @@
 //      provvisorio) e ricalcola la SOLA partita del giocatore.
 //
 // POST { stagione, azione: "elimina_simulazione", id_squadra }
-//      Cancella la simulazione di UNA partita: voti e risultati
-//      simulati delle due squadre e gli editing manuali dei loro
-//      giocatori. Le altre partite restano invariate.
+//      Cancella la simulazione di UNA partita (con "competizione":
+//      "CHAMP" quella di Champions): voti e risultati simulati delle
+//      due squadre e gli editing manuali dei loro giocatori. Le altre
+//      partite restano invariate.
 //
 // Endpoint libero: nessun controllo di ruolo (la simulazione è aperta
 // a tutti gli utenti). Non tocca mai NEW_VOTI / NEW_RISULTATI.
@@ -43,6 +49,7 @@
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/SimulazioneGiornata.php";
+require_once __DIR__ . "/lib/FormazioniChampions.php";
 
 mysqli_set_charset($conn, "utf8mb4");
 
@@ -55,6 +62,11 @@ if ($metodo === "POST") {
     $stagione = param_int("stagione");
 }
 if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
+
+// Competizione richiesta ("CAMP" | "CHAMP"); null = non indicata
+$compRaw = strtoupper(trim((string) ($metodo === "POST" ? ($input["competizione"] ?? "") : (param_str("competizione", false) ?? ""))));
+if ($compRaw !== "" && !in_array($compRaw, ["CAMP", "CHAMP"], true)) api_error("Competizione non valida (CAMP o CHAMP)", 400);
+$comp = $compRaw !== "" ? $compRaw : null;
 
 $stato = sg_stato_corrente($stagione);
 if (!$stato["in_corso"]) api_error($stato["motivo"] ?? "Nessuna giornata in corso", 409);
@@ -71,8 +83,9 @@ if (sg_giornata_chiusa($stagione, $giornata)) {
 if ($metodo === "GET") {
     $idSquadra = param_int("id_squadra");
 
+    $tabForm = $comp === "CHAMP" ? formazione_tabella_champions($stagione, $giornata, $idSquadra) : "NEW_FORMAZIONI";
     $righe = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
-                        FROM NEW_FORMAZIONI f
+                        FROM $tabForm f
                         JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                         WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra AND f.GIORNATA = $giornata
                         ORDER BY f.MAGLIA");
@@ -134,7 +147,11 @@ $rilascia = function () use ($conn, $lockName) { mysqli_query($conn, "SELECT REL
 try {
     if ($azione === "simula") {
         $solo = (int) ($input["id_squadra"] ?? 0) ?: null;
-        $res = sim_esegui($conn, $stagione, $giornata, $solo, $utente);
+        // Una singola partita: della competizione indicata (default campionato);
+        // l'intera giornata: campionato + turno di Champions
+        $res = $solo !== null
+            ? sim_esegui($conn, $stagione, $giornata, $solo, $utente, $comp ?? "CAMP")
+            : sim_esegui_giornata($conn, $stagione, $giornata, null, $utente);
         $rilascia();
         api_success(array_merge(["ok" => true, "stagione" => $stagione, "giornata" => $giornata], $res));
     }
@@ -144,15 +161,20 @@ try {
         if (!$idG) { $rilascia(); api_error("Parametro obbligatorio mancante: id_giocatore", 400); }
 
         // Il giocatore deve far parte di una formazione della giornata
+        // (di campionato o, se ammessa, di Champions)
         $f = query_one("SELECT ID_SQUADRA AS sq FROM NEW_FORMAZIONI
                         WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_GIOCATORE = $idG");
+        if ($f === null && formazione_champions_separata_attiva($stagione)) {
+            $f = query_one("SELECT ID_SQUADRA AS sq FROM " . FORMAZIONE_TAB_CHAMPIONS . "
+                            WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_GIOCATORE = $idG");
+        }
         $squadraG = (int) ($f["sq"] ?? 0);
         if ($squadraG === 0) { $rilascia(); api_error("Il giocatore non è schierato in nessuna formazione della giornata", 400); }
 
         if ($azione === "elimina_edit") {
             mysqli_query($conn, "DELETE FROM NEW_SIMULAZIONE_EDIT
                                  WHERE stagione = $stagione AND giornata = $giornata AND id_giocatore = $idG");
-            $res = sim_esegui($conn, $stagione, $giornata, $squadraG, $utente);
+            $res = sim_esegui_giornata($conn, $stagione, $giornata, $squadraG, $utente);
             $rilascia();
             api_success(array_merge(["ok" => true, "giornata" => $giornata, "id_giocatore" => $idG], $res));
         }
@@ -177,7 +199,7 @@ try {
                     {$campi['gf']}, {$campi['gs']}, {$campi['rp']}, {$campi['rs']}, {$campi['rf']},
                     {$campi['au']}, {$campi['amm']}, {$campi['esp']}, {$campi['ass']}, NOW(3))");
         if (!$ok) throw new Exception(mysqli_error($conn));
-        $res = sim_esegui($conn, $stagione, $giornata, $squadraG, $utente);
+        $res = sim_esegui_giornata($conn, $stagione, $giornata, $squadraG, $utente);
         $rilascia();
         api_success(array_merge(["ok" => true, "giornata" => $giornata, "id_giocatore" => $idG], $res));
     }
@@ -185,7 +207,7 @@ try {
     if ($azione === "elimina_simulazione") {
         $idS = (int) ($input["id_squadra"] ?? 0);
         if (!$idS) { $rilascia(); api_error("Parametro obbligatorio mancante: id_squadra", 400); }
-        $edit = sim_elimina_partita($conn, $stagione, $giornata, $idS);
+        $edit = sim_elimina_partita($conn, $stagione, $giornata, $idS, $comp ?? "CAMP");
         $rilascia();
         api_success(["ok" => true, "giornata" => $giornata, "edit_rimossi" => $edit]);
     }

@@ -1,7 +1,7 @@
 <?php
 // ============================================================
 // api/live_dettaglio.php
-// GET ?stagione=2026&id_squadra=3[&fonte=auto|reale|simulazione]
+// GET ?stagione=2026&id_squadra=3[&fonte=auto|reale|simulazione][&competizione=CAMP|CHAMP]
 // (default auto: NEW_RISULTATI se presente, altrimenti simulazione;
 //  la risposta riporta la fonte effettivamente usata)
 //
@@ -11,15 +11,23 @@
 //   - fonte=simulazione  legge NEW_SIMULAZIONE_VOTI / _RISULTATI e
 //                        aggiunge ai giocatori i flag "provvisorio"
 //                        (6 provvisorio) e "manuale" (editing manuale).
+// Con competizione=CHAMP il dettaglio è quello della partita di Champions
+// della giornata (id_squadra = squadra di casa): reale = NEW_RISULTATI_CHAMP /
+// NEW_VOTI_CHAMP, simulazione = NEW_SIMULAZIONE_*_CHAMP; le formazioni sono
+// quelle effettive di Champions (distinta se ammessa e salvata).
 // Disponibile solo per la giornata in corso (non chiusa).
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
+require_once __DIR__ . "/lib/FormazioniChampions.php";
 
 $stagione   = param_int("stagione");
 $id_squadra = param_int("id_squadra");
 $fonte      = param_str("fonte", false) ?: "auto";
 if (!in_array($fonte, ["auto", "reale", "simulazione"], true)) api_error("Parametro fonte non valido", 400);
+$comp = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
+if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Parametro competizione non valido (CAMP o CHAMP)", 400);
+$champ = $comp === "CHAMP";
 
 $stato = sg_stato_corrente($stagione);
 if (!$stato["in_corso"]) api_success(null);
@@ -28,13 +36,36 @@ $giornata = $stato["giornata"];
 // auto: se la partita ha dati su NEW_RISULTATI si usano quelli,
 // altrimenti la simulazione
 if ($fonte === "auto") {
-    $n = query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI
-                    WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $id_squadra");
+    $n = $champ
+        ? query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI_CHAMP
+                     WHERE stagione = $stagione AND giornata = $giornata AND squadra = $id_squadra")
+        : query_one("SELECT COUNT(*) AS n FROM NEW_RISULTATI
+                     WHERE stagione = $stagione AND giornata = $giornata AND id_squadra = $id_squadra");
     $fonte = (int) ($n["n"] ?? 0) > 0 ? "reale" : "simulazione";
 }
 
-$tRis  = $fonte === "reale" ? "NEW_RISULTATI" : "NEW_SIMULAZIONE_RISULTATI";
-$tVoti = $fonte === "reale" ? "NEW_VOTI"      : "NEW_SIMULAZIONE_VOTI";
+// Tabelle (e formazioni) della competizione richiesta
+if ($champ) {
+    // Avversaria nel turno di Champions della giornata
+    $avversaria = null;
+    foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $pc) {
+        if ($pc["casa"] === $id_squadra) { $avversaria = $pc["ospite"]; break; }
+    }
+    if ($avversaria === null) api_success(null);
+
+    // NEW_RISULTATI_CHAMP ha la squadra in "squadra": la si espone come id_squadra
+    $tRis  = $fonte === "reale"
+        ? "(SELECT stagione, giornata, squadra AS id_squadra, id_squadra_a, ftotale, ftotale_a, golf, gols,
+                   modificatore, modificatore_a, punti, segno, mod_att, num_cc, tot_cc, mod_cc
+            FROM NEW_RISULTATI_CHAMP)"
+        : "NEW_SIMULAZIONE_RISULTATI_CHAMP";
+    $tVoti = $fonte === "reale" ? "NEW_VOTI_CHAMP" : "NEW_SIMULAZIONE_VOTI_CHAMP";
+    $tForm = formazione_champions_sql_effettiva($stagione, $giornata, [$id_squadra, $avversaria]);
+} else {
+    $tRis  = $fonte === "reale" ? "NEW_RISULTATI" : "NEW_SIMULAZIONE_RISULTATI";
+    $tVoti = $fonte === "reale" ? "NEW_VOTI"      : "NEW_SIMULAZIONE_VOTI";
+    $tForm = "NEW_FORMAZIONI";
+}
 $extraRis = $fonte === "reale" ? "NULL AS calcolato_il, NULL AS simulato_da" : "r.calcolato_il, r.simulato_da";
 $extra = $fonte === "reale" ? "0 AS provvisorio, 0 AS manuale" : "v.provvisorio, v.manuale";
 
@@ -71,7 +102,7 @@ $voti_raw = query_all("SELECT
         $extra
     FROM $tVoti v
     LEFT JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
-    LEFT JOIN NEW_FORMAZIONI f ON f.ID_GIOCATORE = v.id_giocatore AND f.ID_SQUADRA = v.id_squadra
+    LEFT JOIN $tForm f ON f.ID_GIOCATORE = v.id_giocatore AND f.ID_SQUADRA = v.id_squadra
                               AND f.STAGIONE = v.stagione AND f.GIORNATA = v.giornata
     WHERE v.stagione = $stagione AND v.giornata = $giornata
       AND v.id_squadra IN ($id_casa, $id_ospite)
@@ -97,6 +128,7 @@ $int = fn($x) => $x !== null ? (int) $x : null;
 
 api_success([
     "fonte"    => $fonte,
+    "competizione" => $comp,
     "giornata" => $giornata,
     "casa" => [
         "id" => $id_casa, "nome" => $r["nome_casa"], "logo" => $r["logo_casa"],

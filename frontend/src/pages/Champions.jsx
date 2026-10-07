@@ -1,7 +1,7 @@
 // ── Champions ──────────────────────────────────────────────────────────────
 // Struttura della coppa:
 //   Fase 1 · due gironi da 4 squadre, andata e ritorno
-//   Fase 2 · due gironi da 3 squadre, 4 turni (via le ultime della fase 1)
+//   Fase 2 · due gironi da 3 squadre, andata e ritorno (via le ultime della fase 1)
 //   Fase finale · semifinali A/R (1A-2B, 1B-2A), finale con replay,
 //                 supplementari e calci di rigore in caso di parità
 import { useState } from 'react'

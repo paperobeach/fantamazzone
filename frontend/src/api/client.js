@@ -156,11 +156,18 @@ export const getChampions = (stagione, sezione = 'classifica', girone = null) =>
 
 // ── Formazioni ───────────────────────────────────────────────
 
-export const getFormazione = (stagione, giornata, id_squadra) =>
-  get('formazioni.php', { stagione, giornata, id_squadra })
+// competizione: 'CAMP' (campionato, default) | 'CHAMP' (formazione Champions distinta)
+export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CAMP') =>
+  get('formazioni.php', { stagione, giornata, id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
-export const saveFormazione = (stagione, giornata, id_squadra, giocatori) =>
-  post('formazioni.php', { stagione, giornata, id_squadra, giocatori })
+// Indica se per squadra+giornata è ammessa una formazione Champions diversa da quella di campionato:
+// { champions_in_giornata, separata_attiva, separata_ammessa }
+export const getFormazioneContesto = (stagione, giornata, id_squadra) =>
+  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'contesto' })
+
+// competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
+export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false) =>
+  post('formazioni.php', { stagione, giornata, id_squadra, giocatori, competizione, entrambe })
 
 // ── Penalità ─────────────────────────────────────────────────
 

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadra, getGiornataCorrente, getFormazione, saveFormazione } from '../api/client'
-import { PageHeader, LoadingState, ErrorState } from '../components/ui'
+import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, saveFormazione } from '../api/client'
+import { PageHeader, LoadingState, ErrorState, TabBar } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
 import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
-import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock } from 'lucide-react'
+import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info } from 'lucide-react'
 
 const MODULO_DEFAULT = '4-4-2'
 
@@ -19,8 +19,63 @@ const MOTIVO_EMAIL_LABEL = {
   squadra_non_trovata: 'squadra non trovata',
 }
 
+const COMP_LABEL = { CAMP: 'Campionato', CHAMP: 'Champions' }
+
+/**
+ * Costruisce lo stato locale (modulo, titolari, panchina, tribuna) a
+ * partire dalle righe restituite da formazioni.php (codifica MAGLIA
+ * descritta sotto). Con `fonte` nulla restituisce la situazione di
+ * default: campo vuoto e tutta la rosa in panchina, ordinata per ruolo.
+ */
+function costruisciStato(fonte, rosa) {
+  const byId = Object.fromEntries(rosa.map(p => [p.id, p]))
+
+  if (!fonte) {
+    return {
+      modulo: MODULO_DEFAULT,
+      titolari: [],
+      panchina: ordinaPerRuoloDefault(rosa.map(p => p.id), byId),
+      tribuna: [],
+    }
+  }
+
+  // f.MAGLIA codifica la posizione: 1..11 = titolare (nello slot
+  // corrispondente, da portiere a attaccanti, sinistra→destra),
+  // 12+ = panchina nell'ordine salvato. Chi non compare affatto tra le
+  // righe restituite è considerato in tribuna.
+  const ordinati = [...fonte].sort((a, b) => a.maglia - b.maglia)
+  const idsTitolari = ordinati.filter(r => r.maglia <= 11).map(r => r.id_giocatore).filter(id => byId[id])
+  const idsPanchina = ordinati.filter(r => r.maglia >= 12).map(r => r.id_giocatore).filter(id => byId[id])
+
+  const conteggioSalvato = { '1': 0, '2': 0, '3': 0, '4': 0 }
+  idsTitolari.forEach(id => conteggioSalvato[String(byId[id].ruolo)]++)
+  const moduloSalvato = MODULI_VALIDI.find(
+    m => JSON.stringify(conteggioAtteso(m)) === JSON.stringify(conteggioSalvato)
+  )
+
+  const inFormazione = new Set([...idsTitolari, ...idsPanchina])
+  return {
+    modulo: moduloSalvato ?? MODULO_DEFAULT,
+    titolari: idsTitolari,
+    panchina: idsPanchina,
+    // Chi era in rosa ma non compare né tra i titolari né in panchina va in tribuna.
+    tribuna: rosa.filter(p => !inFormazione.has(p.id)).map(p => p.id),
+  }
+}
+
 /**
  * Pagina "Formazione".
+ *
+ * FORMAZIONE CHAMPIONS DISTINTA: se il parametro di stagione
+ * FORMAZIONE_CHAMPIONS_DIVERSA è attivo e nella giornata la squadra gioca
+ * un turno di Champions (formazioni.php?modo=contesto → separata_ammessa),
+ * compaiono due schede, Campionato e Champions, ciascuna con la propria
+ * formazione (la Champions parte da una copia di quella di campionato se
+ * non ne è stata salvata una distinta). Al salvataggio si chiede "vuoi
+ * salvare la formazione per entrambe le competizioni?" (default NO): se
+ * sì, la formazione della scheda attiva viene salvata in entrambe.
+ * Altrimenti la pagina funziona come sempre e la formazione vale per
+ * entrambe le competizioni.
  *
  * La formazione si riferisce sempre alla giornata di riferimento della
  * stagione corrente: la prima giornata successiva all'ultima già chiusa
@@ -127,31 +182,57 @@ export default function Formazione() {
     (!giornataCorrenteVuota || giornata <= 1 ||
       Array.isArray(formazionePrecedente) || !!errorFormazionePrecedente)
 
-  const [modulo, setModulo]     = useState(MODULO_DEFAULT)
-  const [titolari, setTitolari] = useState([])
-  const [panchina, setPanchina] = useState([])
-  const [tribuna, setTribuna]   = useState([])
+  // ── Formazione Champions distinta: ammessa per questa squadra/giornata? ──
+  const { data: contesto, error: errorContesto } = useFetch(
+    idSquadra !== null && ultimaStagione !== null && giornata !== null
+      ? () => getFormazioneContesto(ultimaStagione, giornata, idSquadra)
+      : null,
+    [ultimaStagione, idSquadra, giornata]
+  )
+  // Un errore sul contesto non blocca la pagina: si procede come se la
+  // formazione distinta non fosse ammessa (comportamento tradizionale).
+  const contestoPronto = contesto !== null || !!errorContesto
+  const separata = !!contesto?.separata_ammessa
+  const champsInGiornataSenzaSeparata = !!contesto?.champions_in_giornata && !contesto?.separata_attiva
+
+  const { data: champSalvata, error: errorChamp } = useFetch(
+    separata ? () => getFormazione(ultimaStagione, giornata, idSquadra, 'CHAMP') : null,
+    [ultimaStagione, idSquadra, giornata, separata]
+  )
+  const champPronta = !separata || Array.isArray(champSalvata) || !!errorChamp
+
+  const tuttoPronto = formazioniPronte && contestoPronto && champPronta
+
+  const statoIniziale = { modulo: MODULO_DEFAULT, titolari: [], panchina: [], tribuna: [] }
+  const [comp, setComp]   = useState('CAMP')
+  const [forms, setForms] = useState({ CAMP: statoIniziale, CHAMP: statoIniziale })
+  const { modulo, titolari, panchina, tribuna } = forms[comp]
 
   const [saving, setSaving]             = useState(false)
   const [saveError, setSaveError]       = useState(null)
   const [justSaved, setJustSaved]       = useState(false)
+  const [savedPer, setSavedPer]         = useState(['CAMP'])
   const [emailInviata, setEmailInviata] = useState(false)
   const [motivoEmail, setMotivoEmail]   = useState(null)
+  const [confermaAperta, setConfermaAperta] = useState(false)
+  const [perEntrambe, setPerEntrambe]   = useState(false)
+
+  function resetEsito() {
+    setJustSaved(false); setEmailInviata(false); setMotivoEmail(null); setSaveError(null)
+  }
 
   // ── Inizializza/ricarica lo stato locale quando arrivano rosa e
   //    formazione salvata (per la giornata di riferimento corrente,
   //    con eventuale ripiego sulla giornata precedente) ──
   useEffect(() => {
     if (rosa.length === 0) return
-    if (!formazioniPronte) return
+    if (!tuttoPronto) return
 
     setSaving(false)
-    setSaveError(null)
-    setJustSaved(false)
-    setEmailInviata(false)
-    setMotivoEmail(null)
-
-    const byId = Object.fromEntries(rosa.map(p => [p.id, p]))
+    resetEsito()
+    setConfermaAperta(false)
+    setPerEntrambe(false)
+    setComp('CAMP')
 
     // Fonte dei dati, in ordine di priorità: giornata corrente, poi la
     // precedente, altrimenti nessuna (situazione di default).
@@ -161,41 +242,15 @@ export default function Formazione() {
         ? formazionePrecedente
         : null
 
-    if (!fonte) {
-      // Situazione di default: campo vuoto, tutta la rosa in panchina
-      // ordinata per ruolo (Portieri, Attaccanti, Centrocampisti,
-      // Difensori).
-      setModulo(MODULO_DEFAULT)
-      setTitolari([])
-      setPanchina(ordinaPerRuoloDefault(rosa.map(p => p.id), byId))
-      setTribuna([])
-      return
-    }
-
-    // f.MAGLIA codifica la posizione: 1..11 = titolare (nello slot
-    // corrispondente, da portiere a attaccanti, sinistra→destra),
-    // 12+ = panchina nell'ordine salvato. Chi non compare affatto tra le
-    // righe restituite è considerato in tribuna.
-    const ordinati = [...fonte].sort((a, b) => a.maglia - b.maglia)
-    const idsTitolari = ordinati.filter(r => r.maglia <= 11).map(r => r.id_giocatore).filter(id => byId[id])
-    const idsPanchina = ordinati.filter(r => r.maglia >= 12).map(r => r.id_giocatore).filter(id => byId[id])
-
-    const conteggioSalvato = { '1': 0, '2': 0, '3': 0, '4': 0 }
-    idsTitolari.forEach(id => conteggioSalvato[String(byId[id].ruolo)]++)
-    const moduloSalvato = MODULI_VALIDI.find(
-      m => JSON.stringify(conteggioAtteso(m)) === JSON.stringify(conteggioSalvato)
-    )
-
-    const inFormazione = new Set([...idsTitolari, ...idsPanchina])
-
-    setModulo(moduloSalvato ?? MODULO_DEFAULT)
-    setTitolari(idsTitolari)
-    setPanchina(idsPanchina)
-    // Chi era in rosa ma non compare né tra i titolari né in panchina
-    // (nella formazione letta) va in tribuna.
-    setTribuna(rosa.filter(p => !inFormazione.has(p.id)).map(p => p.id))
+    const statoCamp = costruisciStato(fonte, rosa)
+    // Champions: formazione distinta già salvata, altrimenti parte da
+    // una copia di quella di campionato.
+    const statoChamp = separata && Array.isArray(champSalvata) && champSalvata.length > 0
+      ? costruisciStato(champSalvata, rosa)
+      : statoCamp
+    setForms({ CAMP: statoCamp, CHAMP: statoChamp })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idSquadra, giornata, rosa.length, formazioneSalvata, formazionePrecedente, formazioniPronte])
+  }, [idSquadra, giornata, rosa.length, formazioneSalvata, formazionePrecedente, champSalvata, separata, tuttoPronto])
 
   const attesi = conteggioAtteso(modulo)
   const conteggio = { '1': 0, '2': 0, '3': 0, '4': 0 }
@@ -209,14 +264,24 @@ export default function Formazione() {
   const readOnly = nessunaGiornataAperta
 
   // Qualsiasi modifica successiva a un salvataggio invalida il messaggio
-  // "salvata" e l'eventuale errore precedente.
+  // "salvata" e l'eventuale errore precedente. Le modifiche riguardano
+  // sempre la scheda (competizione) attiva.
+  function aggiornaAttiva(patch) {
+    setForms(f => ({ ...f, [comp]: { ...f[comp], ...patch } }))
+    setConfermaAperta(false)
+    resetEsito()
+  }
   function handleFormationChange(t, p, tr) {
-    setTitolari(t); setPanchina(p); setTribuna(tr)
-    setJustSaved(false); setEmailInviata(false); setMotivoEmail(null); setSaveError(null)
+    aggiornaAttiva({ titolari: t, panchina: p, tribuna: tr })
   }
   function handleModuloChange(m) {
-    setModulo(m)
-    setJustSaved(false); setEmailInviata(false); setMotivoEmail(null); setSaveError(null)
+    aggiornaAttiva({ modulo: m })
+  }
+  function handleCompChange(c) {
+    setComp(c)
+    setConfermaAperta(false)
+    setPerEntrambe(false)
+    resetEsito()
   }
 
   // Costruisce il payload per formazioni.php, un elemento per ciascun
@@ -245,12 +310,32 @@ export default function Formazione() {
     return [...titolariPayload, ...panchinaPayload]
   }
 
-  async function handleSalva() {
+  // Con la formazione Champions distinta ammessa, prima di salvare si
+  // chiede se la formazione va salvata per entrambe le competizioni
+  // (default NO); altrimenti si salva direttamente, come sempre.
+  function handleSalva() {
+    if (!formazioneCompleta || saving || readOnly || giornata === null) return
+    if (separata) {
+      setPerEntrambe(false)
+      setConfermaAperta(true)
+    } else {
+      eseguiSalvataggio(false)
+    }
+  }
+
+  async function eseguiSalvataggio(entrambe) {
     if (!formazioneCompleta || saving || readOnly || giornata === null) return
     setSaving(true)
     setSaveError(null)
+    setConfermaAperta(false)
     try {
-      const res = await saveFormazione(ultimaStagione, giornata, idSquadra, buildGiocatoriPayload())
+      const res = await saveFormazione(
+        ultimaStagione, giornata, idSquadra, buildGiocatoriPayload(),
+        separata ? comp : 'CAMP', separata && entrambe
+      )
+      // Salvata in entrambe: le due schede sono ora identiche.
+      if (separata && entrambe) setForms(f => ({ CAMP: f[comp], CHAMP: f[comp] }))
+      setSavedPer(res?.salvata_per ?? [separata ? comp : 'CAMP'])
       setEmailInviata(!!res?.email_inviata)
       setMotivoEmail(res?.motivo_email ?? null)
       setJustSaved(true)
@@ -258,6 +343,7 @@ export default function Formazione() {
       setSaveError(e.message ?? 'Errore durante il salvataggio')
     } finally {
       setSaving(false)
+      setPerEntrambe(false)
     }
   }
 
@@ -303,11 +389,36 @@ export default function Formazione() {
         <ErrorState message={errorGiornata} />
       ) : errorFormazione ? (
         <ErrorState message={errorFormazione} />
-      ) : loadingGiornata || !formazioniPronte ? (
+      ) : loadingGiornata || !tuttoPronto ? (
         <LoadingState label="Caricamento formazione..." />
       ) : (
         <>
+          {separata && (
+            <div className="mb-4 flex items-center gap-3 flex-wrap">
+              <TabBar
+                tabs={[
+                  { value: 'CAMP', label: COMP_LABEL.CAMP },
+                  { value: 'CHAMP', label: COMP_LABEL.CHAMP },
+                ]}
+                active={comp}
+                onChange={handleCompChange}
+              />
+              <p className="text-xs text-slate-500">
+                Questa giornata prevede un turno di Champions: puoi schierare una formazione diversa per ciascuna competizione.
+              </p>
+            </div>
+          )}
+          {champsInGiornataSenzaSeparata && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
+              <Info className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-400">
+                Questa giornata prevede un turno di Champions: la formazione inserita vale per entrambe le competizioni.
+              </p>
+            </div>
+          )}
+
           <FormationBuilder
+            key={comp}
             rosa={rosa}
             modulo={modulo}
             onModuloChange={handleModuloChange}
@@ -336,7 +447,7 @@ export default function Formazione() {
                   <button
                     type="button"
                     onClick={handleSalva}
-                    disabled={!formazioneCompleta || saving}
+                    disabled={!formazioneCompleta || saving || confermaAperta}
                     className="btn-primary text-xs px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
@@ -346,9 +457,39 @@ export default function Formazione() {
               </div>
             </div>
 
+            {confermaAperta && (
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 mb-3">
+                <p className="text-sm text-slate-200">
+                  Vuoi salvare la formazione per entrambe le competizioni?
+                </p>
+                <p className="text-xs text-slate-500 mt-1 mb-3">
+                  Stai salvando la formazione {COMP_LABEL[comp]}. Con "No" la formazione dell'altra competizione resta invariata.
+                </p>
+                <div className="flex items-center gap-5 mb-3 text-sm text-slate-300">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="salva-entrambe" checked={!perEntrambe} onChange={() => setPerEntrambe(false)} />
+                    No
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="radio" name="salva-entrambe" checked={perEntrambe} onChange={() => setPerEntrambe(true)} />
+                    Sì
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => eseguiSalvataggio(perEntrambe)} className="btn-primary text-xs px-4 py-2">
+                    <Save className="w-3.5 h-3.5" /> Conferma e salva
+                  </button>
+                  <button type="button" onClick={() => { setConfermaAperta(false); setPerEntrambe(false) }} className="btn-ghost text-xs">
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            )}
+
             {justSaved && (
               <p className="flex items-center gap-1.5 text-xs text-grass-400 mb-3">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Formazione salvata per la giornata {giornata}.
+                <CheckCircle2 className="w-3.5 h-3.5" /> Formazione salvata per la giornata {giornata}
+                {separata ? ` (${savedPer.length > 1 ? 'Campionato e Champions' : COMP_LABEL[savedPer[0]] ?? savedPer[0]})` : ''}.
                 {emailInviata
                   ? ' Email di conferma inviata.'
                   : ` (email di conferma non inviata: ${MOTIVO_EMAIL_LABEL[motivoEmail] ?? 'motivo sconosciuto'})`}

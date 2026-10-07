@@ -666,6 +666,29 @@ export default function GestisciRegoleCalcolo() {
                       </div>
                     </Sottosezione>
 
+                    <Sottosezione
+                      titolo="Formazione Champions"
+                      descrizione="Se attivo, nelle giornate in cui la squadra gioca la Champions l'utente può inserire una formazione diversa da quella di campionato."
+                    >
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={getValoreParametro('FORMAZIONE_CHAMPIONS_DIVERSA', '0') === '1'}
+                          onChange={e => setValoreParametro(
+                            'FORMAZIONE_CHAMPIONS_DIVERSA',
+                            e.target.checked ? '1' : '0',
+                            'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)',
+                          )}
+                          className="w-4 h-4"
+                        />
+                        Consenti una formazione Champions diversa da quella di campionato
+                      </label>
+                      <p className="text-[11px] text-slate-700 mt-2 max-w-md">
+                        Se disattivo, la formazione inserita vale per entrambe le competizioni. Se attivo, la scelta
+                        compare solo nelle giornate in cui la squadra gioca un turno di Champions (non se riposa).
+                      </p>
+                    </Sottosezione>
+
                     <Sottosezione titolo="Sostituzioni e fattore casa">
                       <div className="flex flex-wrap gap-6">
                         <div>

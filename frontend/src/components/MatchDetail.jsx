@@ -73,47 +73,91 @@ export function NomeGiocatore({ g }) {
   )
 }
 
+// ── Eventi (bonus / malus) del singolo giocatore, mostrati come icone ──
+// Ogni evento compare solo se il giocatore lo ha avuto; con più di uno
+// viene aggiunto il moltiplicatore (×2). Al posto di una colonna per ogni
+// bonus/malus, le icone stanno accanto al nome.
+export const EVENTI = [
+  { k: 'reti',        icona: '⚽',  titolo: 'Gol',               tono: 'bonus' },
+  { k: 'assist',      icona: '🅰️', titolo: 'Assist',            tono: 'bonus' },
+  { k: 'rigorep',     icona: '🧤',  titolo: 'Rigore parato',     tono: 'bonus' },
+  { k: 'retis',       icona: '🥅',  titolo: 'Gol subiti',        tono: 'malus' },
+  { k: 'autogol',     icona: '🔴',  titolo: 'Autogol',           tono: 'malus' },
+  { k: 'rigores',     icona: '❌',  titolo: 'Rigore sbagliato',  tono: 'malus' },
+  { k: 'ammonizioni', icona: '🟨',  titolo: 'Ammonizione',       tono: 'malus' },
+  { k: 'espulsioni',  icona: '🟥',  titolo: 'Espulsione',        tono: 'malus' },
+]
+
+export function EventiGiocatore({ g }) {
+  const presenti = EVENTI
+    .map(e => ({ ...e, n: Number(g[e.k]) || 0 }))
+    .filter(e => e.n > 0)
+  if (!presenti.length) return null
+  return (
+    <span className="inline-flex items-center gap-1 flex-wrap">
+      {presenti.map(e => (
+        <span
+          key={e.k}
+          title={`${e.titolo}${e.n > 1 ? ` ×${e.n}` : ''}`}
+          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[11px] leading-none ${
+            e.tono === 'bonus' ? 'bg-green-500/10' : 'bg-red-500/10'
+          }`}
+        >
+          <span aria-hidden="true">{e.icona}</span>
+          {e.n > 1 && <span className="font-mono text-[10px] text-slate-300">×{e.n}</span>}
+          <span className="sr-only">{e.titolo}{e.n > 1 ? ` ×${e.n}` : ''}</span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+// Legenda delle icone (compare in fondo al dettaglio partita)
+export function LegendaEventi() {
+  return (
+    <div className="border-t border-white/5 px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-600">
+      {EVENTI.map(e => (
+        <span key={e.k} className="inline-flex items-center gap-1">
+          <span aria-hidden="true">{e.icona}</span>{e.titolo}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 // ── Tabella voti giocatori di una squadra ──
+// Colonne: ruolo, giocatore (con icone degli eventi), voto, totale.
 export function GiocatoriTable({ giocatori }) {
   return (
-    <div className="overflow-x-auto">
-    <table className="w-full text-xs min-w-[560px]">
+    <table className="w-full text-xs">
       <thead>
         <tr className="border-b border-white/5">
-          <th className="px-3 py-2 text-left font-mono tracking-widest uppercase text-slate-700 font-normal">R</th>
+          <th className="px-3 py-2 text-left font-mono tracking-widest uppercase text-slate-700 font-normal w-8">R</th>
           <th className="px-3 py-2 text-left font-mono tracking-widest uppercase text-slate-700 font-normal">Giocatore</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Voto</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Tot</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">⚽</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Assist">🅰️</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Gol subiti (portiere)">GS</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal" title="Autogol">AG</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">🟨</th>
-          <th className="px-3 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">🟥</th>
+          <th className="px-2 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Voto</th>
+          <th className="px-2 py-2 text-center font-mono tracking-widest uppercase text-slate-700 font-normal">Tot</th>
         </tr>
       </thead>
       <tbody>
         {(giocatori ?? []).map((g, i) => (
           <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : g.provvisorio ? 'bg-sky-400/[0.05]' : g.manuale ? 'bg-violet-400/[0.05]' : ''}`}>
             <td className="px-3 py-2"><RoleBadge ruolo={g.ruolo} /></td>
-            <td className="px-3 py-2 text-slate-300 font-medium"><NomeGiocatore g={g} /></td>
-            <td className="px-3 py-2 text-center">
+            <td className="px-3 py-2 text-slate-300 font-medium">
+              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                <NomeGiocatore g={g} />
+                <EventiGiocatore g={g} />
+              </div>
+            </td>
+            <td className="px-2 py-2 text-center">
               <VotoBox voto={g.voto} totale={g.voto} giocata={g.giocata} />
             </td>
-            <td className="px-3 py-2 text-center">
+            <td className="px-2 py-2 text-center">
               <VotoBox voto={g.totale} totale={g.totale} giocata={g.giocata} />
             </td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.reti > 0 ? g.reti : '—'}</td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.assist > 0 ? g.assist : '—'}</td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.retis > 0 ? g.retis : '—'}</td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.autogol > 0 ? g.autogol : '—'}</td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.ammonizioni > 0 ? g.ammonizioni : '—'}</td>
-            <td className="px-3 py-2 text-center text-slate-500">{g.espulsioni > 0 ? g.espulsioni : '—'}</td>
           </tr>
         ))}
       </tbody>
     </table>
-    </div>
   )
 }
 
@@ -168,6 +212,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
     )
   }
   return (
+    <>
     <div className="border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-white/5">
       <div>
         <div className="px-3 py-2 border-b border-white/5">
@@ -184,5 +229,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
         <GiocatoriTable giocatori={ospite.giocatori} />
       </div>
     </div>
+    <LegendaEventi />
+    </>
   )
 }

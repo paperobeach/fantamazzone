@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import {
@@ -8,9 +7,9 @@ import {
 } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
-import TeamLogo from '../components/TeamLogo'
+import { MatchResultRow } from '../components/MatchResult'
 import {
-  ChevronDown, Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator,
+  Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator,
 } from 'lucide-react'
 
 // Nome dell'utente registrato come autore delle simulazioni
@@ -22,30 +21,6 @@ function fmtDataOra(v) {
   if (!v) return null
   const d = new Date(String(v).replace(' ', 'T'))
   return isNaN(d) ? String(v) : d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
-}
-
-// ── Punteggio (gol) di una partita; null = non disponibile ──
-function Gol({ r }) {
-  if (!r) return <span className="text-slate-700 font-mono text-sm">—</span>
-  const cls = (win, draw) =>
-    win ? 'bg-green-500/15 text-green-400' : draw ? 'bg-yellow-500/15 text-yellow-400' : 'bg-pitch-800 text-slate-400'
-  const pari = r.golf === r.gols
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${cls(r.golf > r.gols, pari)}`}>{r.golf}</span>
-      <span className="text-slate-600 text-xs font-mono">:</span>
-      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${cls(r.gols > r.golf, pari)}`}>{r.gols}</span>
-    </div>
-  )
-}
-
-function Punti({ r }) {
-  if (!r) return null
-  return (
-    <span className="font-mono text-[11px] text-slate-500">
-      {Number(r.ftotale_casa).toFixed(1)} <span className="text-slate-700">vs</span> {Number(r.ftotale_ospite).toFixed(1)}
-    </span>
-  )
 }
 
 // ── Editor voti (admin) ─────────────────────────────────────
@@ -210,8 +185,6 @@ function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP
     [open, fonte, stagione, casa.id, versione, competizione]
   )
 
-  const stop = (e) => e.stopPropagation()
-
   // Azioni sulla SINGOLA partita: simula/salva e cancella
   const esegui = async (fn, okMsg) => {
     setBusy(true); setMsg(null)
@@ -236,47 +209,39 @@ function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP
 
   return (
     <div className="border-b border-white/[0.03] last:border-0">
-      <div role="button" tabIndex={0}
-        onClick={() => setOpen(o => !o)}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
-        className="flex items-center gap-2 sm:gap-4 py-3 px-4 cursor-pointer hover:bg-white/[0.02] transition-colors">
-        <Link onClick={stop} to={`/squadre/${casa.id}`} className="flex items-center gap-2 flex-1 justify-end group min-w-0">
-          <span className="text-sm text-slate-300 group-hover:text-grass-400 font-medium text-right truncate">{casa.nome}</span>
-          <TeamLogo logo={casa.logo} nome={casa.nome} size="sm" />
-        </Link>
-
-        {/* Risultato unico: calcolato se presente, altrimenti simulato */}
-        <div className="flex-shrink-0 flex items-center gap-2"
-             title={isReale ? 'Risultato calcolato (non definitivo)' : isSim ? 'Risultato simulato con i voti disponibili' : 'Nessun risultato disponibile'}>
-          <span className={`flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
-            {isReale && <><Calculator className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span></>}
-            {isSim && <><Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span></>}
+      <MatchResultRow
+        casa={casa}
+        ospite={ospite}
+        risultato={risultato}
+        expandable
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+        centroExtra={(isReale || isSim) && (
+          <span
+            title={isReale ? 'Risultato calcolato (non definitivo)' : 'Risultato simulato con i voti disponibili'}
+            className={`flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
+            {isReale
+              ? <><Calculator className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span></>
+              : <><Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span></>}
           </span>
-          <Gol r={risultato} />
-          <span className="hidden sm:inline w-24 text-left"><Punti r={risultato} /></span>
-          {isSim && (provvisori > 0 || manuali > 0) && (
-            <span className="flex items-center gap-1.5 text-[10px] font-mono">
-              {provvisori > 0 && (
-                <span className="flex items-center gap-0.5 text-sky-400" title={`${provvisori} giocatori con 6 provvisorio`}>
-                  <Clock className="w-3 h-3" aria-hidden="true" />{provvisori}
-                </span>
-              )}
-              {manuali > 0 && (
-                <span className="flex items-center gap-0.5 text-violet-400" title={`${manuali} voti inseriti manualmente`}>
-                  <Pencil className="w-3 h-3" aria-hidden="true" />{manuali}
-                </span>
-              )}
+        )}
+      />
+
+      {/* Voti provvisori / manuali della simulazione */}
+      {isSim && (provvisori > 0 || manuali > 0) && (
+        <p className="px-4 pb-2 -mt-1 flex items-center justify-center gap-3 text-[10px] font-mono">
+          {provvisori > 0 && (
+            <span className="flex items-center gap-1 text-sky-400" title={`${provvisori} giocatori con 6 provvisorio`}>
+              <Clock className="w-3 h-3" aria-hidden="true" />{provvisori} provvisori
             </span>
           )}
-        </div>
-
-        <Link onClick={stop} to={`/squadre/${ospite.id}`} className="flex items-center gap-2 flex-1 group min-w-0">
-          <TeamLogo logo={ospite.logo} nome={ospite.nome} size="sm" />
-          <span className="text-sm text-slate-300 group-hover:text-grass-400 font-medium truncate">{ospite.nome}</span>
-        </Link>
-
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 text-slate-600 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </div>
+          {manuali > 0 && (
+            <span className="flex items-center gap-1 text-violet-400" title={`${manuali} voti inseriti manualmente`}>
+              <Pencil className="w-3 h-3" aria-hidden="true" />{manuali} manuali
+            </span>
+          )}
+        </p>
+      )}
 
       {/* Data/ora e utente dell'ultima simulazione: solo se si sta mostrando la simulazione */}
       {isSim && simulazione && (

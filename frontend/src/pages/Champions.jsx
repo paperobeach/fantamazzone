@@ -10,6 +10,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getChampions } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import TeamLogo from '../components/TeamLogo'
+import { MatchResultRow } from '../components/MatchResult'
 
 const FASI = [
   { id: 'fase1', label: 'Fase 1', sub: 'Gironi' },
@@ -66,29 +67,18 @@ function ClassificaGirone({ squadre, qualificano }) {
   )
 }
 
+// Riga partita: stesso layout della pagina Calendario
 function Partita({ p }) {
   const { casa, ospite, giocata } = p
-  const fmt = v => (v === null || v === undefined ? '–' : Number(v).toFixed(1))
+  const risultato = giocata ? {
+    golf: casa.golf,
+    gols: ospite.golf,
+    ftotale_casa: casa.ftotale,
+    ftotale_ospite: ospite.ftotale,
+  } : null
   return (
-    <div className="px-4 py-2.5">
-      <div className="flex items-center gap-2">
-        <div className="flex-1 flex items-center justify-end gap-2 min-w-0">
-          <span className="text-sm text-slate-200 truncate text-right">{casa.nome}</span>
-          <TeamLogo logo={casa.logo} nome={casa.nome} size="sm" />
-        </div>
-        <div className="w-16 text-center font-bold text-white text-display">
-          {giocata ? `${casa.golf} - ${ospite.golf}` : 'vs'}
-        </div>
-        <div className="flex-1 flex items-center gap-2 min-w-0">
-          <TeamLogo logo={ospite.logo} nome={ospite.nome} size="sm" />
-          <span className="text-sm text-slate-200 truncate">{ospite.nome}</span>
-        </div>
-      </div>
-      {giocata && (
-        <div className="text-center text-[11px] text-slate-600 mt-0.5">
-          fantapunti {fmt(casa.ftotale)} – {fmt(ospite.ftotale)}
-        </div>
-      )}
+    <div className="border-b border-white/[0.03] last:border-0">
+      <MatchResultRow casa={casa} ospite={ospite} risultato={risultato} disabled={!giocata} />
     </div>
   )
 }

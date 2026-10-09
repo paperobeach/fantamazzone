@@ -4,47 +4,8 @@ import { useFetch } from '../hooks/useFetch'
 import { getCalendario, getDettaglioPartita } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
-import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import TeamLogo from '../components/TeamLogo'
-
-function ScoreBox({ risultato }) {
-  if (!risultato) return (
-    <div className="flex items-center gap-2">
-      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
-      <span className="text-slate-700 text-xs">:</span>
-      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
-    </div>
-  )
-  const { golf, gols, segno } = risultato
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
-        ['V', 'W'].includes(segno) ? 'bg-green-500/15 text-green-400' :
-        segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
-                        'bg-pitch-800 text-slate-400'
-      }`}>{golf}</span>
-      <span className="text-slate-600 text-xs font-mono">:</span>
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
-        ['P', 'L'].includes(segno) ? 'bg-green-500/15 text-green-400' :
-        segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
-                        'bg-pitch-800 text-slate-400'
-      }`}>{gols}</span>
-    </div>
-  )
-}
-
-function PunteggioBadge({ valore, isMax, isMin }) {
-  return (
-    <span className={`px-2.5 py-1 rounded-md font-mono text-sm font-bold ${
-      isMax ? 'bg-green-500/15 text-green-400 ring-1 ring-green-500/30' :
-      isMin ? 'bg-red-500/15 text-red-400 ring-1 ring-red-500/30' :
-              'bg-pitch-800 text-slate-300'
-    }`}>
-      {Number(valore).toFixed(1)}
-    </span>
-  )
-}
+import { MatchResultRow } from '../components/MatchResult'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 function MatchRow({ partita, stagione, giornata, maxScore, minScore }) {
   const { casa, ospite, risultato } = partita
@@ -60,58 +21,19 @@ function MatchRow({ partita, stagione, giornata, maxScore, minScore }) {
   )
   const match = dettaglio?.[0] ?? null
 
-  const stop = (e) => e.stopPropagation()
-
   return (
     <div className="border-b border-white/[0.03] last:border-0">
-      <div
-        role="button"
-        tabIndex={giocata ? 0 : -1}
-        onClick={() => giocata && setOpen(o => !o)}
-        onKeyDown={(e) => giocata && (e.key === 'Enter' || e.key === ' ') && setOpen(o => !o)}
-        className={`flex items-center gap-2 sm:gap-4 py-3 px-4 transition-colors ${
-          giocata ? 'cursor-pointer hover:bg-white/[0.02]' : 'opacity-60 cursor-default'
-        }`}
-      >
-        {/* Casa */}
-        <Link onClick={stop} to={`/squadre/${casa?.id}`} className="flex items-center gap-2 flex-1 justify-end group min-w-0">
-          <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium text-right truncate">{casa?.nome}</span>
-          <TeamLogo logo={casa?.logo} nome={casa?.nome} size="sm" />
-        </Link>
-
-        {/* Score */}
-        <div className="flex-shrink-0">
-          <ScoreBox risultato={risultato} />
-        </div>
-
-        {/* Ospite */}
-        <Link onClick={stop} to={`/squadre/${ospite?.id}`} className="flex items-center gap-2 flex-1 group min-w-0">
-          <TeamLogo logo={ospite?.logo} nome={ospite?.nome} size="sm" />
-          <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium truncate">{ospite?.nome}</span>
-        </Link>
-
-        {/* Punteggi */}
-        {giocata && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <PunteggioBadge
-              valore={risultato.ftotale_casa}
-              isMax={Number(risultato.ftotale_casa) === maxScore}
-              isMin={Number(risultato.ftotale_casa) === minScore}
-            />
-            <span className="text-slate-700 text-xs hidden sm:inline">vs</span>
-            <PunteggioBadge
-              valore={risultato.ftotale_ospite}
-              isMax={Number(risultato.ftotale_ospite) === maxScore}
-              isMin={Number(risultato.ftotale_ospite) === minScore}
-            />
-          </div>
-        )}
-
-        {/* Indicatore espansione */}
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${
-          giocata ? 'text-slate-600' : 'text-slate-800'
-        } ${open ? 'rotate-180' : ''}`} />
-      </div>
+      <MatchResultRow
+        casa={casa}
+        ospite={ospite}
+        risultato={risultato}
+        maxScore={maxScore}
+        minScore={minScore}
+        expandable
+        disabled={!giocata}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+      />
 
       {/* Dettaglio voti */}
       {open && (

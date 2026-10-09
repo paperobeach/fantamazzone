@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import TeamLogo from './TeamLogo'
 
@@ -57,21 +56,23 @@ export function PunteggioBadge({ valore, isMax, isMin }) {
   )
 }
 
-function Squadra({ squadra, lato, stopClick }) {
-  const inner = lato === 'casa' ? (
-    <>
-      <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium text-right truncate">{squadra?.nome}</span>
-      <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
-    </>
-  ) : (
-    <>
-      <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
-      <span className="text-sm text-slate-300 group-hover:text-grass-400 transition-colors font-medium truncate">{squadra?.nome}</span>
-    </>
+// Nome + logo della squadra (nessun link: l'intera riga è cliccabile per espandere)
+function Squadra({ squadra, lato }) {
+  return (
+    <div className={`flex items-center gap-2 flex-1 min-w-0 ${lato === 'casa' ? 'justify-end' : ''}`}>
+      {lato === 'casa' ? (
+        <>
+          <span className="text-sm text-slate-300 font-medium text-right truncate">{squadra?.nome}</span>
+          <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
+        </>
+      ) : (
+        <>
+          <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
+          <span className="text-sm text-slate-300 font-medium truncate">{squadra?.nome}</span>
+        </>
+      )}
+    </div>
   )
-  const cls = `flex items-center gap-2 flex-1 group min-w-0 ${lato === 'casa' ? 'justify-end' : ''}`
-  if (!squadra?.id) return <div className={cls}>{inner}</div>
-  return <Link onClick={stopClick} to={`/squadre/${squadra.id}`} className={cls}>{inner}</Link>
 }
 
 // ── Riga partita uniforme ──
@@ -81,12 +82,12 @@ function Squadra({ squadra, lato, stopClick }) {
 //  maxScore/minScore   evidenziano i fantapunti più alto/basso della giornata
 //  expandable, open, onToggle   riga espandibile (chevron)
 //  centroExtra         contenuto aggiuntivo accanto al punteggio (es. etichetta Calc./Sim.)
-//  disabled            riga attenuata e non cliccabile
+//  disabled            riga attenuata e non cliccabile (di norma non serve:
+//                      anche senza risultati si può espandere per vedere le formazioni)
 export function MatchResultRow({
   casa, ospite, risultato, maxScore = null, minScore = null,
   expandable = false, open = false, onToggle, centroExtra = null, disabled = false,
 }) {
-  const stop = (e) => e.stopPropagation()
   const attiva = expandable && !disabled
   const haPunti = risultato && risultato.ftotale_casa !== undefined && risultato.ftotale_ospite !== undefined
 
@@ -100,14 +101,14 @@ export function MatchResultRow({
         attiva ? 'cursor-pointer hover:bg-white/[0.02]' : ''
       } ${disabled ? 'opacity-60 cursor-default' : ''}`}
     >
-      <Squadra squadra={casa} lato="casa" stopClick={stop} />
+      <Squadra squadra={casa} lato="casa" />
 
       <div className="flex-shrink-0 flex items-center gap-2">
         {centroExtra}
         <ScoreBox risultato={risultato} />
       </div>
 
-      <Squadra squadra={ospite} lato="ospite" stopClick={stop} />
+      <Squadra squadra={ospite} lato="ospite" />
 
       {haPunti && (
         <div className="flex items-center gap-2 flex-shrink-0">

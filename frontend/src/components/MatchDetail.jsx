@@ -127,7 +127,38 @@ export function LegendaEventi() {
 
 // ── Tabella voti giocatori di una squadra ──
 // Colonne: ruolo, giocatore (con icone degli eventi), voto, totale.
-export function GiocatoriTable({ giocatori }) {
+// Con soloFormazione (partita senza risultati) mostra la sola formazione
+// inserita: titolari e panchina, senza voti.
+export function GiocatoriTable({ giocatori, soloFormazione = false }) {
+  const lista = giocatori ?? []
+
+  if (soloFormazione) {
+    if (!lista.length) {
+      return <p className="px-3 py-6 text-center text-xs text-slate-600">Formazione non ancora inserita</p>
+    }
+    const titolari = lista.filter(g => g.titolare)
+    const panchina = lista.filter(g => !g.titolare)
+    const gruppo = (titolo, righe) => righe.length > 0 && (
+      <>
+        <tr><td colSpan={2} className="px-3 py-1.5 bg-white/[0.02] text-[10px] font-mono uppercase tracking-widest text-slate-600">{titolo}</td></tr>
+        {righe.map((g, i) => (
+          <tr key={`${titolo}-${i}`} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
+            <td className="px-3 py-2 w-8"><RoleBadge ruolo={g.ruolo} /></td>
+            <td className="px-3 py-2 text-slate-300 font-medium">{g.giocatore}</td>
+          </tr>
+        ))}
+      </>
+    )
+    return (
+      <table className="w-full text-xs">
+        <tbody>
+          {gruppo('Titolari', titolari)}
+          {gruppo('Panchina', panchina)}
+        </tbody>
+      </table>
+    )
+  }
+
   return (
     <table className="w-full text-xs">
       <thead>
@@ -139,7 +170,7 @@ export function GiocatoriTable({ giocatori }) {
         </tr>
       </thead>
       <tbody>
-        {(giocatori ?? []).map((g, i) => (
+        {lista.map((g, i) => (
           <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : g.provvisorio ? 'bg-sky-400/[0.05]' : g.manuale ? 'bg-violet-400/[0.05]' : ''}`}>
             <td className="px-3 py-2"><RoleBadge ruolo={g.ruolo} /></td>
             <td className="px-3 py-2 text-slate-300 font-medium">
@@ -178,7 +209,7 @@ function ModBox({ label, value }) {
 }
 
 export function ModificatoriRow({ squadra }) {
-  if (!squadra) return null
+  if (!squadra || squadra.solo_formazione) return null
   return (
     <div className="flex items-center gap-2 px-3 py-2 border-b border-white/5">
       <ModBox label="Difesa"      value={squadra.mod_dif} />
@@ -219,17 +250,17 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
           <p className="text-xs font-semibold text-slate-400">{casa.nome}</p>
         </div>
         <ModificatoriRow squadra={casa} />
-        <GiocatoriTable giocatori={casa.giocatori} />
+        <GiocatoriTable giocatori={casa.giocatori} soloFormazione={!!casa.solo_formazione} />
       </div>
       <div>
         <div className="px-3 py-2 border-b border-white/5">
           <p className="text-xs font-semibold text-slate-400">{ospite.nome}</p>
         </div>
         <ModificatoriRow squadra={ospite} />
-        <GiocatoriTable giocatori={ospite.giocatori} />
+        <GiocatoriTable giocatori={ospite.giocatori} soloFormazione={!!ospite.solo_formazione} />
       </div>
     </div>
-    <LegendaEventi />
+    {!casa.solo_formazione && <LegendaEventi />}
     </>
   )
 }

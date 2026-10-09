@@ -9,15 +9,13 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 function MatchRow({ partita, stagione, giornata, maxScore, minScore }) {
   const { casa, ospite, risultato } = partita
-  const giocata = risultato !== null
   const [open, setOpen] = useState(false)
 
-  // Dettaglio voti caricato on-demand solo alla prima apertura della riga,
-  // e solo se la partita è già stata giocata (altrimenti non c'è nulla da
-  // mostrare).
+  // Dettaglio caricato on-demand all'apertura della riga: voti se la partita
+  // ha risultati, altrimenti la sola formazione inserita.
   const { data: dettaglio, loading, error } = useFetch(
-    () => (open && giocata) ? getDettaglioPartita(stagione, giornata, casa?.id) : Promise.resolve(null),
-    [open, giocata, stagione, giornata, casa?.id]
+    () => open ? getDettaglioPartita(stagione, giornata, casa?.id, 'CAMP', ospite?.id) : Promise.resolve(null),
+    [open, stagione, giornata, casa?.id, ospite?.id]
   )
   const match = dettaglio?.[0] ?? null
 
@@ -30,7 +28,6 @@ function MatchRow({ partita, stagione, giornata, maxScore, minScore }) {
         maxScore={maxScore}
         minScore={minScore}
         expandable
-        disabled={!giocata}
         open={open}
         onToggle={() => setOpen(o => !o)}
       />

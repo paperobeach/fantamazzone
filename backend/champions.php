@@ -14,57 +14,15 @@ $sezione  = param_str("sezione", false) ?? "classifica";
 
 // ------------------------------------------------------------
 // Calendario + risultati Champions, suddiviso per turno.
-// Ogni riga di NEW_CALENDARIO_CHAMP (girone, giornata) viene associata
-// a una "cella" della struttura (lib/ChampionsCalendario.php, codici
-// CHAMP_*) cercando la giornata nei parametri configurati in
-// "Struttura stagione":
-//   - fasi a gironi: cella del girone della riga con quella giornata
-//     (ogni girone ha le proprie giornate di campionato);
-//   - fase finale: cella senza girone con quella giornata.
-// Se la stagione non ha parametri configurati si usa l'ordine
-// cronologico delle giornate (come fa inizializza_stagione.php).
-// In ogni cella le righe, ordinate per posizione, formano le partite a
-// coppie (dispari = casa, pari = ospite); l'eventuale riga spaiata è
-// la squadra che riposa.
+// I turni (una giornata di campionato ciascuno) sono associati in
+// ordine cronologico ai turni previsti da champions_turni_piatti():
+//   fase1 (6) · fase2 (4) · semifinali (2) · finale · replay.
+// In ogni girone le righe, ordinate per posizione, formano le
+// partite a coppie (dispari = casa, pari = ospite); l'eventuale riga
+// spaiata è la squadra che riposa.
 // ------------------------------------------------------------
 function champions_carica_turni(int $stagione): array
 {
-    // Celle della struttura con il turno di appartenenza
-    $celle = [];
-    foreach (champions_fasi() as $f) {
-        foreach ($f["turni"] as $t) {
-            foreach ($t["celle"] as $c) {
-                $celle[$c["codice"]] = $c + [
-                    "fase_id" => $f["id"],
-                    "n"       => $t["n"],
-                    "label"   => preg_replace('/^Giornata /', 'Turno ', $t["label"]),
-                ];
-            }
-        }
-    }
-
-    // (girone|giornata) => codice cella, dai parametri configurati
-    $mappa = [];
-    foreach (champions_parametri_stagione($stagione) as $cod => $val) {
-        if (!isset($celle[$cod]) || $val === "" || !ctype_digit($val)) continue;
-        $mappa[($celle[$cod]["girone"] ?? "*") . "|" . (int) $val] = $cod;
-    }
-
-    // Fallback: ordine cronologico delle giornate => turno => cella del girone
-    $sorgente = [];
-    if (empty($mappa)) {
-        $cron = champions_turni_cronologici();
-        foreach (champions_assegna_sorgente($stagione) as $g => $idx) {
-            if (isset($cron[$idx])) $sorgente[$g] = $cron[$idx];
-        }
-    }
-    $trovaCella = function (string $girone, int $giornata) use ($mappa, $sorgente) {
-        if (isset($mappa["$girone|$giornata"])) return $mappa["$girone|$giornata"];
-        if (isset($mappa["*|$giornata"])) return $mappa["*|$giornata"];
-        if (isset($sorgente[$giornata])) return champions_cella_turno($sorgente[$giornata], $girone)["codice"];
-        return null;
-    };
-
     $cal = query_all("SELECT cc.giornata, cc.giornata_camp, cc.posizione, cc.girone,
             cc.squadra AS id_squadra, s.nome, s.logo
         FROM NEW_CALENDARIO_CHAMP cc
@@ -82,20 +40,16 @@ function champions_carica_turni(int $stagione): array
         $ris[(int) $r["giornata"]][(int) $r["id_squadra"]] = $r;
     }
 
-    // Raggruppo le righe per cella (stessa cella = stesso turno di un girone)
-    $perCella = [];
-    foreach ($cal as $row) {
-        $cod = $trovaCella(trim($row["girone"]), (int) $row["giornata"]);
-        if ($cod === null) continue;
-        $perCella[$cod]["giornata"] = (int) $row["giornata"];
-        $perCella[$cod]["righe"][] = $row;
-    }
+    $perGiornata = [];
+    foreach ($cal as $row) $perGiornata[(int) $row["giornata"]][] = $row;
+    ksort($perGiornata);
 
+    $slots = champions_turni_piatti();
     $turni = [];
-    foreach ($celle as $cod => $cella) {          // ordine cronologico della struttura
-        if (!isset($perCella[$cod])) continue;
-        $giornata = $perCella[$cod]["giornata"];
-        $righe = $perCella[$cod]["righe"];
+    $n = 0;
+    foreach ($perGiornata as $giornata => $righe) {
+        if (!isset($slots[$n])) break;
+        $slot = $slots[$n++];
 
         $lato = function ($riga) use ($ris, $giornata) {
             $id = (int) $riga["id_squadra"];
@@ -119,12 +73,14 @@ function champions_carica_turni(int $stagione): array
             foreach (array_chunk($rg, 2) as $coppia) {
                 if (count($coppia) < 2) {
                     $l = $lato($coppia[0]);
-                    $riposa[] = ["id" => $l["id"], "nome" => $l["nome"], "logo" => $l["logo"]];
+                    $riposa[] = ["girone" => $girone, "id" => $l["id"], "nome" => $l["nome"], "logo" => $l["logo"]];
                     continue;
                 }
                 $casa = $lato($coppia[0]);
                 $ospite = $lato($coppia[1]);
                 $partite[] = [
+                    "girone"  => $girone,
+                    "giornata" => $giornata,
                     "casa"    => $casa,
                     "ospite"  => $ospite,
                     "giocata" => $casa["golf"] !== null && $ospite["golf"] !== null,
@@ -133,11 +89,9 @@ function champions_carica_turni(int $stagione): array
         }
 
         $turni[] = [
-            "codice"        => $cod,
-            "fase"          => $cella["fase_id"],
-            "girone"        => $cella["girone"],          // null nella fase finale
-            "n"             => $cella["n"],
-            "label"         => $cella["label"],
+            "codice"        => $slot["codice"],
+            "fase"          => $slot["fase_id"],
+            "label"         => $slot["label"],
             "giornata"      => $giornata,
             "giornata_camp" => (int) $righe[0]["giornata_camp"],
             "partite"       => $partite,
@@ -153,18 +107,22 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
 {
     $gironi = [];
     foreach ($turni as $t) {
-        if ($t["fase"] !== $fase || $t["girone"] === null) continue;
-        $g = $t["girone"];
-        if (!isset($gironi[$g])) {
-            $gironi[$g] = ["girone" => $g, "qualificano" => $qualificano, "squadre" => [], "turni" => []];
+        if ($t["fase"] !== $fase) continue;
+        $per = [];
+        foreach ($t["partite"] as $p) $per[$p["girone"]]["partite"][] = $p;
+        foreach ($t["riposa"] as $r) $per[$r["girone"]]["riposa"][] = $r;
+        foreach ($per as $g => $dati) {
+            if (!isset($gironi[$g])) {
+                $gironi[$g] = ["girone" => $g, "qualificano" => $qualificano, "squadre" => [], "turni" => []];
+            }
+            $gironi[$g]["turni"][] = [
+                "label"         => $t["label"],
+                "giornata"      => $t["giornata"],
+                "giornata_camp" => $t["giornata_camp"],
+                "partite"       => $dati["partite"] ?? [],
+                "riposa"        => $dati["riposa"] ?? [],
+            ];
         }
-        $gironi[$g]["turni"][] = [
-            "label"         => $t["label"],
-            "giornata"      => $t["giornata"],
-            "giornata_camp" => $t["giornata_camp"],
-            "partite"       => $t["partite"],
-            "riposa"        => $t["riposa"],
-        ];
     }
 
     foreach ($gironi as &$g) {

@@ -7,19 +7,86 @@
 //
 // GET ?stagione=2024&giornata=5
 // GET ?stagione=2024&giornata=5&id_squadra=3  (singola partita)
+// GET ?stagione=2024&giornata=5&id_squadra=3&competizione=CHAMP
+//     (singola partita di Champions: id_squadra = squadra di casa;
+//      legge NEW_RISULTATI_CHAMP / NEW_VOTI_CHAMP)
 //
-// Risposta: dettaglio voti giocatori per ogni partita
+// Risposta: dettaglio voti giocatori per ogni partita.
+//
+// FALLBACK "SOLO FORMAZIONE": se i risultati della partita non sono
+// disponibili (giornata non chiusa, oppure partita senza righe in
+// NEW_RISULTATI / NEW_RISULTATI_CHAMP) e il chiamante passa
+// id_squadra (casa) + id_ospite, la risposta contiene la sola
+// formazione inserita (NEW_FORMAZIONI, o quella effettiva di Champions):
+// casa/ospite con "solo_formazione": true, titolari (maglia 1..11) e
+// panchina (12+), senza voti né modificatori.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
+require_once __DIR__ . "/lib/FormazioniChampions.php";
 
 $stagione    = param_int("stagione");
 $giornata    = param_int("giornata");
 $id_squadra  = param_int("id_squadra", false);
+$id_ospite_req = param_int("id_ospite", false);
+$comp        = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
+if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Parametro competizione non valido (CAMP o CHAMP)", 400);
+$champ       = $comp === "CHAMP";
+if ($champ && $id_squadra === null) api_error("Parametro id_squadra obbligatorio per la Champions", 400);
+
+// ── Fallback: solo formazione (partita senza risultati) ──────
+function dp_solo_formazione(int $stagione, int $giornata, int $id_casa, int $id_ospite, bool $champ): array
+{
+    $tForm = $champ
+        ? formazione_champions_sql_effettiva($stagione, $giornata, [$id_casa, $id_ospite])
+        : "NEW_FORMAZIONI";
+
+    $squadre = [];
+    foreach (query_all("SELECT id, nome, logo FROM NEW_SQUADRE
+                        WHERE stagione = $stagione AND id IN ($id_casa, $id_ospite)") as $q) {
+        $squadre[(int)$q["id"]] = $q;
+    }
+    if (!isset($squadre[$id_casa], $squadre[$id_ospite])) return [];
+
+    $righe = query_all("SELECT
+            f.ID_SQUADRA AS id_squadra, f.ID_GIOCATORE AS id_giocatore,
+            g.descrizione AS giocatore, g.ruolo, f.MAGLIA AS maglia
+        FROM $tForm f
+        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+        WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata
+          AND f.ID_SQUADRA IN ($id_casa, $id_ospite)
+        ORDER BY f.ID_SQUADRA, f.MAGLIA");
+
+    $per = [$id_casa => [], $id_ospite => []];
+    foreach ($righe as $r) {
+        $r["ruolo"]    = (int)$r["ruolo"];
+        $r["maglia"]   = (int)$r["maglia"];
+        $r["titolare"] = $r["maglia"] >= 1 && $r["maglia"] <= 11;
+        $per[(int)$r["id_squadra"]][] = $r;
+    }
+
+    $lato = fn(int $id) => [
+        "id" => $id, "nome" => $squadre[$id]["nome"], "logo" => $squadre[$id]["logo"],
+        "ftotale" => null, "mod_dif" => null, "mod_cc" => null, "mod_att" => null,
+        "num_cc" => null, "tot_cc" => null,
+        "solo_formazione" => true,
+        "giocatori" => $per[$id],
+    ];
+    return [[
+        "solo_formazione" => true,
+        "casa"   => $lato($id_casa),
+        "ospite" => $lato($id_ospite),
+        "golf" => null, "gols" => null, "punti_casa" => null, "segno" => null,
+    ]];
+}
 
 // I dettagli sono visibili solo per le giornate chiuse (la giornata in
 // corso è consultabile da "LIVE Giornata in corso", live_dettaglio.php)
 if (!sg_risultati_pubblici($stagione, $giornata)) {
+    // Giornata non chiusa: niente risultati, ma la formazione sì
+    if ($id_squadra !== null && $id_ospite_req !== null) {
+        api_success(dp_solo_formazione($stagione, $giornata, $id_squadra, $id_ospite_req, $champ));
+    }
     api_success([]);
 }
 
@@ -37,6 +104,33 @@ $where_squadra = $id_squadra !== null
 // "gemella" (r2, prospettiva dell'ospite) viene agganciata in JOIN solo
 // per recuperare i modificatori attacco/centrocampo specifici dell'ospite,
 // che nella riga di casa non sono presenti.
+if ($champ) {
+    // Champions: NEW_RISULTATI_CHAMP ha la squadra in "squadra" e contiene una
+    // riga per prospettiva (casa / ospite); la riga di casa è quella di
+    // $id_squadra, la gemella (r2) fornisce i modificatori dell'ospite.
+    $risultati = query_all("SELECT
+            r.squadra AS id_squadra, r.id_squadra_a,
+            s1.nome AS nome_casa,  s1.logo AS logo_casa,
+            s2.nome AS nome_ospite, s2.logo AS logo_ospite,
+            r.ftotale, r.ftotale_a,
+            r.golf, r.gols,
+            r.modificatore, r.modificatore_a,
+            r.punti, r.segno,
+            r.mod_att  AS mod_att_casa,  r.mod_cc  AS mod_cc_casa,
+            r.num_cc   AS num_cc_casa,   r.tot_cc  AS tot_cc_casa,
+            r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
+            r2.num_cc  AS num_cc_ospite,  r2.tot_cc AS tot_cc_ospite,
+            r2.modificatore_a AS modificatore_a_ospite
+        FROM NEW_RISULTATI_CHAMP r
+        JOIN NEW_SQUADRE s1 ON s1.id = r.squadra      AND s1.stagione = r.stagione
+        JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
+        LEFT JOIN NEW_RISULTATI_CHAMP r2 ON r2.stagione     = r.stagione
+                                        AND r2.giornata     = r.giornata
+                                        AND r2.squadra      = r.id_squadra_a
+                                        AND r2.id_squadra_a = r.squadra
+        WHERE r.stagione = $stagione AND r.giornata = $giornata
+          AND r.squadra = $id_squadra");
+} else {
 $risultati = query_all("SELECT
         r.id_squadra, r.id_squadra_a,
         s1.nome AS nome_casa,  s1.logo AS logo_casa,
@@ -64,8 +158,13 @@ $risultati = query_all("SELECT
       AND cal.posizione % 2 = 1
     $where_squadra
     ORDER BY r.id_squadra");
+}
 
 if (empty($risultati)) {
+    // Partita senza risultati: si mostra la sola formazione
+    if ($id_squadra !== null && $id_ospite_req !== null) {
+        api_success(dp_solo_formazione($stagione, $giornata, $id_squadra, $id_ospite_req, $champ));
+    }
     api_success([]);
 }
 
@@ -83,6 +182,11 @@ $ids_str = implode(",", array_unique($ids));
 //  - ID fittizio NEGATIVO (-(ruolo*1000000 + idSquadra*100 + n)): non
 //    esiste in NEW_GIOCATORI (LEFT JOIN) → nome "Riserva d'ufficio" e
 //    ruolo ricavato dall'ID stesso.
+$tVoti = $champ ? "NEW_VOTI_CHAMP" : "NEW_VOTI";
+$tForm = $champ
+    ? formazione_champions_sql_effettiva($stagione, $giornata, [$id_squadra, (int)$risultati[0]["id_squadra_a"]])
+    : "NEW_FORMAZIONI";
+
 $voti_raw = query_all("SELECT
         v.id_squadra, v.id_giocatore,
         COALESCE(g.descrizione, 'Riserva d''ufficio') AS giocatore,
@@ -93,9 +197,9 @@ $voti_raw = query_all("SELECT
         v.voto, v.totale, v.giocata,
         v.reti, v.ammonizioni, v.espulsioni, v.autogol,
         v.retis, v.rigores, v.rigorep, v.assist
-    FROM NEW_VOTI v
+    FROM $tVoti v
     LEFT JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
-    LEFT JOIN NEW_FORMAZIONI f ON f.ID_GIOCATORE = v.id_giocatore
+    LEFT JOIN $tForm f ON f.ID_GIOCATORE = v.id_giocatore
                            AND f.ID_SQUADRA  = v.id_squadra
                            AND f.STAGIONE    = v.stagione
                            AND f.GIORNATA    = v.giornata

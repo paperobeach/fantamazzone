@@ -148,8 +148,14 @@ export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id }
 //  la pagina "Incontri" dal front end — il dettaglio è ora
 //  consultabile dalla pagina "Calendario")
 
-export const getDettaglioPartita = (stagione, giornata, id_squadra = null) =>
-  get('dettaglio_partita.php', { stagione, giornata, id_squadra })
+// competizione: 'CAMP' (default) | 'CHAMP' (id_squadra = squadra di casa, obbligatorio)
+// id_ospite: se la partita non ha risultati, il backend restituisce la sola formazione
+export const getDettaglioPartita = (stagione, giornata, id_squadra = null, competizione = 'CAMP', id_ospite = null) =>
+  get('dettaglio_partita.php', {
+    stagione, giornata, id_squadra,
+    ...(competizione !== 'CAMP' ? { competizione } : {}),
+    ...(id_ospite ? { id_ospite } : {}),
+  })
 
 // ── Statistiche ──────────────────────────────────────────────
 

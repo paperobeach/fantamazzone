@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import {
-  getLiveGiornata, getLiveDettaglio, getLiveGiocatori,
+  getLiveGiornata, getLiveDettaglio, getLiveGiocatori, getDettaglioPartita,
   simulaGiornata, salvaEditLive, eliminaEditLive, eliminaSimulazionePartita,
 } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
@@ -169,7 +169,7 @@ function EditorPartita({ stagione, partita, onChanged, competizione = 'CAMP' }) 
 }
 
 // ── Riga partita ────────────────────────────────────────────
-function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP' }) {
+function MatchRow({ partita, giornata, stagione, versione, onChanged, competizione = 'CAMP' }) {
   const { utente } = useApp()
   const { casa, ospite, fonte, risultato, simulazione, provvisori = 0, manuali = 0, formazione_distinta } = partita
   const [open, setOpen]     = useState(false)
@@ -184,6 +184,15 @@ function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP
     () => (open && fonte) ? getLiveDettaglio(Number(stagione), casa.id, 'auto', competizione) : Promise.resolve(null),
     [open, fonte, stagione, casa.id, versione, competizione]
   )
+
+  // Senza calcolo né simulazione: si mostra la sola formazione inserita
+  const { data: form, loading: loadingForm, error: errorForm } = useFetch(
+    () => (open && !fonte)
+      ? getDettaglioPartita(Number(stagione), giornata, casa.id, competizione, ospite.id)
+      : Promise.resolve(null),
+    [open, fonte, stagione, giornata, casa.id, ospite.id, competizione]
+  )
+  const formMatch = form?.[0] ?? null
 
   // Azioni sulla SINGOLA partita: simula/salva e cancella
   const esegui = async (fn, okMsg) => {
@@ -301,7 +310,12 @@ function MatchRow({ partita, stagione, versione, onChanged, competizione = 'CAMP
           )}
           {fonte
             ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} loading={loading} error={error} />
-            : <p className="px-4 py-6 text-center text-xs text-slate-600">Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".</p>}
+            : <>
+                <MatchDetailPanel casa={formMatch?.casa} ospite={formMatch?.ospite} loading={loadingForm} error={errorForm} />
+                <p className="px-4 py-2 text-center text-[11px] text-slate-600 border-t border-white/5">
+                  Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".
+                </p>
+              </>}
           {!isReale && editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} competizione={competizione} />}
         </>
       )}
@@ -400,7 +414,7 @@ export default function LiveGiornata() {
         {partite.length === 0
           ? <EmptyState label="Nessuna partita a calendario" />
           : partite.map(p => (
-              <MatchRow key={p.casa.id} partita={p} stagione={stagione}
+              <MatchRow key={p.casa.id} partita={p} giornata={stato.giornata} stagione={stagione}
                 versione={versione} onChanged={aggiorna} />
             ))}
       </div>
@@ -420,7 +434,7 @@ export default function LiveGiornata() {
                 </div>
               )}
               {champions.partite.filter(p => p.girone === girone).map(p => (
-                <MatchRow key={`champ-${p.casa.id}`} partita={p} stagione={stagione}
+                <MatchRow key={`champ-${p.casa.id}`} partita={p} giornata={stato.giornata} stagione={stagione}
                   versione={versione} onChanged={aggiorna} competizione="CHAMP" />
               ))}
             </div>

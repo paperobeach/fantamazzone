@@ -7,10 +7,11 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getChampions } from '../api/client'
+import { getChampions, getDettaglioPartita } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import TeamLogo from '../components/TeamLogo'
 import { MatchResultRow } from '../components/MatchResult'
+import { MatchDetailPanel } from '../components/MatchDetail'
 
 const FASI = [
   { id: 'fase1', label: 'Fase 1', sub: 'Gironi' },
@@ -67,18 +68,44 @@ function ClassificaGirone({ squadre, qualificano }) {
   )
 }
 
-// Riga partita: stesso layout della pagina Calendario
+// Riga partita: stesso layout della pagina Calendario, espandibile sul
+// dettaglio: voti se giocata, altrimenti la sola formazione.
 function Partita({ p }) {
-  const { casa, ospite, giocata } = p
+  const { stagione } = useApp()
+  const { casa, ospite, giocata, giornata } = p
+  const [open, setOpen] = useState(false)
+  const espandibile = !!giornata
+
   const risultato = giocata ? {
     golf: casa.golf,
     gols: ospite.golf,
     ftotale_casa: casa.ftotale,
     ftotale_ospite: ospite.ftotale,
   } : null
+
+  // Dettaglio caricato on-demand alla prima apertura
+  const { data: dettaglio, loading, error } = useFetch(
+    () => (open && espandibile)
+      ? getDettaglioPartita(stagione, giornata, casa.id, 'CHAMP', ospite.id)
+      : Promise.resolve(null),
+    [open, espandibile, stagione, giornata, casa.id, ospite.id]
+  )
+  const match = dettaglio?.[0] ?? null
+
   return (
     <div className="border-b border-white/[0.03] last:border-0">
-      <MatchResultRow casa={casa} ospite={ospite} risultato={risultato} disabled={!giocata} />
+      <MatchResultRow
+        casa={casa}
+        ospite={ospite}
+        risultato={risultato}
+        expandable
+        disabled={!espandibile}
+        open={open}
+        onToggle={() => setOpen(o => !o)}
+      />
+      {open && (
+        <MatchDetailPanel casa={match?.casa} ospite={match?.ospite} loading={loading} error={error} />
+      )}
     </div>
   )
 }

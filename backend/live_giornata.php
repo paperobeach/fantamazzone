@@ -157,14 +157,10 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
         ];
     }
 
-    // Etichetta del turno (es. "Fase 1 · Gironi - Turno 2"), se ricavabile
+    // Etichetta del turno (es. "Fase 1 · Gironi - Turno 2 (andata)"), se ricavabile
     $etichetta = null;
     try {
-        if (function_exists("champions_giornate_calendario") && function_exists("champions_turni_piatti")) {
-            $idx = array_search($giornata, champions_giornate_calendario($stagione), true);
-            $slot = $idx !== false ? (champions_turni_piatti()[$idx] ?? null) : null;
-            if ($slot) $etichetta = ($slot["fase_label"] ?? "") . " - " . ($slot["label"] ?? "");
-        }
+        $etichetta = champions_etichetta_turno($stagione, $giornata);
     } catch (Throwable $e) { /* etichetta facoltativa */ }
 
     $champions = [

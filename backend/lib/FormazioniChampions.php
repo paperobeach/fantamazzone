@@ -77,6 +77,50 @@ function champions_squadra_gioca_in_giornata(int $stagione, int $giornata, int $
     return false;
 }
 
+/**
+ * Etichetta del turno di Champions che si gioca nella giornata di
+ * campionato (es. "Fase 1 · Gironi - Turno 2 (andata)"), oppure null.
+ * Stessa associazione giornata → cella CHAMP_* usata da champions.php:
+ * parametri "Struttura stagione" e, se assenti, ordine cronologico.
+ */
+function champions_etichetta_turno(int $stagione, int $giornata): ?string
+{
+    require_once __DIR__ . "/ChampionsCalendario.php";
+
+    $celle = [];
+    foreach (champions_fasi() as $f) {
+        foreach ($f["turni"] as $t) {
+            foreach ($t["celle"] as $c) {
+                $celle[$c["codice"]] = [
+                    "fase"  => $f["label"],
+                    "turno" => preg_replace('/^Giornata /', 'Turno ', $t["label"]),
+                ];
+            }
+        }
+    }
+
+    $trovate = [];
+    $haParametri = false;
+    foreach (champions_parametri_stagione($stagione) as $cod => $val) {
+        if (!isset($celle[$cod]) || $val === "" || !ctype_digit($val)) continue;
+        $haParametri = true;
+        if ((int) $val === $giornata) $trovate[$celle[$cod]["fase"] . " - " . $celle[$cod]["turno"]] = true;
+    }
+
+    if (!$haParametri) {
+        // Senza parametri: i turni seguono l'ordine cronologico delle giornate
+        $cron = champions_turni_cronologici();
+        $idx  = champions_assegna_sorgente($stagione)[$giornata] ?? null;
+        if ($idx !== null && isset($cron[$idx])) {
+            $fase = null;
+            foreach (champions_fasi() as $f) if ($f["id"] === $cron[$idx]["fase_id"]) $fase = $f["label"];
+            $turno = preg_replace('/^Giornata /', 'Turno ', $cron[$idx]["label"]);
+            $trovate[($fase ? "$fase - " : "") . $turno] = true;
+        }
+    }
+    return $trovate ? implode(" / ", array_keys($trovate)) : null;
+}
+
 /** Formazione Champions distinta ammessa per stagione + giornata + squadra? */
 function formazione_champions_separata_ammessa(int $stagione, int $giornata, int $idSquadra): bool
 {

@@ -21,6 +21,8 @@
 // Va incluso DOPO connect.php (usa query_one/query_all).
 // ============================================================
 
+require_once __DIR__ . "/ChampionsCalendario.php";
+
 const FORMAZIONE_PARAM_CHAMP_DIVERSA = "FORMAZIONE_CHAMPIONS_DIVERSA";
 const FORMAZIONE_TAB_CAMPIONATO      = "NEW_FORMAZIONI";
 const FORMAZIONE_TAB_CHAMPIONS       = "NEW_FORMAZIONI_CHAMP";
@@ -35,30 +37,32 @@ function formazione_champions_separata_attiva(int $stagione): bool
 }
 
 /**
- * Partite di Champions della giornata di campionato.
- * Come in champions.php, in ogni girone le righe di NEW_CALENDARIO_CHAMP
- * ordinate per posizione formano le partite a coppie (dispari = casa,
- * pari = ospite); l'eventuale ultima riga spaiata è la squadra che riposa.
+ * Partite di Champions della giornata di campionato (giornata_camp).
+ * Come in champions.php, in ogni gruppo (vedi champions_gruppo_girone:
+ * A, B, C, D, S1, S2, FI, FR) le righe di NEW_CALENDARIO_CHAMP ordinate per
+ * posizione formano le partite a coppie (dispari = casa, pari = ospite);
+ * l'eventuale ultima riga spaiata è la squadra che riposa.
  *
  * @return array ['partite' => [['girone', 'casa' => id, 'ospite' => id], ...],
  *                'riposa'  => [['girone', 'id'], ...]]
  */
 function champions_partite_giornata(int $stagione, int $giornata): array
 {
-    $righe = query_all("SELECT squadra, TRIM(girone) AS girone FROM NEW_CALENDARIO_CHAMP
-                        WHERE stagione = $stagione AND giornata = $giornata
-                        ORDER BY girone, posizione");
-    $perGirone = [];
-    foreach ($righe as $r) $perGirone[$r["girone"]][] = (int) $r["squadra"];
+    // $giornata = giornata di FANTACAMPIONATO: si usa giornata_camp
+    // (la colonna "giornata" è il progressivo Champions).
+    $righe = query_all("SELECT squadra, TRIM(girone) AS girone, posizione
+                        FROM NEW_CALENDARIO_CHAMP
+                        WHERE stagione = $stagione AND giornata_camp = $giornata");
 
     $partite = [];
     $riposa  = [];
-    foreach ($perGirone as $girone => $squadre) {
+    foreach (champions_raggruppa_righe($righe) as $gruppo => $rg) {
+        $squadre = array_map(fn($r) => (int) $r["squadra"], $rg);
         foreach (array_chunk($squadre, 2) as $coppia) {
             if (count($coppia) < 2) {
-                $riposa[] = ["girone" => (string) $girone, "id" => $coppia[0]];
+                $riposa[] = ["girone" => (string) $gruppo, "id" => $coppia[0]];
             } else {
-                $partite[] = ["girone" => (string) $girone, "casa" => $coppia[0], "ospite" => $coppia[1]];
+                $partite[] = ["girone" => (string) $gruppo, "casa" => $coppia[0], "ospite" => $coppia[1]];
             }
         }
     }
@@ -75,50 +79,6 @@ function champions_squadra_gioca_in_giornata(int $stagione, int $giornata, int $
         if ($p["casa"] === $idSquadra || $p["ospite"] === $idSquadra) return true;
     }
     return false;
-}
-
-/**
- * Etichetta del turno di Champions che si gioca nella giornata di
- * campionato (es. "Fase 1 · Gironi - Turno 2 (andata)"), oppure null.
- * Stessa associazione giornata → cella CHAMP_* usata da champions.php:
- * parametri "Struttura stagione" e, se assenti, ordine cronologico.
- */
-function champions_etichetta_turno(int $stagione, int $giornata): ?string
-{
-    require_once __DIR__ . "/ChampionsCalendario.php";
-
-    $celle = [];
-    foreach (champions_fasi() as $f) {
-        foreach ($f["turni"] as $t) {
-            foreach ($t["celle"] as $c) {
-                $celle[$c["codice"]] = [
-                    "fase"  => $f["label"],
-                    "turno" => preg_replace('/^Giornata /', 'Turno ', $t["label"]),
-                ];
-            }
-        }
-    }
-
-    $trovate = [];
-    $haParametri = false;
-    foreach (champions_parametri_stagione($stagione) as $cod => $val) {
-        if (!isset($celle[$cod]) || $val === "" || !ctype_digit($val)) continue;
-        $haParametri = true;
-        if ((int) $val === $giornata) $trovate[$celle[$cod]["fase"] . " - " . $celle[$cod]["turno"]] = true;
-    }
-
-    if (!$haParametri) {
-        // Senza parametri: i turni seguono l'ordine cronologico delle giornate
-        $cron = champions_turni_cronologici();
-        $idx  = champions_assegna_sorgente($stagione)[$giornata] ?? null;
-        if ($idx !== null && isset($cron[$idx])) {
-            $fase = null;
-            foreach (champions_fasi() as $f) if ($f["id"] === $cron[$idx]["fase_id"]) $fase = $f["label"];
-            $turno = preg_replace('/^Giornata /', 'Turno ', $cron[$idx]["label"]);
-            $trovate[($fase ? "$fase - " : "") . $turno] = true;
-        }
-    }
-    return $trovate ? implode(" / ", array_keys($trovate)) : null;
 }
 
 /** Formazione Champions distinta ammessa per stagione + giornata + squadra? */

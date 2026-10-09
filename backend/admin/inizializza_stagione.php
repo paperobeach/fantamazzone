@@ -269,8 +269,12 @@ function calendari_genera($conn, $stagione, $giornate, array $champGiornate) {
         WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
 
     // Ogni giornata sorgente corrisponde a un turno (per posizione
-    // cronologica); per ogni riga si usa la cella del suo girone e la
-    // colonna "giornata" è sostituita con quella configurata.
+    // cronologica); per ogni riga si usa la cella del suo girone (i gironi
+    // storici C/D della fase 2 corrispondono alle celle A/B).
+    // Colonne scritte:
+    //   giornata       progressivo Champions: copiato dalla sorgente
+    //   giornata_camp  giornata di fantacampionato: quella CONFIGURATA per la cella
+    //   girone         copiato com'è (il dominio storico A, B, C1..D3, S1, S2, FI, FR non cambia)
     $turniCron = champions_turni_cronologici();
     $sorgente  = champions_assegna_sorgente($stagionePrecedente);
     $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
@@ -280,12 +284,12 @@ function calendari_genera($conn, $stagione, $giornate, array $champGiornate) {
     foreach ($righeSorg as $rs) {
         $gSorg = (int) $rs["giornata"];
         if (!isset($sorgente[$gSorg]) || !isset($turniCron[$sorgente[$gSorg]])) continue; // oltre i turni previsti
-        $cella  = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
-        $gNuova = (int) ($champGiornate[$cella["codice"]] ?? 0);
-        if ($gNuova < 1) continue; // turno non configurato (es. replay)
+        $cella = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
+        $gCamp = (int) ($champGiornate[$cella["codice"]] ?? 0);
+        if ($gCamp < 1) continue; // turno non configurato (es. replay)
         $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
         esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-            VALUES ($stagione, $gNuova, " . (int) $rs["giornata_camp"] . ", " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
+            VALUES ($stagione, $gSorg, $gCamp, " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
     }
 }
 

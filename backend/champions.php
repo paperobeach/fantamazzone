@@ -51,9 +51,11 @@ function champions_carica_turni(int $stagione): array
         if (!isset($slots[$n])) break;
         $slot = $slots[$n++];
 
-        $lato = function ($riga) use ($ris, $giornata) {
+        // I risultati (NEW_RISULTATI_CHAMP) sono salvati per giornata di
+        // FANTACAMPIONATO: si cercano con giornata_camp della riga.
+        $lato = function ($riga) use ($ris) {
             $id = (int) $riga["id_squadra"];
-            $r  = $ris[$giornata][$id] ?? null;
+            $r  = $ris[(int) $riga["giornata_camp"]][$id] ?? null;
             return [
                 "id"      => $id,
                 "nome"    => $riga["nome"],
@@ -64,8 +66,8 @@ function champions_carica_turni(int $stagione): array
             ];
         };
 
-        $perGirone = [];
-        foreach ($righe as $riga) $perGirone[trim($riga["girone"])][] = $riga;
+        // Gruppi storici (A, B, C1..C3 -> C, D1..D3 -> D, S1, S2, FI, FR)
+        $perGirone = champions_raggruppa_righe($righe);
 
         $partite = [];
         $riposa = [];
@@ -80,7 +82,8 @@ function champions_carica_turni(int $stagione): array
                 $ospite = $lato($coppia[1]);
                 $partite[] = [
                     "girone"  => $girone,
-                    "giornata" => $giornata,
+                    // Giornata di fantacampionato: serve per aprire il dettaglio
+                    "giornata" => (int) $coppia[0]["giornata_camp"],
                     "casa"    => $casa,
                     "ospite"  => $ospite,
                     "giocata" => $casa["golf"] !== null && $ospite["golf"] !== null,

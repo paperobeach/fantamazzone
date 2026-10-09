@@ -23,10 +23,65 @@
 //   CHAMP_SF_T1/T2           Semifinali andata/ritorno (senza girone)
 //   CHAMP_FIN_T1             Finale
 //   CHAMP_FIN_REPLAY         Replay finale (opzionale)
+//
+// NEW_CALENDARIO_CHAMP (significato delle colonne, valido anche per i dati storici):
+//   GIORNATA        numero progressivo di giornata Champions
+//   GIORNATA_CAMP   giornata di fantacampionato in cui si gioca quella giornata
+//                   (è QUESTA la colonna da usare per sapere cosa si gioca in
+//                   una giornata di campionato: calcolo, LIVE, formazioni)
+//   GIRONE          A, B = gironi della fase 1;
+//                   C1, C2, C3 / D1, D2, D3 = le tre squadre dei gironi C e D
+//                   della fase 2 (C1 e C2 si incontrano, C3 riposa, ecc.);
+//                   S1, S2 = semifinali; FI = finale; FR = replay della finale
+//   POSIZIONE       posizione della squadra nella giornata del girone
+//                   (dispari = casa, pari = ospite)
+//   SQUADRA         riferimento alla squadra
+// Il dominio di GIRONE NON viene modificato: i codici storici sono
+// interpretati da champions_gruppo_girone().
 // ============================================================
 
 /** Gironi delle fasi a gironi. */
 const CHAMPIONS_GIRONI = ['A', 'B'];
+
+/**
+ * Raggruppa i codici GIRONE storici nel "gruppo" che forma le partite:
+ *   A, B          -> A, B        (fase 1)
+ *   C1..C3        -> C           (fase 2, girone C: le righe C1/C2/C3 sono le squadre)
+ *   D1..D3        -> D           (fase 2, girone D)
+ *   S1, S2        -> S1, S2      (ogni semifinale è una partita)
+ *   FI, FR        -> FI, FR      (finale, replay)
+ *   (vuoto)       -> ""          (compatibilità con il formato senza girone)
+ */
+function champions_gruppo_girone($codice): string
+{
+    $c = strtoupper(trim((string) $codice));
+    if (preg_match('/^([CD])[1-9]$/', $c, $m)) return $m[1];
+    return $c;
+}
+
+/**
+ * Raggruppa le righe del calendario (girone, posizione, ...) per gruppo e
+ * le ordina per posizione. Ritorna gruppo => righe.
+ */
+function champions_raggruppa_righe(array $righe): array
+{
+    $per = [];
+    foreach ($righe as $r) $per[champions_gruppo_girone($r["girone"] ?? "")][] = $r;
+    foreach ($per as &$rg) usort($rg, fn($a, $b) => (int) $a["posizione"] <=> (int) $b["posizione"]);
+    unset($rg);
+    ksort($per);
+    return $per;
+}
+
+/** Etichetta leggibile di un gruppo (per le pagine). */
+function champions_etichetta_gruppo(string $gruppo): string
+{
+    return match ($gruppo) {
+        "S1" => "Semifinale 1", "S2" => "Semifinale 2",
+        "FI" => "Finale", "FR" => "Replay finale",
+        "" => "", default => "Girone $gruppo",
+    };
+}
 
 /**
  * Struttura della Champions nell'ordine cronologico in cui si gioca.
@@ -116,7 +171,10 @@ function champions_turni_cronologici(): array
 /** Cella di un turno per il girone indicato (se il turno non ha gironi, l'unica cella). */
 function champions_cella_turno(array $turno, string $girone): array
 {
-    foreach ($turno["celle"] as $c) if ($c["girone"] === $girone) return $c;
+    // Fase 2: i gironi storici C e D corrispondono alle celle di configurazione A e B
+    $g = champions_gruppo_girone($girone);
+    $g = ['C' => 'A', 'D' => 'B'][$g] ?? $g;
+    foreach ($turno["celle"] as $c) if ($c["girone"] === $g) return $c;
     return $turno["celle"][0];
 }
 
@@ -138,16 +196,23 @@ function champions_assegna_sorgente(int $stagione): array
 }
 
 /**
- * Giornate del calendario Champions esistente, come valori suggeriti
- * per ogni cella di configurazione: codice => giornata.
+ * Giornate di campionato del calendario Champions esistente, come valori
+ * suggeriti per ogni cella di configurazione: codice => giornata_camp.
  */
 function champions_suggerite(int $stagione): array
 {
-    $turni = champions_turni_cronologici();
+    $turni   = champions_turni_cronologici();
+    $mappa   = champions_assegna_sorgente($stagione);
     $out = [];
-    foreach (champions_assegna_sorgente($stagione) as $giornata => $idx) {
-        if (!isset($turni[$idx])) continue;
-        foreach ($turni[$idx]["celle"] as $c) $out[$c["codice"]] = $giornata;
+    // Il valore suggerito per una cella è la giornata di CAMPIONATO (giornata_camp)
+    foreach (query_all("SELECT giornata, TRIM(girone) AS girone, MIN(giornata_camp) AS camp
+                        FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione
+                        GROUP BY giornata, TRIM(girone)") as $r) {
+        $idx = $mappa[(int) $r["giornata"]] ?? null;
+        if ($idx === null || !isset($turni[$idx])) continue;
+        $cella = champions_cella_turno($turni[$idx], (string) $r["girone"]);
+        $camp  = (int) $r["camp"];
+        if ($camp > 0 && !isset($out[$cella["codice"]])) $out[$cella["codice"]] = $camp;
     }
     return $out;
 }

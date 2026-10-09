@@ -430,7 +430,7 @@ export default function LiveGiornata() {
             <div key={girone || '_'}>
               {girone && (
                 <div className="px-4 py-1.5 bg-white/[0.02] text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                  Girone {girone}
+                  {champions.partite.find(p => p.girone === girone)?.girone_label || `Girone ${girone}`}
                 </div>
               )}
               {champions.partite.filter(p => p.girone === girone).map(p => (

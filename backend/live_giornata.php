@@ -115,7 +115,7 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
     foreach (query_all("SELECT s.id, s.nome, s.logo
                         FROM NEW_CALENDARIO_CHAMP cc
                         JOIN NEW_SQUADRE s ON s.id = cc.squadra AND s.stagione = cc.stagione
-                        WHERE cc.stagione = $stagione AND cc.giornata = $giornata") as $r) {
+                        WHERE cc.stagione = $stagione AND cc.giornata_camp = $giornata") as $r) {
         $nomi[(int) $r["id"]] = ["id" => (int) $r["id"], "nome" => $r["nome"], "logo" => $r["logo"]];
     }
 
@@ -141,6 +141,7 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
         $fonte = $reale !== null ? "reale" : ($simul !== null ? "simulazione" : null);
         $partiteC[] = [
             "girone"      => $p["girone"],
+            "girone_label" => champions_etichetta_gruppo($p["girone"]),
             "casa"        => $nomi[$idCasa],
             "ospite"      => $nomi[$idOsp],
             "fonte"       => $fonte,
@@ -157,10 +158,18 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
         ];
     }
 
-    // Etichetta del turno (es. "Fase 1 · Gironi - Turno 2 (andata)"), se ricavabile
+    // Etichetta del turno (es. "Fase 1 · Gironi - Giornata 2 (andata)"), se ricavabile
     $etichetta = null;
     try {
-        $etichetta = champions_etichetta_turno($stagione, $giornata);
+        $prog = query_one("SELECT MIN(giornata) AS g FROM NEW_CALENDARIO_CHAMP
+                           WHERE stagione = $stagione AND giornata_camp = $giornata");
+        $idx  = champions_assegna_sorgente($stagione)[(int) ($prog["g"] ?? 0)] ?? null;
+        $turno = $idx !== null ? (champions_turni_cronologici()[$idx] ?? null) : null;
+        if ($turno) {
+            $faseLabel = "";
+            foreach (champions_fasi() as $f) if ($f["id"] === $turno["fase_id"]) $faseLabel = $f["label"];
+            $etichetta = trim($faseLabel . " - " . $turno["label"], " -");
+        }
     } catch (Throwable $e) { /* etichetta facoltativa */ }
 
     $champions = [

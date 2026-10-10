@@ -183,7 +183,8 @@ function righe_per_stagione($conn, $stagione) {
     $righe = query_all("
         SELECT s.id AS ordine, s.nome, s.logo, s.albo,
                a.descrizione AS allenatore, a.logo AS foto_allenatore, $colEmail,
-               u.utenza, u.abilitazione, u.amministratore
+               u.utenza, u.abilitazione, u.amministratore,
+               IF(u.PASSWORD IS NOT NULL AND u.PASSWORD <> '', 1, 0) AS password_impostata
         FROM NEW_SQUADRE s
         LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
         LEFT JOIN NEW_UTENZE     u ON u.id = s.id AND u.stagione = s.stagione
@@ -198,6 +199,9 @@ function righe_per_stagione($conn, $stagione) {
         $r["abilitazione"]    = $r["abilitazione"] ?? "N";
         $r["amministratore"]  = $r["amministratore"] ?? "N";
         $r["password"]        = ""; // mai restituita
+        // Solo un indicatore (mai la password): è già valorizzata, quindi se il
+        // campo resta vuoto viene mantenuta o copiata dalla stagione precedente
+        $r["password_impostata"] = (bool) (int) ($r["password_impostata"] ?? 0);
     }
     unset($r);
     return $righe;
@@ -492,12 +496,18 @@ foreach ($righe as $i => $r) {
     ];
 }
 
-// ---- Password mancante su una utenza nuova ----
-// Se la password è vuota, si mantiene quella già presente su DB per
-// lo stesso ordine/stagione (permette di lasciarla invariata). Se
-// però non esiste ancora nessuna utenza per quell'ordine/stagione
-// (o esiste ma priva di password), e viene indicato un nome utenza,
-// la password è obbligatoria.
+// ---- Password mancante ----
+// Se la password è vuota, la si ricava (senza mai passarla al frontend):
+//   1. da quella già presente su DB per lo stesso ordine/stagione;
+//   2. se la stagione non ha ancora utenze (stagione copiata dalla
+//      precedente), da quella della stagione precedente per lo stesso
+//      ordine, ma SOLO se il nome utenza è rimasto lo stesso (se l'utenza
+//      è cambiata si tratta di un'altra persona: la password va indicata).
+// Se non si trova nulla e viene indicato un nome utenza, la password è
+// obbligatoria.
+$stagionePrec = query_one("SELECT MAX(stagione) AS s FROM NEW_UTENZE WHERE stagione < $stagione");
+$stagionePrec = ($stagionePrec && $stagionePrec["s"] !== null) ? (int) $stagionePrec["s"] : null;
+
 foreach ($rigaData as $i => &$r) {
     if ($r["utenza"] === "" || $r["password"] !== "") continue;
 
@@ -506,9 +516,21 @@ foreach ($rigaData as $i => &$r) {
 
     if ($esistente && $esistente["PASSWORD"] !== "") {
         $r["password"] = $esistente["PASSWORD"]; // mantiene quella attuale
-    } else {
-        $errors[] = err_field($i, "password", "Campo obbligatorio per una nuova utenza (o utenza senza password attuale)");
+        continue;
     }
+
+    if ($stagionePrec !== null) {
+        $utenza_esc = mysqli_real_escape_string($conn, $r["utenza"]);
+        $prec = query_one("SELECT PASSWORD FROM NEW_UTENZE
+                           WHERE id = {$r['ordine']} AND stagione = $stagionePrec
+                             AND utenza = '$utenza_esc' AND PASSWORD <> '' LIMIT 1");
+        if ($prec) {
+            $r["password"] = $prec["PASSWORD"]; // copiata dalla stagione precedente
+            continue;
+        }
+    }
+
+    $errors[] = err_field($i, "password", "Campo obbligatorio per una nuova utenza (o utenza senza password attuale)");
 }
 unset($r);
 

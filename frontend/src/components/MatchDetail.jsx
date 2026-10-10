@@ -99,8 +99,10 @@ export function EventiGiocatore({ g }) {
         <span
           key={e.k}
           title={`${e.titolo}${e.n > 1 ? ` ×${e.n}` : ''}`}
-          className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[11px] leading-none ${
-            e.tono === 'bonus' ? 'bg-green-500/10' : 'bg-red-500/10'
+          className={`inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[11px] leading-none ring-1 ${
+            e.tono === 'bonus'
+              ? 'bg-green-500/25 ring-green-500/40'
+              : 'bg-red-500/25 ring-red-500/40'
           }`}
         >
           <span aria-hidden="true">{e.icona}</span>

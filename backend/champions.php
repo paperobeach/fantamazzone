@@ -44,12 +44,22 @@ function champions_carica_turni(int $stagione): array
     foreach ($cal as $row) $perGiornata[(int) $row["giornata"]][] = $row;
     ksort($perGiornata);
 
-    $slots = champions_turni_piatti();
+    // Una giornata Champions (progressivo) = un TURNO che contiene tutti i
+    // gironi della fase (es. giornata 1: girone A alla giornata di campionato
+    // 2 e girone B alla 3). Le giornate distinte, in ordine, corrispondono
+    // per posizione ai turni (Fase 1, Fase 2, Fase finale).
+    $turniCron = champions_turni_cronologici();
     $turni = [];
     $n = 0;
     foreach ($perGiornata as $giornata => $righe) {
-        if (!isset($slots[$n])) break;
-        $slot = $slots[$n++];
+        if (!isset($turniCron[$n])) break;
+        $turnoDef = $turniCron[$n++];
+        $celle    = $turnoDef["celle"];
+        // Codice del turno: la cella se unica (SF, finale, replay), altrimenti
+        // il codice generico senza girone (es. CHAMP_F1_T3)
+        $codiceTurno = count($celle) === 1
+            ? $celle[0]["codice"]
+            : preg_replace('/_[A-Z]_T(\d+)$/', '_T$1', $celle[0]["codice"]);
 
         // I risultati (NEW_RISULTATI_CHAMP) sono salvati per giornata di
         // FANTACAMPIONATO: si cercano con giornata_camp della riga.
@@ -75,7 +85,8 @@ function champions_carica_turni(int $stagione): array
             foreach (array_chunk($rg, 2) as $coppia) {
                 if (count($coppia) < 2) {
                     $l = $lato($coppia[0]);
-                    $riposa[] = ["girone" => $girone, "id" => $l["id"], "nome" => $l["nome"], "logo" => $l["logo"]];
+                    $riposa[] = ["girone" => $girone, "giornata_camp" => (int) $coppia[0]["giornata_camp"],
+                                 "id" => $l["id"], "nome" => $l["nome"], "logo" => $l["logo"]];
                     continue;
                 }
                 $casa = $lato($coppia[0]);
@@ -92,9 +103,9 @@ function champions_carica_turni(int $stagione): array
         }
 
         $turni[] = [
-            "codice"        => $slot["codice"],
-            "fase"          => $slot["fase_id"],
-            "label"         => $slot["label"],
+            "codice"        => $codiceTurno,
+            "fase"          => $turnoDef["fase_id"],
+            "label"         => $turnoDef["label"],
             "giornata"      => $giornata,
             "giornata_camp" => (int) $righe[0]["giornata_camp"],
             "partite"       => $partite,
@@ -121,7 +132,9 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
             $gironi[$g]["turni"][] = [
                 "label"         => $t["label"],
                 "giornata"      => $t["giornata"],
-                "giornata_camp" => $t["giornata_camp"],
+                // Ogni girone può giocare la stessa giornata Champions in una
+                // giornata di campionato diversa: si usa quella del girone
+                "giornata_camp" => $dati["partite"][0]["giornata"] ?? $dati["riposa"][0]["giornata_camp"] ?? $t["giornata_camp"],
                 "partite"       => $dati["partite"] ?? [],
                 "riposa"        => $dati["riposa"] ?? [],
             ];

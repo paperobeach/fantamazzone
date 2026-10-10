@@ -52,7 +52,7 @@ const emptyRiga = (ordine = '') => ({
   ordine: String(ordine),
   nome: '', logo: '', albo: '',
   allenatore: '', foto_allenatore: '', email: '',
-  utenza: '', password: '', abilitazione: 'N', amministratore: 'N',
+  utenza: '', password: '', password_impostata: false, abilitazione: 'N', amministratore: 'N',
 })
 
 export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onStagioneChange, onProsegui }) {
@@ -93,7 +93,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
             nome: r.nome ?? '', logo: r.logo ?? '', albo: r.albo ?? '',
             allenatore: r.allenatore ?? '', foto_allenatore: r.foto_allenatore ?? '',
             email: r.email ?? '',
-            utenza: r.utenza ?? '', password: '', abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
+            utenza: r.utenza ?? '', password: '', password_impostata: !!r.password_impostata, abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
             amministratore: r.amministratore === 'Y' ? 'Y' : 'N',
           }))
         : [emptyRiga(1)])
@@ -301,7 +301,11 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
                         {err('utenza') && <p className="text-[10px] text-red-400 mt-1">{err('utenza')}</p>}
                       </td>
                       <td className="py-2 pr-3">
-                        <input value={r.password} onChange={e => update(i, 'password', e.target.value)} className={cls('password')} maxLength={8} placeholder="invariata se vuota" />
+                        <input value={r.password} onChange={e => update(i, 'password', e.target.value)} className={cls('password')} maxLength={8} placeholder={
+                          r.password_impostata
+                            ? (fonteStagione ? 'copiata dalla precedente' : 'invariata se vuota')
+                            : 'obbligatoria'
+                        } />
                         {err('password') && <p className="text-[10px] text-red-400 mt-1">{err('password')}</p>}
                       </td>
                       <td className="py-2 pr-3">
@@ -334,7 +338,8 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
           </button>
 
           <p className="text-[11px] text-slate-600 mt-4">
-            Lascia vuota la password di un'utenza già esistente per non modificarla.
+            Lascia vuota la password di un'utenza già esistente per non modificarla
+            {fonteStagione ? ` (se l'utenza non è stata cambiata, viene copiata la password della stagione ${fonteStagione}; le password non vengono mai mostrate)` : ''}.
             {formazionePresente
               ? ' Verranno aggiornate solo utenza, password, abilitazione, amministratore ed email allenatore delle squadre esistenti.'
               : ` Confermando, i dati esistenti per la stagione ${stagione} in NEW_SQUADRE, NEW_ALLENATORI e NEW_UTENZE verranno sostituiti con quelli qui sopra.`}

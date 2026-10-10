@@ -25,6 +25,13 @@ return [
     // Timeout in secondi per le chiamate verso Anthropic
     "timeout" => 25,
 
+    // Proxy per le chiamate in uscita (cURL):
+    //   "auto"              comportamento predefinito dell'hosting (default)
+    //   "nessuno"           connessione diretta, ignora il proxy dell'hosting
+    //   "http://host:porta" proxy esplicito
+    // Usare "nessuno" solo se "Verifica rete" indica che funziona solo in diretta.
+    "proxy" => "auto",
+
     // Modello usato dal test di connessione (il più economico)
     "modello_test" => "claude-haiku-5-5",
 

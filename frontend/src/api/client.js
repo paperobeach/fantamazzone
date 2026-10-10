@@ -264,6 +264,9 @@ export const adminEliminaBackup = (bk_ids, { utenza, password, conferma, accetta
 //        azione 'diagnostica' → controlli locali, nessun costo
 //          { ambiente, config_presente, chiave_configurata, modello_test,
 //            modelli, chiamate_in_uscita_possibili }
+//        azione 'rete' → raggiungibilità di api.anthropic.com e host di controllo,
+//          con proxy predefinito e in diretta (gratuita)
+//          { esito, prove, proxy_ambiente, proxy_configurato, curl_versione }
 //        azione 'test' (default) → conteggio token (gratuito) + risposta
 //        brevissima del modello (costo trascurabile)
 //          { modello, conteggio_token, generazione, tutto_ok, ambiente }

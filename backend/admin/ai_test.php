@@ -19,6 +19,12 @@
 //      di esecuzione, presenza della chiave in config_ai.php (mai
 //      restituita), modelli e listino configurati.
 //
+// azione = "rete"
+//      Verifica di raggiungibilità, gratuita (nessuna chiave, nessuna
+//      generazione): prova api.anthropic.com e alcuni host di controllo,
+//      sia col proxy predefinito dell'hosting sia in connessione diretta,
+//      e indica se il blocco riguarda solo Anthropic o tutto il traffico.
+//
 // azione = "test" (default)
 //      In sequenza:
 //        1. conteggio token di un prompt minimo (gratuito);
@@ -58,8 +64,8 @@ $azione   = strtolower(trim((string) ($input["azione"] ?? "test")));
 if ($stagione < 2000 || $stagione > 2100) {
     api_error("Parametro 'stagione' obbligatorio e deve essere un anno a 4 cifre plausibile (2000-2100)", 400);
 }
-if (!in_array($azione, ["diagnostica", "test"], true)) {
-    api_error("Azione non valida: usare 'diagnostica' o 'test'", 400);
+if (!in_array($azione, ["diagnostica", "rete", "test"], true)) {
+    api_error("Azione non valida: usare 'diagnostica', 'rete' o 'test'", 400);
 }
 if (!ai_verifica_abilitato($conn, $stagione, $utenza, $password)) {
     api_error("Credenziali non valide oppure utenza non abilitata alle funzioni AI", 403);
@@ -78,6 +84,14 @@ if ($azione === "diagnostica") {
         "chiamate_in_uscita_possibili" =>
             function_exists("curl_init") || (bool) ini_get("allow_url_fopen"),
     ]);
+}
+
+// ============================================================
+// Verifica di rete (gratuita)
+// ============================================================
+if ($azione === "rete") {
+    @set_time_limit(60);
+    api_success(ai_sonda_rete());
 }
 
 // ============================================================

@@ -9,6 +9,8 @@
 // Funzioni:
 //   ai_config()                      configurazione (o null se assente)
 //   ai_ambiente()                    diagnostica dell'ambiente PHP
+//   ai_sonda_rete()                  prova di raggiungibilità (gratuita) di
+//                                    api.anthropic.com e di host di controllo
 //   ai_chiamata($endpoint, $payload) POST JSON verso Anthropic
 //   ai_conta_token($modello, $messaggi, $system)  token di input (gratuito)
 //   ai_messaggio($modello, $messaggi, $maxToken, $system)  generazione
@@ -53,6 +55,120 @@ function ai_ambiente(): array
 }
 
 /**
+ * Applica a un handle cURL l'impostazione "proxy" di config_ai.php:
+ *   "auto" (default o assente) → comportamento predefinito di cURL (variabili
+ *                                d'ambiente http_proxy/https_proxy dell'hosting)
+ *   "nessuno"                  → connessione diretta, ignora i proxy
+ *   "http://host:porta"        → usa quel proxy
+ */
+function ai_applica_proxy($ch): void
+{
+    $cfg  = ai_config();
+    $mode = (string) ($cfg["proxy"] ?? "auto");
+    if ($mode === "" || $mode === "auto") return;
+    if ($mode === "nessuno") {
+        curl_setopt($ch, CURLOPT_PROXY, "");
+        curl_setopt($ch, CURLOPT_NOPROXY, "*");
+        return;
+    }
+    curl_setopt($ch, CURLOPT_PROXY, $mode);
+}
+
+/** Variabili d'ambiente di proxy visibili a PHP, senza credenziali (solo schema://host:porta). */
+function ai_proxy_ambiente(): array
+{
+    $out = [];
+    foreach (["https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY", "no_proxy", "NO_PROXY"] as $nome) {
+        $v = getenv($nome);
+        if ($v === false || $v === "") continue;
+        $p = @parse_url($v);
+        $out[$nome] = $p && isset($p["host"])
+            ? (($p["scheme"] ?? "") !== "" ? $p["scheme"] . "://" : "") . $p["host"] . (isset($p["port"]) ? ":" . $p["port"] : "")
+            : "(impostata)";
+    }
+    return $out;
+}
+
+/** Una prova HEAD verso $url, con proxy predefinito o connessione diretta. */
+function ai_sonda_url(string $url, bool $diretto): array
+{
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_NOBODY         => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_TIMEOUT        => 6,
+    ]);
+    if ($diretto) {
+        curl_setopt($ch, CURLOPT_PROXY, "");
+        curl_setopt($ch, CURLOPT_NOPROXY, "*");
+    }
+    $t0   = microtime(true);
+    $res  = curl_exec($ch);
+    $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = $res === false ? curl_error($ch) : null;
+    curl_close($ch);
+    return [
+        "ok"     => $res !== false && $http > 0,
+        "http"   => $http,
+        "ms"     => (int) round((microtime(true) - $t0) * 1000),
+        "errore" => $err,
+    ];
+}
+
+/**
+ * Prova di raggiungibilità, GRATUITA (nessuna chiave, nessuna generazione).
+ * Per ogni host prova prima il percorso predefinito (con l'eventuale proxy
+ * dell'hosting) e, se fallisce, la connessione diretta. Gli host di controllo
+ * servono a capire se il blocco riguarda solo Anthropic o tutto il traffico.
+ *
+ * "esito":
+ *   anthropic_raggiungibile   percorso predefinito OK
+ *   anthropic_solo_diretto    funziona solo bypassando il proxy → proxy="nessuno"
+ *   bloccato_solo_anthropic   altri host raggiungibili, Anthropic no
+ *   bloccato_tutto            nessun host esterno raggiungibile
+ *   curl_assente              cURL non disponibile
+ */
+function ai_sonda_rete(): array
+{
+    if (!function_exists("curl_init")) {
+        return ["esito" => "curl_assente", "prove" => [], "proxy_ambiente" => ai_proxy_ambiente(),
+                "proxy_configurato" => (string) (ai_config()["proxy"] ?? "auto")];
+    }
+    $bersagli = [
+        "api.anthropic.com" => "https://api.anthropic.com/",
+        "example.com"       => "https://example.com/",
+        "api.github.com"    => "https://api.github.com/",
+        "workers.dev"       => "https://workers.dev/",
+    ];
+    $prove = [];
+    foreach ($bersagli as $host => $url) {
+        $pred = ai_sonda_url($url, false);
+        $dir  = $pred["ok"] ? null : ai_sonda_url($url, true);
+        $prove[] = ["host" => $host, "predefinito" => $pred, "diretto" => $dir];
+    }
+
+    $anth   = $prove[0];
+    $altri  = array_slice($prove, 1);
+    $altriOk = false;
+    foreach ($altri as $a) {
+        if ($a["predefinito"]["ok"] || ($a["diretto"]["ok"] ?? false)) $altriOk = true;
+    }
+    if ($anth["predefinito"]["ok"])            $esito = "anthropic_raggiungibile";
+    elseif ($anth["diretto"]["ok"] ?? false)   $esito = "anthropic_solo_diretto";
+    elseif ($altriOk)                          $esito = "bloccato_solo_anthropic";
+    else                                       $esito = "bloccato_tutto";
+
+    return [
+        "esito"             => $esito,
+        "prove"             => $prove,
+        "proxy_ambiente"    => ai_proxy_ambiente(),
+        "proxy_configurato" => (string) (ai_config()["proxy"] ?? "auto"),
+        "curl_versione"     => curl_version()["version"] ?? null,
+    ];
+}
+
+/**
  * POST JSON verso Anthropic.
  * Ritorna ["ok"=>bool, "http"=>int, "ms"=>int, "dati"=>array|null, "errore"=>string|null].
  * Non lancia eccezioni e non include mai la chiave nei messaggi di errore.
@@ -89,6 +205,7 @@ function ai_chiamata(string $endpoint, array $payload): array
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => $timeout,
         ]);
+        ai_applica_proxy($ch);
         $risposta = curl_exec($ch);
         $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         if ($risposta === false) $errTrasporto = "cURL: " . curl_error($ch);

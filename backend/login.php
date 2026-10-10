@@ -3,7 +3,7 @@
 // api/login.php  —  POST
 // Body: stagione, utenza, password
 //
-// Risposta: { id, utenza, descrizione, abilitazione, amministratore, stagione }
+// Risposta: { id, utenza, descrizione, abilitazione, amministratore, abilita_ai, stagione }
 // oppure 401 se credenziali errate
 //
 // NOTA SICUREZZA: le password nel DB sono attualmente in chiaro.
@@ -20,9 +20,14 @@ $stagione = post_int("stagione");
 $utenza   = post_str("utenza");
 $pass     = post_str("password");
 
+// NEW_UTENZE.abilita_ai è aggiunta da migrazione_abilita_ai.sql: finché
+// non è stata eseguita, il login deve continuare a funzionare (flag 'N').
+$rCol  = mysqli_query($conn, "SHOW COLUMNS FROM NEW_UTENZE LIKE 'abilita_ai'");
+$colAi = ($rCol && mysqli_num_rows($rCol) > 0) ? "abilita_ai" : "'N' AS abilita_ai";
+
 // Recupera l'utente (non filtriamo per password in query per
 // evitare timing attack; il controllo avviene in PHP)
-$sql = "SELECT id, utenza, PASSWORD, descrizione, abilitazione, amministratore
+$sql = "SELECT id, utenza, PASSWORD, descrizione, abilitazione, amministratore, $colAi
         FROM NEW_UTENZE
         WHERE stagione = $stagione AND utenza = '$utenza'
         LIMIT 1";

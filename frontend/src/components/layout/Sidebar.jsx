@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap
 } from 'lucide-react'
 
 const NAV = [
@@ -36,8 +36,13 @@ const ADMIN_NAV = [
   { to: '/ripristino-stagione',         icon: ArchiveRestore, label: 'Ripristino stagione' },
 ]
 
+// Menu "AI": visibile solo alle utenze con NEW_UTENZE.abilita_ai = 'Y'.
+const AI_NAV = [
+  { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
+]
+
 export default function Sidebar({ open = false, onClose = () => {} }) {
-  const { stagioni, stagione, changeStagione, utente, doLogout, isAdmin } = useApp()
+  const { stagioni, stagione, changeStagione, utente, doLogout, isAdmin, canAi } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -150,6 +155,36 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
               <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">Gestione squadra</p>
             </div>
             {TEAM_NAV.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                    isActive
+                      ? 'bg-grass-500/10 text-grass-400 font-medium'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-grass-500' : ''}`} />
+                    {label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </>
+        )}
+
+        {canAi && (
+          <>
+            <div className="pt-3 pb-1 px-2">
+              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5" /> AI
+              </p>
+            </div>
+            {AI_NAV.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}

@@ -13,6 +13,12 @@ RewriteEngine On
     Deny from all
 </Files>
 
+# Blocca accesso diretto alla configurazione AI (contiene la chiave API Anthropic)
+<FilesMatch "^config_ai(\.example)?\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
 # Blocca accesso diretto alla cartella admin dall'esterno
 # (gli endpoint admin devono essere chiamati solo da IP fidati
 #  oppure con un token - vedi autenticazione admin sotto)

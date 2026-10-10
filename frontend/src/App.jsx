@@ -27,6 +27,7 @@ const RiaperturaGiornata = lazy(() => import('./pages/RiaperturaGiornata'))
 const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSerieA'))
 const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
+const AiTest = lazy(() => import('./pages/AiTest'))
 
 function PageLoader() {
   return (
@@ -45,6 +46,14 @@ function AdminRoute({ children }) {
   const { utente, isAdmin } = useApp()
   if (!utente) return <Navigate to="/login" replace />
   if (!isAdmin) return <Navigate to="/" replace />
+  return children
+}
+
+// Sezione "AI": solo utenze con NEW_UTENZE.abilita_ai = 'Y'
+function AiRoute({ children }) {
+  const { utente, canAi } = useApp()
+  if (!utente) return <Navigate to="/login" replace />
+  if (!canAi) return <Navigate to="/" replace />
   return children
 }
 
@@ -103,6 +112,9 @@ function AppShell() {
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={
                     <AdminRoute><Admin /></AdminRoute>
+                  } />
+                  <Route path="/ai/test" element={
+                    <AiRoute><AiTest /></AiRoute>
                   } />
                   <Route path="/inserimento-rose" element={
                     <AdminRoute><InserimentoRose /></AdminRoute>

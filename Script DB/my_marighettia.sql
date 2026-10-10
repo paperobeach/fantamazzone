@@ -894,7 +894,8 @@ CREATE TABLE `NEW_UTENZE` (
   `descrizione` varchar(50) NOT NULL DEFAULT '',
   `stagione` int NOT NULL DEFAULT '0',
   `abilitazione` char(1) NOT NULL DEFAULT '',
-  `amministratore` char(1) NOT NULL DEFAULT 'N'
+  `amministratore` char(1) NOT NULL DEFAULT 'N',
+  `abilita_ai` char(1) NOT NULL DEFAULT 'N'
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------

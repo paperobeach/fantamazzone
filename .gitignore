@@ -8,6 +8,7 @@ frontend/.env
 backend/vendor/
 backend/.env
 backend/connect.php
+backend/config_ai.php
 
 # Varie
 .DS_Store

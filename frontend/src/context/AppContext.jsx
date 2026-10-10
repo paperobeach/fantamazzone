@@ -61,6 +61,11 @@ export function AppProvider({ children }) {
   // UI (che usa sempre 'Y'/'N') oppure inserito a mano nel DB.
   const isAdmin = String(utente?.amministratore ?? '').trim().toUpperCase() === 'Y'
 
+  // "abilita_ai" è un'abilitazione specifica di NEW_UTENZE per la sezione
+  // di menu "AI", indipendente da "amministratore". Il valore arriva dal
+  // login: chi era già connesso deve uscire e rientrare per vederlo.
+  const canAi = String(utente?.abilita_ai ?? '').trim().toUpperCase() === 'Y'
+
   // Stagione più recente tra quelle disponibili (stagioni è già ordinata
   // DESC dal backend): serve per il login (che non fa più scegliere la
   // stagione) e per la sezione "Gestione squadra", che deve sempre
@@ -72,7 +77,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       stagioni, stagione, changeStagione, ultimaStagione,
       sistemaParams,
-      utente, doLogin, doLogout, isAdmin,
+      utente, doLogin, doLogout, isAdmin, canAi,
       loading,
     }}>
       {children}

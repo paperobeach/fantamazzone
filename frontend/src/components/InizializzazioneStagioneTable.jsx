@@ -39,6 +39,7 @@ import { Spinner } from './ui'
 //   Password          → NEW_UTENZE.PASSWORD
 //   Abilitazione      → NEW_UTENZE.ABILITAZIONE
 //   Amministratore    → NEW_UTENZE.AMMINISTRATORE
+//   AI                → NEW_UTENZE.ABILITA_AI (accesso alla sezione di menu "AI")
 //   Ordine            → NEW_SQUADRE.ID, NEW_ALLENATORI.ID,
 //                        NEW_ALLENATORI.ID_SQUADRA, NEW_UTENZE.ID
 //                        (stesso valore su tutte e 4 le colonne)
@@ -52,7 +53,7 @@ const emptyRiga = (ordine = '') => ({
   ordine: String(ordine),
   nome: '', logo: '', albo: '',
   allenatore: '', foto_allenatore: '', email: '',
-  utenza: '', password: '', password_impostata: false, abilitazione: 'N', amministratore: 'N',
+  utenza: '', password: '', password_impostata: false, abilitazione: 'N', amministratore: 'N', abilita_ai: 'N',
 })
 
 export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onStagioneChange, onProsegui }) {
@@ -95,6 +96,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
             email: r.email ?? '',
             utenza: r.utenza ?? '', password: '', password_impostata: !!r.password_impostata, abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
             amministratore: r.amministratore === 'Y' ? 'Y' : 'N',
+            abilita_ai: r.abilita_ai === 'Y' ? 'Y' : 'N',
           }))
         : [emptyRiga(1)])
       setFonteStagione(dati.fonte_stagione ?? null)
@@ -141,7 +143,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
           allenatore: r.allenatore, foto_allenatore: r.foto_allenatore,
           email: r.email,
           utenza: r.utenza, password: r.password, abilitazione: r.abilitazione,
-          amministratore: r.amministratore,
+          amministratore: r.amministratore, abilita_ai: r.abilita_ai,
         })),
       }
       const res = await adminInizializzaStagione(Number(stagione), payload)
@@ -242,6 +244,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
                 <col style={{ width: '150px' }} />  {/* Password */}
                 <col style={{ width: '110px' }} />  {/* Abilitata */}
                 <col style={{ width: '120px' }} />  {/* Amministratore */}
+                <col style={{ width: '80px' }} />   {/* AI */}
                 <col style={{ width: '44px' }} />   {/* Elimina */}
               </colgroup>
               <thead>
@@ -257,6 +260,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
                   <th className="pb-2 pr-3">Password</th>
                   <th className="pb-2 pr-3">Abilitata</th>
                   <th className="pb-2 pr-3">Amministratore</th>
+                  <th className="pb-2 pr-3">AI</th>
                   <th className="pb-2" />
                 </tr>
               </thead>
@@ -320,6 +324,13 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
                           <option value="N">No</option>
                         </select>
                         {err('amministratore') && <p className="text-[10px] text-red-400 mt-1">{err('amministratore')}</p>}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <select value={r.abilita_ai} onChange={e => update(i, 'abilita_ai', e.target.value)} className={`${cls('abilita_ai')} cursor-pointer`}>
+                          <option value="Y">Sì</option>
+                          <option value="N">No</option>
+                        </select>
+                        {err('abilita_ai') && <p className="text-[10px] text-red-400 mt-1">{err('abilita_ai')}</p>}
                       </td>
                       <td className="py-2">
                         <button onClick={() => removeRiga(i)} disabled={bloccato} className="text-slate-600 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed">

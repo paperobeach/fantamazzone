@@ -258,6 +258,18 @@ export const adminRipristinaStagione = (bk_id, { utenza, password, conferma }) =
 export const adminEliminaBackup = (bk_ids, { utenza, password, conferma, accetta_perdita = false }) =>
   post('admin/ripristino_stagione.php', { azione: 'elimina', bk_ids, utenza, password, conferma, accetta_perdita })
 
+// ── AI: test connessione Anthropic (admin/ai_test.php) ────────
+// POST → Body { stagione, utenza, password, azione }: credenziali di una
+//        utenza con NEW_UTENZE.abilita_ai = 'Y' (verificate lato server).
+//        azione 'diagnostica' → controlli locali, nessun costo
+//          { ambiente, config_presente, chiave_configurata, modello_test,
+//            modelli, chiamate_in_uscita_possibili }
+//        azione 'test' (default) → conteggio token (gratuito) + risposta
+//        brevissima del modello (costo trascurabile)
+//          { modello, conteggio_token, generazione, tutto_ok, ambiente }
+export const aiConnessione = (stagione, { utenza, password, azione = 'test' }) =>
+  post('admin/ai_test.php', { stagione, utenza, password, azione })
+
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
 //        Allenatori + Utenze). Se la stagione non ha ancora dati,

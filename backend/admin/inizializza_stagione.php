@@ -47,7 +47,7 @@
 //     Consolida in un'unica chiamata le tre tabelle:
 //       - NEW_SQUADRE     (id, nome, logo, stagione, albo)
 //       - NEW_ALLENATORI  (id, descrizione, id_squadra, logo, stagione, email)
-//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
+//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore, abilita_ai)
 //     con cancellazione preventiva per stagione + reinserimento
 //     (operazione ripetibile).
 //   Se ESISTE già almeno una formazione per la stagione (controllo
@@ -101,6 +101,10 @@
 //   utenza          → NEW_UTENZE.UTENZA
 //   password        → NEW_UTENZE.PASSWORD
 //   abilitazione    → NEW_UTENZE.ABILITAZIONE
+//   abilita_ai      → NEW_UTENZE.ABILITA_AI (flag Y/N: accesso alla sezione
+//                      "AI", indipendente da abilitazione e amministratore;
+//                      ignorato se la migrazione migrazione_abilita_ai.sql
+//                      non è ancora stata eseguita)
 //   amministratore  → NEW_UTENZE.AMMINISTRATORE (flag Y/N: utente
 //                      riconosciuto come amministratore dell'app,
 //                      indipendentemente dall'abilitazione)
@@ -161,6 +165,14 @@ function colonna_email_presente($conn) {
     return $r && mysqli_num_rows($r) > 0;
 }
 
+// La colonna NEW_UTENZE.abilita_ai è aggiunta da una migrazione
+// (migrazione_abilita_ai.sql). A differenza dell'email NON blocca il
+// salvataggio: se manca, il flag AI viene semplicemente ignorato.
+function colonna_ai_presente($conn) {
+    $r = mysqli_query($conn, "SHOW COLUMNS FROM NEW_UTENZE LIKE 'abilita_ai'");
+    return $r && mysqli_num_rows($r) > 0;
+}
+
 // Esegue una query di scrittura e, se fallisce, solleva un'eccezione
 // (gestita dal try/catch del POST) invece di proseguire in silenzio
 // rispondendo "ok" con dati non realmente salvati.
@@ -180,10 +192,11 @@ function righe_per_stagione($conn, $stagione) {
     // utilizzabile in lettura (email vuote); è il salvataggio a
     // segnalare esplicitamente il problema.
     $colEmail = colonna_email_presente($conn) ? "a.email" : "'' AS email";
+    $colAi    = colonna_ai_presente($conn) ? "u.abilita_ai" : "'N' AS abilita_ai";
     $righe = query_all("
         SELECT s.id AS ordine, s.nome, s.logo, s.albo,
                a.descrizione AS allenatore, a.logo AS foto_allenatore, $colEmail,
-               u.utenza, u.abilitazione, u.amministratore,
+               u.utenza, u.abilitazione, u.amministratore, $colAi,
                IF(u.PASSWORD IS NOT NULL AND u.PASSWORD <> '', 1, 0) AS password_impostata
         FROM NEW_SQUADRE s
         LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
@@ -198,6 +211,7 @@ function righe_per_stagione($conn, $stagione) {
         $r["utenza"]          = $r["utenza"] ?? "";
         $r["abilitazione"]    = $r["abilitazione"] ?? "N";
         $r["amministratore"]  = $r["amministratore"] ?? "N";
+        $r["abilita_ai"]      = $r["abilita_ai"] ?? "N";
         $r["password"]        = ""; // mai restituita
         // Solo un indicatore (mai la password): è già valorizzata, quindi se il
         // campo resta vuoto viene mantenuta o copiata dalla stagione precedente
@@ -417,6 +431,7 @@ foreach ($righe as $i => $r) {
     $password        = (string) ($r["password"] ?? "");
     $abilitazione    = trim((string) ($r["abilitazione"] ?? ""));
     $amministratore  = trim((string) ($r["amministratore"] ?? ""));
+    $abilitaAi       = trim((string) ($r["abilita_ai"] ?? ""));
 
     // ordine: sempre richiesto per individuare la riga; con
     // formazione già presente deve corrispondere a una squadra già
@@ -487,12 +502,18 @@ foreach ($righe as $i => $r) {
         $errors[] = err_field($i, "amministratore", "Deve essere 'Y' o 'N'");
     }
 
+    if ($abilitaAi === "") {
+        $abilitaAi = "N";
+    } elseif (!in_array($abilitaAi, ["Y", "N"], true)) {
+        $errors[] = err_field($i, "abilita_ai", "Deve essere 'Y' o 'N'");
+    }
+
     $rigaData[] = [
         "ordine" => $ordine, "nome" => $nome, "logo" => $logo, "albo" => $albo,
         "allenatore" => $allenatore, "foto_allenatore" => $foto_allenatore,
         "email" => $email,
         "utenza" => $utenza, "password" => $password, "abilitazione" => $abilitazione,
-        "amministratore" => $amministratore,
+        "amministratore" => $amministratore, "abilita_ai" => $abilitaAi,
     ];
 }
 
@@ -542,6 +563,8 @@ if (!colonna_email_presente($conn)) {
     api_error("La colonna 'email' non esiste ancora su NEW_ALLENATORI: eseguire prima la migrazione migrazione_email_allenatori.sql. Nessun dato è stato modificato.", 500);
 }
 
+$aiPresente = colonna_ai_presente($conn);
+
 mysqli_begin_transaction($conn);
 try {
     if ($formazionePresente) {
@@ -553,9 +576,10 @@ try {
             $abil_esc   = mysqli_real_escape_string($conn, $r["abilitazione"]);
             $admin_esc  = mysqli_real_escape_string($conn, $r["amministratore"]);
             $email_esc  = mysqli_real_escape_string($conn, $r["email"]);
+            $ai_set     = $aiPresente ? ", abilita_ai = '" . mysqli_real_escape_string($conn, $r["abilita_ai"]) . "'" : "";
 
             esegui($conn, "UPDATE NEW_UTENZE
-                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
+                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'$ai_set
                 WHERE id = {$r['ordine']} AND stagione = $stagione");
 
             // L'email dell'allenatore è modificabile anche a formazioni
@@ -594,6 +618,8 @@ try {
         $pass_esc       = mysqli_real_escape_string($conn, $r["password"]);
         $abil_esc       = mysqli_real_escape_string($conn, $r["abilitazione"]);
         $admin_esc      = mysqli_real_escape_string($conn, $r["amministratore"]);
+        $ai_cols        = $aiPresente ? ", abilita_ai" : "";
+        $ai_val         = $aiPresente ? ", '" . mysqli_real_escape_string($conn, $r["abilita_ai"]) . "'" : "";
 
         // NEW_UTENZE.descrizione non è tra i campi mappati esplicitamente:
         // di default usa il nome dell'allenatore, con fallback al nome
@@ -607,8 +633,8 @@ try {
         esegui($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione, email)
             VALUES ({$r['ordine']}, '$allenatore_esc', {$r['ordine']}, '$foto_all_esc', $stagione, '$email_esc')");
 
-        esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
-            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc')");
+        esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore$ai_cols)
+            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc'$ai_val)");
     }
 
     mysqli_commit($conn);

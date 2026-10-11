@@ -53,7 +53,7 @@ const emptyRiga = (ordine = '') => ({
   ordine: String(ordine),
   nome: '', logo: '', albo: '',
   allenatore: '', foto_allenatore: '', email: '',
-  utenza: '', password: '', password_impostata: false, abilitazione: 'N', amministratore: 'N', abilita_ai: 'N',
+  utenza: '', utenza_originale: '', password: '', password_impostata: false, abilitazione: 'N', amministratore: 'N', abilita_ai: 'N',
 })
 
 export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onStagioneChange, onProsegui }) {
@@ -94,7 +94,11 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
             nome: r.nome ?? '', logo: r.logo ?? '', albo: r.albo ?? '',
             allenatore: r.allenatore ?? '', foto_allenatore: r.foto_allenatore ?? '',
             email: r.email ?? '',
-            utenza: r.utenza ?? '', password: '', password_impostata: !!r.password_impostata, abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
+            utenza: r.utenza ?? '',
+            // Chiave di aggiornamento su NEW_UTENZE = stagione + utenza (valore caricato da DB).
+            // Se i dati arrivano da un'altra stagione (precompilazione) non esiste ancora nessuna utenza da aggiornare.
+            utenza_originale: dati.fonte_stagione ? '' : (r.utenza ?? ''),
+            password: '', password_impostata: !!r.password_impostata, abilitazione: r.abilitazione === 'Y' ? 'Y' : 'N',
             amministratore: r.amministratore === 'Y' ? 'Y' : 'N',
             abilita_ai: r.abilita_ai === 'Y' ? 'Y' : 'N',
           }))
@@ -142,7 +146,7 @@ export function InizializzazioneStagioneTable({ stagione: stagioneIniziale, onSt
           nome: r.nome, logo: r.logo, albo: r.albo,
           allenatore: r.allenatore, foto_allenatore: r.foto_allenatore,
           email: r.email,
-          utenza: r.utenza, password: r.password, abilitazione: r.abilitazione,
+          utenza: r.utenza, utenza_originale: r.utenza_originale ?? '', password: r.password, abilitazione: r.abilitazione,
           amministratore: r.amministratore, abilita_ai: r.abilita_ai,
         })),
       }

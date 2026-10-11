@@ -52,6 +52,9 @@
 //     (operazione ripetibile).
 //   Se ESISTE già almeno una formazione per la stagione (controllo
 //   ripetuto anche qui lato server, non ci si fida del frontend):
+//     - NEW_UTENZE è aggiornata per chiave STAGIONE + UTENZA (non per id):
+//       ogni riga porta "utenza_originale" (utenza attuale su DB; vuota
+//       se nuova), usata come chiave nella WHERE dell'UPDATE;
 //     - vengono accettate in scrittura SOLO utenza/password/
 //       abilitazione/amministratore e l'email dell'allenatore delle
 //       righe già esistenti (aggiornate con UPDATE, non con
@@ -402,6 +405,9 @@ foreach ($righe as $i => $r) {
     $foto_allenatore = trim((string) ($r["foto_allenatore"] ?? ""));
     $email           = trim((string) ($r["email"] ?? ""));
     $utenza          = trim((string) ($r["utenza"] ?? ""));
+    // Chiave di NEW_UTENZE = stagione + utenza: "utenza_originale" è il nome
+    // utenza attualmente su DB per la riga (vuoto = utenza nuova).
+    $utenzaOrig      = trim((string) ($r["utenza_originale"] ?? ""));
     $password        = (string) ($r["password"] ?? "");
     $abilitazione    = trim((string) ($r["abilitazione"] ?? ""));
     $amministratore  = trim((string) ($r["amministratore"] ?? ""));
@@ -461,6 +467,8 @@ foreach ($righe as $i => $r) {
         }
     }
 
+    if (mb_strlen($utenzaOrig) > 50) $errors[] = err_field($i, "utenza_originale", "Massimo 50 caratteri");
+
     if (mb_strlen($password) > 8) $errors[] = err_field($i, "password", "Massimo 8 caratteri (limite colonna PASSWORD)");
 
     if ($abilitazione === "") {
@@ -479,9 +487,38 @@ foreach ($righe as $i => $r) {
         "ordine" => $ordine, "nome" => $nome, "logo" => $logo, "albo" => $albo,
         "allenatore" => $allenatore, "foto_allenatore" => $foto_allenatore,
         "email" => $email,
-        "utenza" => $utenza, "password" => $password, "abilitazione" => $abilitazione,
+        "utenza" => $utenza, "utenza_originale" => $utenzaOrig, "password" => $password, "abilitazione" => $abilitazione,
         "amministratore" => $amministratore,
     ];
+}
+
+// ---- Coerenza della chiave NEW_UTENZE (stagione + utenza) ----
+// Una riga già esistente è individuata da stagione + utenza_originale.
+// Il nuovo nome utenza non può coincidere con l'utenza originale di
+// un'altra riga (scambi/catene non sono gestibili in un'unica
+// operazione) né con un'utenza già presente su DB per la stagione.
+if ($formazionePresente) {
+    $originali = []; // utenza_originale => indice riga
+    foreach ($rigaData as $i => $r) {
+        if ($r["utenza_originale"] === "") continue;
+        if (isset($originali[$r["utenza_originale"]])) {
+            $errors[] = err_field($i, "utenza_originale", "Utenza originale duplicata (già usata alla riga {$originali[$r['utenza_originale']]})");
+        } else {
+            $originali[$r["utenza_originale"]] = $i;
+        }
+    }
+    foreach ($rigaData as $i => $r) {
+        if ($r["utenza"] === "" || $r["utenza"] === $r["utenza_originale"]) continue;
+        if (isset($originali[$r["utenza"]])) {
+            $errors[] = err_field($i, "utenza", "Nome utenza già assegnato a un'altra riga: non è possibile scambiare le utenze in un'unica operazione");
+            continue;
+        }
+        $utenza_esc = mysqli_real_escape_string($conn, $r["utenza"]);
+        $dup = query_one("SELECT utenza FROM NEW_UTENZE WHERE stagione = $stagione AND utenza = '$utenza_esc' LIMIT 1");
+        if ($dup) {
+            $errors[] = err_field($i, "utenza", "Nome utenza già presente per la stagione $stagione");
+        }
+    }
 }
 
 // ---- Password mancante ----
@@ -499,8 +536,13 @@ $stagionePrec = ($stagionePrec && $stagionePrec["s"] !== null) ? (int) $stagione
 foreach ($rigaData as $i => &$r) {
     if ($r["utenza"] === "" || $r["password"] !== "") continue;
 
-    $esistente = query_one("SELECT PASSWORD FROM NEW_UTENZE
-                             WHERE id = {$r['ordine']} AND stagione = $stagione LIMIT 1");
+    // Password attuale: riga individuata da stagione + utenza (originale).
+    $esistente = null;
+    if ($r["utenza_originale"] !== "") {
+        $orig_esc  = mysqli_real_escape_string($conn, $r["utenza_originale"]);
+        $esistente = query_one("SELECT PASSWORD FROM NEW_UTENZE
+                                 WHERE stagione = $stagione AND utenza = '$orig_esc' LIMIT 1");
+    }
 
     if ($esistente && $esistente["PASSWORD"] !== "") {
         $r["password"] = $esistente["PASSWORD"]; // mantiene quella attuale
@@ -510,7 +552,7 @@ foreach ($rigaData as $i => &$r) {
     if ($stagionePrec !== null) {
         $utenza_esc = mysqli_real_escape_string($conn, $r["utenza"]);
         $prec = query_one("SELECT PASSWORD FROM NEW_UTENZE
-                           WHERE id = {$r['ordine']} AND stagione = $stagionePrec
+                           WHERE stagione = $stagionePrec
                              AND utenza = '$utenza_esc' AND PASSWORD <> '' LIMIT 1");
         if ($prec) {
             $r["password"] = $prec["PASSWORD"]; // copiata dalla stagione precedente
@@ -542,9 +584,28 @@ try {
             $admin_esc  = mysqli_real_escape_string($conn, $r["amministratore"]);
             $email_esc  = mysqli_real_escape_string($conn, $r["email"]);
 
-            esegui($conn, "UPDATE NEW_UTENZE
-                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
-                WHERE id = {$r['ordine']} AND stagione = $stagione");
+            // NEW_UTENZE si aggiorna per chiave STAGIONE + UTENZA (mai per id).
+            // La riga è individuata dall'utenza attualmente su DB
+            // (utenza_originale); se non esiste (utenza nuova) viene inserita.
+            $orig_esc = mysqli_real_escape_string($conn, $r["utenza_originale"]);
+            $trovata  = ($r["utenza_originale"] !== "")
+                ? query_one("SELECT utenza FROM NEW_UTENZE WHERE stagione = $stagione AND utenza = '$orig_esc' LIMIT 1")
+                : null;
+
+            if ($trovata) {
+                esegui($conn, "UPDATE NEW_UTENZE
+                    SET id = {$r['ordine']}, utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
+                    WHERE stagione = $stagione AND utenza = '$orig_esc'");
+            } elseif ($r["utenza"] !== "") {
+                $sq = query_one("SELECT s.nome, a.descrizione AS allenatore
+                                 FROM NEW_SQUADRE s
+                                 LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
+                                 WHERE s.id = {$r['ordine']} AND s.stagione = $stagione LIMIT 1");
+                $descr = ($sq && ($sq["allenatore"] ?? "") !== "") ? $sq["allenatore"] : ($sq["nome"] ?? $r["utenza"]);
+                $descr_esc = mysqli_real_escape_string($conn, $descr);
+                esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
+                    VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$descr_esc', $stagione, '$abil_esc', '$admin_esc')");
+            }
 
             // L'email dell'allenatore è modificabile anche a formazioni
             // già presenti (non altera squadra/allenatore).

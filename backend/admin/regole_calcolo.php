@@ -122,25 +122,50 @@ const FASCE_GOL_PUNTEGGIO_DEFAULT = [
     ['da' => 109,  'a' => null,    'gol' => 11],
 ];
 
+// Giornate di campionato di default dei turni Champions.
+//   Fase 1: girone A 2,4,6,10,12,14 - girone B 3,5,7,11,13,15
+//   Fase 2: gironi C e D (celle A e B) 17,18,19,21,22,23
+//   Semifinali 26,28 - finale 30 - replay finale 31
+const CHAMPIONS_GIORNATE_DEFAULT = [
+    'CHAMP_F1_A_T1' => 2,  'CHAMP_F1_A_T2' => 4,  'CHAMP_F1_A_T3' => 6,
+    'CHAMP_F1_A_T4' => 10, 'CHAMP_F1_A_T5' => 12, 'CHAMP_F1_A_T6' => 14,
+    'CHAMP_F1_B_T1' => 3,  'CHAMP_F1_B_T2' => 5,  'CHAMP_F1_B_T3' => 7,
+    'CHAMP_F1_B_T4' => 11, 'CHAMP_F1_B_T5' => 13, 'CHAMP_F1_B_T6' => 15,
+    'CHAMP_F2_A_T1' => 17, 'CHAMP_F2_A_T2' => 18, 'CHAMP_F2_A_T3' => 19,
+    'CHAMP_F2_A_T4' => 21, 'CHAMP_F2_A_T5' => 22, 'CHAMP_F2_A_T6' => 23,
+    'CHAMP_F2_B_T1' => 17, 'CHAMP_F2_B_T2' => 18, 'CHAMP_F2_B_T3' => 19,
+    'CHAMP_F2_B_T4' => 21, 'CHAMP_F2_B_T5' => 22, 'CHAMP_F2_B_T6' => 23,
+    'CHAMP_SF_T1' => 26, 'CHAMP_SF_T2' => 28,
+    'CHAMP_FIN_T1' => 30, 'CHAMP_FIN_REPLAY' => 31,
+];
+
 // Parametri di stagione non riconducibili a bonus/malus o modificatori.
 // Funzione (non const): una "const" non può contenere una chiamata di
 // funzione come json_encode() nell'inizializzatore.
 function parametri_default(): array
 {
-    return [
+    $parametri = [
         ['codice' => 'SOSTITUZIONI_MAX_MOVIMENTO',   'etichetta' => 'Sostituzioni di movimento (portiere escluso)', 'valore' => '5'],
         ['codice' => 'SOSTITUZIONI_MAX_PORTIERE',    'etichetta' => 'Sostituzioni portiere',                        'valore' => '1'],
         ['codice' => 'RISERVE_UFFICIO_MAX',          'etichetta' => "Riserve d'ufficio: numero massimo schierabile", 'valore' => '1'],
         ['codice' => 'VOTO_UFFICIO_PORTIERE',        'etichetta' => "Voto d'ufficio portiere",                      'valore' => '3'],
         ['codice' => 'VOTO_UFFICIO_MOVIMENTO',       'etichetta' => "Voto d'ufficio giocatore di movimento",        'valore' => '4'],
         ['codice' => 'VOTO_UFFICIO_AMMONITO',        'etichetta' => "Voto d'ufficio giocatore ammonito senza voto", 'valore' => '5'],
-        ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => ''],
-        ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '38'],
+        ['codice' => 'ULTIMA_GIORNATA_FATTORE_CASA', 'etichetta' => 'Ultima giornata con fattore casa (vuoto = sempre)', 'valore' => '28'],
+        ['codice' => 'NUMERO_GIORNATE',              'etichetta' => 'Numero di giornate della stagione',            'valore' => '34'],
         ['codice' => 'TOPFLOP_SOGLIA_PERCENTUALE',   'etichetta' => 'Top/Flop 11: giocate minime (% delle partite giocate)', 'valore' => '50'],
-        ['codice' => 'GIORNATA_SERIE_A_INIZIO',      'etichetta' => 'Giornata di Serie A di partenza',              'valore' => '1'],
+        ['codice' => 'GIORNATA_SERIE_A_INIZIO',      'etichetta' => 'Giornata di Serie A di partenza',              'valore' => '4'],
+        ['codice' => 'FORMAZIONE_CHAMPIONS_DIVERSA', 'etichetta' => 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)', 'valore' => '1'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
     ];
+
+    // Giornate di fantacampionato dei turni Champions (parametri CHAMP_*).
+    // Fase 2: i gironi C e D corrispondono alle celle di configurazione A e B.
+    foreach (CHAMPIONS_GIORNATE_DEFAULT as $codice => $giornata) {
+        $parametri[] = ['codice' => $codice, 'etichetta' => "Champions - $codice: giornata di fantacampionato", 'valore' => (string) $giornata];
+    }
+    return $parametri;
 }
 
 // Ultima stagione disponibile (la stessa elenca sistema.php?tipo=stagioni):

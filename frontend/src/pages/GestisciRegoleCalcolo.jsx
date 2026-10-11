@@ -305,6 +305,42 @@ function Sottosezione({ titolo, descrizione, children }) {
   )
 }
 
+// Valori di default dei parametri di stagione. Vengono proposti (e salvati con
+// "Salva") solo quando il parametro manca o è vuoto. Allineati a
+// backend/admin/regole_calcolo.php (CHAMPIONS_GIORNATE_DEFAULT e parametri_default).
+// Fase 2: i gironi C e D corrispondono alle celle di configurazione A e B.
+const DEFAULT_PARAMETRI = {
+  NUMERO_GIORNATE: ['34', 'Numero di giornate della stagione'],
+  GIORNATA_SERIE_A_INIZIO: ['4', 'Giornata di Serie A di partenza'],
+  ULTIMA_GIORNATA_FATTORE_CASA: ['28', 'Ultima giornata con fattore casa (vuoto = sempre)'],
+  FORMAZIONE_CHAMPIONS_DIVERSA: ['1', 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)'],
+}
+const DEFAULT_CHAMP_GIORNATE = {
+  CHAMP_F1_A_T1: 2, CHAMP_F1_A_T2: 4, CHAMP_F1_A_T3: 6, CHAMP_F1_A_T4: 10, CHAMP_F1_A_T5: 12, CHAMP_F1_A_T6: 14,
+  CHAMP_F1_B_T1: 3, CHAMP_F1_B_T2: 5, CHAMP_F1_B_T3: 7, CHAMP_F1_B_T4: 11, CHAMP_F1_B_T5: 13, CHAMP_F1_B_T6: 15,
+  CHAMP_F2_A_T1: 17, CHAMP_F2_A_T2: 18, CHAMP_F2_A_T3: 19, CHAMP_F2_A_T4: 21, CHAMP_F2_A_T5: 22, CHAMP_F2_A_T6: 23,
+  CHAMP_F2_B_T1: 17, CHAMP_F2_B_T2: 18, CHAMP_F2_B_T3: 19, CHAMP_F2_B_T4: 21, CHAMP_F2_B_T5: 22, CHAMP_F2_B_T6: 23,
+  CHAMP_SF_T1: 26, CHAMP_SF_T2: 28, CHAMP_FIN_T1: 30, CHAMP_FIN_REPLAY: 31,
+}
+function conDefault(parametri) {
+  const out = [...parametri]
+  const mancante = (cod) => !out.some(p => p.codice === cod && String(p.valore ?? '').trim() !== '')
+  const imposta = (cod, valore, etichetta) => {
+    const i = out.findIndex(p => p.codice === cod)
+    if (i >= 0) out[i] = { ...out[i], valore }
+    else out.push({ codice: cod, etichetta, valore })
+  }
+  for (const [cod, [val, et]] of Object.entries(DEFAULT_PARAMETRI)) {
+    // ULTIMA_GIORNATA_FATTORE_CASA vuoto = "sempre": si propone il default solo se il parametro non esiste
+    const esiste = out.some(p => p.codice === cod)
+    if (cod === 'ULTIMA_GIORNATA_FATTORE_CASA' ? !esiste : mancante(cod)) imposta(cod, val, et)
+  }
+  for (const [cod, g] of Object.entries(DEFAULT_CHAMP_GIORNATE)) {
+    if (mancante(cod)) imposta(cod, String(g), `Champions - ${cod}: giornata di fantacampionato`)
+  }
+  return out
+}
+
 export default function GestisciRegoleCalcolo() {
   const { stagione, ultimaStagione } = useApp()
   const { data: info, loading, error, refetch } = useFetch(
@@ -325,7 +361,8 @@ export default function GestisciRegoleCalcolo() {
     if (!info) return
     setBonus(info.bonus ?? [])
     setAlgoritmi(info.algoritmi ?? {})
-    setParametri(info.parametri ?? [])
+    // Solo per la stagione modificabile si completano i parametri mancanti con i default
+    setParametri(info.modificabile === false ? (info.parametri ?? []) : conDefault(info.parametri ?? []))
     setSaved(false)
     setSaveError(null)
   }, [info])
@@ -375,7 +412,7 @@ export default function GestisciRegoleCalcolo() {
       }
     }
   }
-  const numeroGiornate = Math.max(1, parseInt(getValoreParametro('NUMERO_GIORNATE', 38), 10) || 38)
+  const numeroGiornate = Math.max(1, parseInt(getValoreParametro('NUMERO_GIORNATE', 34), 10) || 34)
 
   const salva = async () => {
     if (readOnly) return
@@ -570,7 +607,7 @@ export default function GestisciRegoleCalcolo() {
                           <label className="text-xs text-slate-600 mb-1 block">Numero di giornate della stagione</label>
                           <input
                             type="number" min="1" max="99" step="1"
-                            value={getValoreParametro('NUMERO_GIORNATE', 38)}
+                            value={getValoreParametro('NUMERO_GIORNATE', 34)}
                             onChange={e => setValoreParametro('NUMERO_GIORNATE', e.target.value, 'Numero di giornate della stagione')}
                             className="fanta-input w-28"
                           />
@@ -579,7 +616,7 @@ export default function GestisciRegoleCalcolo() {
                           <label className="text-xs text-slate-600 mb-1 block">Giornata di Serie A di partenza</label>
                           <input
                             type="number" min="1" step="1"
-                            value={getValoreParametro('GIORNATA_SERIE_A_INIZIO', 1)}
+                            value={getValoreParametro('GIORNATA_SERIE_A_INIZIO', 4)}
                             onChange={e => setValoreParametro('GIORNATA_SERIE_A_INIZIO', e.target.value, 'Giornata di Serie A di partenza')}
                             className="fanta-input w-28"
                           />
@@ -673,7 +710,7 @@ export default function GestisciRegoleCalcolo() {
                       <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={getValoreParametro('FORMAZIONE_CHAMPIONS_DIVERSA', '0') === '1'}
+                          checked={getValoreParametro('FORMAZIONE_CHAMPIONS_DIVERSA', '1') === '1'}
                           onChange={e => setValoreParametro(
                             'FORMAZIONE_CHAMPIONS_DIVERSA',
                             e.target.checked ? '1' : '0',

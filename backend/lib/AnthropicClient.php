@@ -13,6 +13,7 @@
 //                                    api.anthropic.com e di host di controllo
 //   ai_chiamata($endpoint, $payload, $timeoutSec = null)  POST JSON verso Anthropic
 //   ai_conta_token($modello, $messaggi, $system)  token di input (gratuito)
+//   ai_messaggio_stream(...)         come ai_messaggio ma in streaming (risposte lunghe)
 //   ai_messaggio($modello, $messaggi, $maxToken, $system)  generazione
 //   ai_costo_usd($modello, $tokIn, $tokOut)       costo in USD
 //   ai_verifica_abilitato($conn, $stagione, $utenza, $password)
@@ -170,6 +171,24 @@ function ai_sonda_rete(): array
 }
 
 /**
+ * Descrizione leggibile di un errore cURL: messaggio (o, se vuoto, quello
+ * standard del codice), codice, codice HTTP eventualmente ricevuto e tempo
+ * trascorso dall'inizio della chiamata. Il tempo distingue un timeout
+ * (≈ il valore impostato) da un'interruzione decisa da qualcuno lungo il
+ * percorso (es. il proxy dell'hosting).
+ */
+function ai_errore_curl($ch, float $t0): string
+{
+    $errno = curl_errno($ch);
+    $msg   = trim((string) curl_error($ch));
+    if ($msg === "" && function_exists("curl_strerror")) $msg = curl_strerror($errno);
+    if ($msg === "") $msg = "errore sconosciuto";
+    $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ms   = (int) round((microtime(true) - $t0) * 1000);
+    return "cURL: $msg [codice $errno" . ($http > 0 ? ", HTTP $http" : "") . ", dopo $ms ms]";
+}
+
+/**
  * POST JSON verso Anthropic.
  * Ritorna ["ok"=>bool, "http"=>int, "ms"=>int, "dati"=>array|null, "errore"=>string|null].
  * Non lancia eccezioni e non include mai la chiave nei messaggi di errore.
@@ -209,7 +228,7 @@ function ai_chiamata(string $endpoint, array $payload, ?int $timeoutSec = null):
         ai_applica_proxy($ch);
         $risposta = curl_exec($ch);
         $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        if ($risposta === false) $errTrasporto = "cURL: " . curl_error($ch);
+        if ($risposta === false) $errTrasporto = ai_errore_curl($ch, $t0);
         curl_close($ch);
     } elseif (ini_get("allow_url_fopen")) {
         $ctx = stream_context_create(["http" => [
@@ -294,4 +313,126 @@ function ai_verifica_abilitato($conn, int $stagione, string $utenza, string $pas
         }
     }
     return false;
+}
+
+/**
+ * Generazione di un messaggio in STREAMING (server-sent events).
+ *
+ * Con una risposta lunga la richiesta normale resta "muta" per decine di
+ * secondi, e proxy o firewall dell'hosting possono chiuderla. In streaming
+ * i dati arrivano di continuo (e l'API invia anche "ping" periodici), quindi
+ * la connessione non è mai inattiva. Il risultato ha la stessa forma di
+ * ai_messaggio(): content[], stop_reason, usage.
+ *
+ * Se la connessione cade a metà, ok=false ma il testo già ricevuto (che è
+ * stato comunque fatturato) è in "parziale" => ["testo", "token_input",
+ * "token_output", "token_output_stimato"], così il chiamante può salvarlo.
+ */
+function ai_messaggio_stream(string $modello, array $messaggi, int $maxToken, ?string $system = null, ?int $timeoutSec = null): array
+{
+    if (!function_exists("curl_init")) {
+        return ai_messaggio($modello, $messaggi, $maxToken, $system, $timeoutSec);
+    }
+    $cfg = ai_config();
+    if (!ai_chiave_configurata()) {
+        return ["ok" => false, "http" => 0, "ms" => 0, "dati" => null,
+                "errore" => "Chiave API non configurata (config_ai.php mancante o non compilato)"];
+    }
+
+    $payload = ["model" => $modello, "max_tokens" => $maxToken, "messages" => $messaggi, "stream" => true];
+    if ($system !== null && $system !== "") $payload["system"] = $system;
+
+    $st = ["buf" => "", "raw" => "", "testo" => "", "in" => null, "out" => null, "out_fin" => false,
+           "stop" => null, "fine" => false, "errore_evento" => null];
+
+    $handler = function ($ch, $chunk) use (&$st) {
+        if (strlen($st["raw"]) < 100000) $st["raw"] .= $chunk;   // serve solo per leggere un errore JSON
+        $st["buf"] .= str_replace("\r\n", "\n", $chunk);
+        while (($p = strpos($st["buf"], "\n\n")) !== false) {
+            $blocco = substr($st["buf"], 0, $p);
+            $st["buf"] = substr($st["buf"], $p + 2);
+            $dati = null;
+            foreach (explode("\n", $blocco) as $riga) {
+                if (strncmp($riga, "data:", 5) === 0) $dati = ltrim(substr($riga, 5));
+            }
+            if ($dati === null) continue;
+            $ev = json_decode($dati, true);
+            if (!is_array($ev)) continue;
+            switch ($ev["type"] ?? "") {
+                case "message_start":
+                    $st["in"]  = (int) ($ev["message"]["usage"]["input_tokens"] ?? 0);
+                    $st["out"] = (int) ($ev["message"]["usage"]["output_tokens"] ?? 0);
+                    break;
+                case "content_block_delta":
+                    if (($ev["delta"]["type"] ?? "") === "text_delta") $st["testo"] .= (string) ($ev["delta"]["text"] ?? "");
+                    break;
+                case "message_delta":
+                    if (isset($ev["delta"]["stop_reason"])) $st["stop"] = $ev["delta"]["stop_reason"];
+                    if (isset($ev["usage"]["output_tokens"])) { $st["out"] = (int) $ev["usage"]["output_tokens"]; $st["out_fin"] = true; }
+                    if (isset($ev["usage"]["input_tokens"]))  $st["in"]  = (int) $ev["usage"]["input_tokens"];
+                    break;
+                case "message_stop":
+                    $st["fine"] = true;
+                    break;
+                case "error":
+                    $st["errore_evento"] = (string) ($ev["error"]["message"] ?? "errore");
+                    break;
+            }
+        }
+        return strlen($chunk);
+    };
+
+    $t0 = microtime(true);
+    $ch = curl_init(AI_BASE_URL . "/v1/messages");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
+        CURLOPT_HTTPHEADER     => [
+            "content-type: application/json",
+            "accept: text/event-stream",
+            "x-api-key: " . $cfg["api_key"],
+            "anthropic-version: " . ($cfg["anthropic_version"] ?? "2023-06-01"),
+        ],
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT        => $timeoutSec ?? (int) ($cfg["timeout"] ?? 25),
+        CURLOPT_WRITEFUNCTION  => $handler,
+    ]);
+    ai_applica_proxy($ch);
+    $esito = curl_exec($ch);
+    $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $errTrasporto = $esito === false ? ai_errore_curl($ch, $t0) : null;
+    curl_close($ch);
+    $ms = (int) round((microtime(true) - $t0) * 1000);
+
+    // Errore HTTP: il corpo non è uno stream ma un JSON { error: { message } }
+    if ($http > 0 && ($http < 200 || $http >= 300)) {
+        $j = json_decode($st["raw"], true);
+        $msg = $j["error"]["message"] ?? "Risposta HTTP $http non valida";
+        return ["ok" => false, "http" => $http, "ms" => $ms, "dati" => null, "errore" => "Anthropic: $msg"];
+    }
+
+    $completo = $st["fine"] && $st["errore_evento"] === null && $errTrasporto === null;
+    if ($completo) {
+        return ["ok" => true, "http" => $http, "ms" => $ms, "errore" => null, "dati" => [
+            "content"     => [["type" => "text", "text" => $st["testo"]]],
+            "stop_reason" => $st["stop"] ?? "end_turn",
+            "usage"       => ["input_tokens" => (int) $st["in"], "output_tokens" => (int) $st["out"]],
+        ]];
+    }
+
+    $errore = $st["errore_evento"] !== null
+        ? "Anthropic (durante la generazione): " . $st["errore_evento"]
+        : ($errTrasporto ?? "Connessione chiusa prima del termine della risposta");
+    $esitoFallito = ["ok" => false, "http" => $http, "ms" => $ms, "dati" => null, "errore" => $errore];
+    if (trim($st["testo"]) !== "") {
+        $esitoFallito["parziale"] = [
+            "testo"                => $st["testo"],
+            "token_input"          => (int) $st["in"],
+            "token_output"         => (int) $st["out"],
+            // il conteggio definitivo dei token di output arriva solo a fine risposta
+            // (message_delta): se la connessione cade prima, stima per caratteri
+            "token_output_stimato" => $st["out_fin"] ? null : (int) ceil(mb_strlen($st["testo"]) / 3),
+        ];
+    }
+    return $esitoFallito;
 }

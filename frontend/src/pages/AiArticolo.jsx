@@ -288,7 +288,14 @@ export default function AiArticolo() {
           </div>
 
           <div className="mt-5 space-y-3">
-            {risultato.articolo.troncato && (
+            {risultato.interrotto && (
+              <Avviso tono="red" icona={XCircle}>
+                La connessione con l'AI si è interrotta durante la scrittura: è stata salvata la parte
+                già ricevuta, che va completata a mano. {risultato.costo_approssimato && 'Il costo indicato è una stima. '}
+                {risultato.avviso_interruzione && <span className="block text-xs opacity-80 mt-1">{risultato.avviso_interruzione}</span>}
+              </Avviso>
+            )}
+            {risultato.articolo.troncato && !risultato.interrotto && (
               <Avviso>
                 Il testo è stato interrotto perché ha raggiunto il limite di token: la parte finale
                 (probabilmente le pagelle) potrebbe mancare.

@@ -25,7 +25,10 @@
 //      Rigenera il prompt e procede SOLO se l'impronta coincide (se i
 //      dati sono cambiati dopo l'anteprima risponde 409). Salva
 //      l'articolo come bozza in NEW_ARTICOLI con token e costo reali.
-//      Risposta: { articolo{...}, costo_usd, costo_stimato_usd, ... }
+//      Risposta: { articolo{...}, costo_usd, costo_stimato_usd, interrotto, ... }
+//      La risposta è richiesta in streaming (vedi ai_messaggio_stream). Se la
+//      connessione cade a metà, il testo già ricevuto viene comunque salvato
+//      come bozza troncata (interrotto = true, costo approssimato).
 //
 // Richiede le tabelle di Script DB/NEW_AI_ARTICOLI.sql e la
 // configurazione di backend/config_ai.php (sezione "articolo" opzionale).
@@ -167,12 +170,33 @@ if (!$stima["entro_tetto"]) {
 }
 
 $timeoutGen = (int) art_cfg("timeout_generazione", 120);
-$gen = ai_messaggio($modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"], $timeoutGen);
-if (!$gen["ok"]) {
+// Streaming (default): evita che proxy/firewall dell'hosting chiudano una
+// connessione rimasta muta per decine di secondi. Disattivabile con
+// "streaming" => false nella sezione "articolo" di config_ai.php.
+$streaming = (bool) art_cfg("streaming", true);
+$gen = $streaming
+    ? ai_messaggio_stream($modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"], $timeoutGen)
+    : ai_messaggio($modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"], $timeoutGen);
+
+$interrotto = false;      // connessione caduta a metà: salvato il testo parziale
+$costoApprossimato = false;
+if ($gen["ok"]) {
+    $dati = $gen["dati"];
+} elseif (isset($gen["parziale"]) && mb_strlen(trim($gen["parziale"]["testo"])) >= 200) {
+    // La parte già ricevuta è stata comunque fatturata: la salvo come bozza troncata
+    $p = $gen["parziale"];
+    $interrotto = true;
+    $costoApprossimato = $p["token_output_stimato"] !== null;
+    $dati = [
+        "content"     => [["type" => "text", "text" => $p["testo"]]],
+        "stop_reason" => "interrotto",
+        "usage"       => ["input_tokens" => $p["token_input"],
+                          "output_tokens" => $p["token_output_stimato"] ?? $p["token_output"]],
+    ];
+} else {
     api_error("Generazione non riuscita: " . $gen["errore"], 502);
 }
 
-$dati = $gen["dati"];
 $grezzo = "";
 foreach (($dati["content"] ?? []) as $blocco) {
     if (($blocco["type"] ?? "") === "text") $grezzo .= (string) ($blocco["text"] ?? "");
@@ -184,7 +208,7 @@ if (trim($grezzo) === "") {
 $tokIn   = (int) ($dati["usage"]["input_tokens"] ?? 0);
 $tokOut  = (int) ($dati["usage"]["output_tokens"] ?? 0);
 $costo   = ai_costo_usd($modelloRichiesto, $tokIn, $tokOut);
-$troncato = (($dati["stop_reason"] ?? "") === "max_tokens");
+$troncato = $interrotto || (($dati["stop_reason"] ?? "") === "max_tokens");
 $parsed  = art_parse_testo($grezzo);
 
 $episodiIds = implode(",", array_map(fn($e) => (int) $e["id"], $prompt["riepilogo"]["episodi"]));
@@ -228,6 +252,9 @@ api_success([
         "modello"   => $modelloRichiesto,
         "troncato"  => $troncato,
     ],
+    "interrotto"         => $interrotto,
+    "avviso_interruzione" => $interrotto ? ($gen["errore"] ?? null) : null,
+    "costo_approssimato" => $costoApprossimato,
     "formato_ok"         => $parsed["formato_ok"],
     "token_input"        => $tokIn,
     "token_output"       => $tokOut,

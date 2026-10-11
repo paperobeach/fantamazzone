@@ -63,5 +63,9 @@ return [
         "cambio_eur_per_usd" => null,
         // Timeout in secondi della chiamata di generazione (default 120)
         "timeout_generazione" => 120,
+        // Generazione in streaming (default true): i dati arrivano di continuo,
+        // così proxy/firewall dell'hosting non chiudono una connessione rimasta
+        // muta per decine di secondi. Mettere false solo per diagnosi.
+        "streaming" => true,
     ],
 ];

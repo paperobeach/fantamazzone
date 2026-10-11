@@ -47,7 +47,7 @@
 //     Consolida in un'unica chiamata le tre tabelle:
 //       - NEW_SQUADRE     (id, nome, logo, stagione, albo)
 //       - NEW_ALLENATORI  (id, descrizione, id_squadra, logo, stagione, email)
-//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore, abilita_ai)
+//       - NEW_UTENZE      (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
 //     con cancellazione preventiva per stagione + reinserimento
 //     (operazione ripetibile).
 //   Se ESISTE già almeno una formazione per la stagione (controllo
@@ -71,17 +71,16 @@
 //           SELECT giornata, posizione, squadra, :stagione
 //           FROM NEW_CALENDARIO
 //           WHERE giornata <= :giornate AND stagione = 2011
-//     - NEW_CALENDARIO_CHAMP: copia la struttura della Champions
-//       della stagione precedente (:stagione - 1). La Champions si
-//       gioca in contemporanea al campionato; la giornata di
-//       campionato di ogni turno e di ogni girone è configurata in
-//       "Gestisci regole di calcolo" → "Parametri stagione" →
-//       "Struttura stagione" (codici CHAMP_*, vedi
-//       lib/ChampionsCalendario.php) e qui viene SOLO LETTA: le
-//       giornate della struttura sorgente, ordinate
-//       cronologicamente, sono associate per posizione ai turni
-//       previsti e la colonna "giornata" è sostituita con quella
-//       configurata per il girone della riga.
+//     - NEW_CALENDARIO_CHAMP: NON si copia più dalla stagione
+//       precedente. Si cancella la Champions della stagione e si genera
+//       la FASE 1 (gironi A e B, 6 giornate ciascuno) con le regole di
+//       lib/ChampionsGenera.php: girone A = squadre 1,3,5,7; girone B =
+//       squadre 2,4,6,8; giornata = progressivo 1..6; posizione 1..4
+//       (partite 1-2 e 3-4); giornata_camp = giornata di campionato
+//       configurata in "Gestisci regole di calcolo" → "Parametri
+//       stagione" → "Struttura stagione" (codici CHAMP_F1_*), che qui
+//       viene SOLO LETTA. Fase 2, semifinali e finale dipendono dai
+//       risultati e si generano a parte (admin/champions_genera_fase.php).
 //   Richiede che esistano le squadre della stagione (passo 1) e NON
 //   che esistano già formazioni. Se la configurazione manca o non è
 //   valida (NUMERO_GIORNATE assente, giornate Champions fuori da
@@ -101,10 +100,6 @@
 //   utenza          → NEW_UTENZE.UTENZA
 //   password        → NEW_UTENZE.PASSWORD
 //   abilitazione    → NEW_UTENZE.ABILITAZIONE
-//   abilita_ai      → NEW_UTENZE.ABILITA_AI (flag Y/N: accesso alla sezione
-//                      "AI", indipendente da abilitazione e amministratore;
-//                      ignorato se la migrazione migrazione_abilita_ai.sql
-//                      non è ancora stata eseguita)
 //   amministratore  → NEW_UTENZE.AMMINISTRATORE (flag Y/N: utente
 //                      riconosciuto come amministratore dell'app,
 //                      indipendentemente dall'abilitazione)
@@ -134,6 +129,7 @@
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/ChampionsCalendario.php";
+require_once __DIR__ . "/../lib/ChampionsGenera.php";
 
 const STAGIONE_MODELLO_CALENDARIO = 2011; // stagione "modello" da cui copiare gli accoppiamenti
 
@@ -165,14 +161,6 @@ function colonna_email_presente($conn) {
     return $r && mysqli_num_rows($r) > 0;
 }
 
-// La colonna NEW_UTENZE.abilita_ai è aggiunta da una migrazione
-// (migrazione_abilita_ai.sql). A differenza dell'email NON blocca il
-// salvataggio: se manca, il flag AI viene semplicemente ignorato.
-function colonna_ai_presente($conn) {
-    $r = mysqli_query($conn, "SHOW COLUMNS FROM NEW_UTENZE LIKE 'abilita_ai'");
-    return $r && mysqli_num_rows($r) > 0;
-}
-
 // Esegue una query di scrittura e, se fallisce, solleva un'eccezione
 // (gestita dal try/catch del POST) invece di proseguire in silenzio
 // rispondendo "ok" con dati non realmente salvati.
@@ -192,11 +180,10 @@ function righe_per_stagione($conn, $stagione) {
     // utilizzabile in lettura (email vuote); è il salvataggio a
     // segnalare esplicitamente il problema.
     $colEmail = colonna_email_presente($conn) ? "a.email" : "'' AS email";
-    $colAi    = colonna_ai_presente($conn) ? "u.abilita_ai" : "'N' AS abilita_ai";
     $righe = query_all("
         SELECT s.id AS ordine, s.nome, s.logo, s.albo,
                a.descrizione AS allenatore, a.logo AS foto_allenatore, $colEmail,
-               u.utenza, u.abilitazione, u.amministratore, $colAi,
+               u.utenza, u.abilitazione, u.amministratore,
                IF(u.PASSWORD IS NOT NULL AND u.PASSWORD <> '', 1, 0) AS password_impostata
         FROM NEW_SQUADRE s
         LEFT JOIN NEW_ALLENATORI a ON a.id = s.id AND a.stagione = s.stagione
@@ -211,7 +198,6 @@ function righe_per_stagione($conn, $stagione) {
         $r["utenza"]          = $r["utenza"] ?? "";
         $r["abilitazione"]    = $r["abilitazione"] ?? "N";
         $r["amministratore"]  = $r["amministratore"] ?? "N";
-        $r["abilita_ai"]      = $r["abilita_ai"] ?? "N";
         $r["password"]        = ""; // mai restituita
         // Solo un indicatore (mai la password): è già valorizzata, quindi se il
         // campo resta vuoto viene mantenuta o copiata dalla stagione precedente
@@ -259,15 +245,23 @@ function calendari_verifica($stagione) {
         $errori[] = "Numero di giornate non configurato per la stagione $stagione: impostarlo in Gestisci regole di calcolo → Parametri stagione → Struttura stagione.";
     }
 
+    // La fase 1 usa le squadre con id 1..8 (A: 1,3,5,7 · B: 2,4,6,8)
+    $attese = array_merge(...array_values(CHAMPIONS_SQUADRE_F1));
+    $presenti = array_map(fn($r) => (int) $r["id"],
+        query_all("SELECT id FROM NEW_SQUADRE WHERE stagione = $stagione AND id IN (" . implode(",", $attese) . ")"));
+    $mancanti = array_values(array_diff($attese, $presenti));
+    if ($mancanti) {
+        $errori[] = "Per la fase 1 della Champions servono le squadre con id " . implode(", ", $attese)
+                  . ": mancano " . implode(", ", $mancanti) . ".";
+    }
+
     $champGiornate = champions_parametri_stagione($stagione);
     if ($giornate !== null) {
-        $turniCron   = champions_turni_cronologici();
-        $sorgenteCal = champions_assegna_sorgente($stagione - 1); // giornata sorgente => indice turno
+        // Obbligatorie solo le giornate di campionato della fase 1: le altre fasi
+        // (opzionali qui) vengono lette quando si generano.
         $obbligatori = [];
-        foreach ($sorgenteCal as $idx) {
-            foreach ($turniCron[$idx]["celle"] ?? [] as $c) {
-                if (!$c["opzionale"]) $obbligatori[] = $c["codice"];
-            }
+        foreach (champions_fasi()[0]["turni"] as $t) {
+            foreach ($t["celle"] as $c) $obbligatori[] = $c["codice"];
         }
         foreach (champions_valida_giornate($champGiornate, $giornate, $obbligatori) as [$cod, $msg]) {
             $errori[] = $msg . " (Gestisci regole di calcolo → Parametri stagione → Struttura stagione)";
@@ -278,37 +272,17 @@ function calendari_verifica($stagione) {
 
 /** Rigenera NEW_CALENDARIO e NEW_CALENDARIO_CHAMP (da chiamare dentro il try/transazione). */
 function calendari_genera($conn, $stagione, $giornate, array $champGiornate) {
-    $stagionePrecedente = $stagione - 1;
-
     esegui($conn, "DELETE FROM NEW_CALENDARIO WHERE stagione = $stagione");
     esegui($conn, "INSERT INTO NEW_CALENDARIO (giornata, posizione, squadra, stagione)
         SELECT giornata, posizione, squadra, $stagione
         FROM NEW_CALENDARIO
         WHERE giornata <= $giornate AND stagione = " . STAGIONE_MODELLO_CALENDARIO);
 
-    // Ogni giornata sorgente corrisponde a un turno (per posizione
-    // cronologica); per ogni riga si usa la cella del suo girone (i gironi
-    // storici C/D della fase 2 corrispondono alle celle A/B).
-    // Colonne scritte:
-    //   giornata       progressivo Champions: copiato dalla sorgente
-    //   giornata_camp  giornata di fantacampionato: quella CONFIGURATA per la cella
-    //   girone         copiato com'è (il dominio storico A, B, C1..D3, S1, S2, FI, FR non cambia)
-    $turniCron = champions_turni_cronologici();
-    $sorgente  = champions_assegna_sorgente($stagionePrecedente);
-    $righeSorg = query_all("SELECT giornata, giornata_camp, posizione, squadra, girone
-                            FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagionePrecedente");
-
+    // Champions: si cancella tutto e si genera la sola FASE 1 (non dipende dai
+    // risultati). Fase 2, semifinali e finale si generano dopo, a partire dalle
+    // classifiche (admin/champions_genera_fase.php).
     esegui($conn, "DELETE FROM NEW_CALENDARIO_CHAMP WHERE stagione = $stagione");
-    foreach ($righeSorg as $rs) {
-        $gSorg = (int) $rs["giornata"];
-        if (!isset($sorgente[$gSorg]) || !isset($turniCron[$sorgente[$gSorg]])) continue; // oltre i turni previsti
-        $cella = champions_cella_turno($turniCron[$sorgente[$gSorg]], trim((string) $rs["girone"]));
-        $gCamp = (int) ($champGiornate[$cella["codice"]] ?? 0);
-        if ($gCamp < 1) continue; // turno non configurato (es. replay)
-        $girone_esc = mysqli_real_escape_string($conn, $rs["girone"]);
-        esegui($conn, "INSERT INTO NEW_CALENDARIO_CHAMP (stagione, giornata, giornata_camp, posizione, squadra, girone)
-            VALUES ($stagione, $gSorg, $gCamp, " . (int) $rs["posizione"] . ", " . (int) $rs["squadra"] . ", '$girone_esc')");
-    }
+    champions_scrivi_righe($conn, $stagione, champions_righe_fase1(), $champGiornate, []);
 }
 
 // ------------------------------------------------------------
@@ -431,7 +405,6 @@ foreach ($righe as $i => $r) {
     $password        = (string) ($r["password"] ?? "");
     $abilitazione    = trim((string) ($r["abilitazione"] ?? ""));
     $amministratore  = trim((string) ($r["amministratore"] ?? ""));
-    $abilitaAi       = trim((string) ($r["abilita_ai"] ?? ""));
 
     // ordine: sempre richiesto per individuare la riga; con
     // formazione già presente deve corrispondere a una squadra già
@@ -502,18 +475,12 @@ foreach ($righe as $i => $r) {
         $errors[] = err_field($i, "amministratore", "Deve essere 'Y' o 'N'");
     }
 
-    if ($abilitaAi === "") {
-        $abilitaAi = "N";
-    } elseif (!in_array($abilitaAi, ["Y", "N"], true)) {
-        $errors[] = err_field($i, "abilita_ai", "Deve essere 'Y' o 'N'");
-    }
-
     $rigaData[] = [
         "ordine" => $ordine, "nome" => $nome, "logo" => $logo, "albo" => $albo,
         "allenatore" => $allenatore, "foto_allenatore" => $foto_allenatore,
         "email" => $email,
         "utenza" => $utenza, "password" => $password, "abilitazione" => $abilitazione,
-        "amministratore" => $amministratore, "abilita_ai" => $abilitaAi,
+        "amministratore" => $amministratore,
     ];
 }
 
@@ -563,8 +530,6 @@ if (!colonna_email_presente($conn)) {
     api_error("La colonna 'email' non esiste ancora su NEW_ALLENATORI: eseguire prima la migrazione migrazione_email_allenatori.sql. Nessun dato è stato modificato.", 500);
 }
 
-$aiPresente = colonna_ai_presente($conn);
-
 mysqli_begin_transaction($conn);
 try {
     if ($formazionePresente) {
@@ -576,10 +541,9 @@ try {
             $abil_esc   = mysqli_real_escape_string($conn, $r["abilitazione"]);
             $admin_esc  = mysqli_real_escape_string($conn, $r["amministratore"]);
             $email_esc  = mysqli_real_escape_string($conn, $r["email"]);
-            $ai_set     = $aiPresente ? ", abilita_ai = '" . mysqli_real_escape_string($conn, $r["abilita_ai"]) . "'" : "";
 
             esegui($conn, "UPDATE NEW_UTENZE
-                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'$ai_set
+                SET utenza = '$utenza_esc', PASSWORD = '$pass_esc', abilitazione = '$abil_esc', amministratore = '$admin_esc'
                 WHERE id = {$r['ordine']} AND stagione = $stagione");
 
             // L'email dell'allenatore è modificabile anche a formazioni
@@ -618,8 +582,6 @@ try {
         $pass_esc       = mysqli_real_escape_string($conn, $r["password"]);
         $abil_esc       = mysqli_real_escape_string($conn, $r["abilitazione"]);
         $admin_esc      = mysqli_real_escape_string($conn, $r["amministratore"]);
-        $ai_cols        = $aiPresente ? ", abilita_ai" : "";
-        $ai_val         = $aiPresente ? ", '" . mysqli_real_escape_string($conn, $r["abilita_ai"]) . "'" : "";
 
         // NEW_UTENZE.descrizione non è tra i campi mappati esplicitamente:
         // di default usa il nome dell'allenatore, con fallback al nome
@@ -633,8 +595,8 @@ try {
         esegui($conn, "INSERT INTO NEW_ALLENATORI (id, descrizione, id_squadra, logo, stagione, email)
             VALUES ({$r['ordine']}, '$allenatore_esc', {$r['ordine']}, '$foto_all_esc', $stagione, '$email_esc')");
 
-        esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore$ai_cols)
-            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc'$ai_val)");
+        esegui($conn, "INSERT INTO NEW_UTENZE (id, utenza, PASSWORD, descrizione, stagione, abilitazione, amministratore)
+            VALUES ({$r['ordine']}, '$utenza_esc', '$pass_esc', '$utenza_descrizione_esc', $stagione, '$abil_esc', '$admin_esc')");
     }
 
     mysqli_commit($conn);

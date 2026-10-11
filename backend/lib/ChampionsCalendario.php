@@ -76,11 +76,9 @@ function champions_raggruppa_righe(array $righe): array
 /** Etichetta leggibile di un gruppo (per le pagine). */
 function champions_etichetta_gruppo(string $gruppo): string
 {
-    return match ($gruppo) {
-        "S1" => "Semifinale 1", "S2" => "Semifinale 2",
-        "FI" => "Finale", "FR" => "Replay finale",
-        "" => "", default => "Girone $gruppo",
-    };
+    $fisse = ["S1" => "Semifinale 1", "S2" => "Semifinale 2", "FI" => "Finale", "FR" => "Replay finale"];
+    if (isset($fisse[$gruppo])) return $fisse[$gruppo];
+    return $gruppo === "" ? "" : "Girone $gruppo";
 }
 
 /**

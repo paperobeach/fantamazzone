@@ -28,6 +28,7 @@ const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSeri
 const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
 const AiTest = lazy(() => import('./pages/AiTest'))
+const AiArticolo = lazy(() => import('./pages/AiArticolo'))
 
 function PageLoader() {
   return (
@@ -112,6 +113,9 @@ function AppShell() {
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={
                     <AdminRoute><Admin /></AdminRoute>
+                  } />
+                  <Route path="/ai/articolo" element={
+                    <AiRoute><AiArticolo /></AiRoute>
                   } />
                   <Route path="/ai/test" element={
                     <AiRoute><AiTest /></AiRoute>

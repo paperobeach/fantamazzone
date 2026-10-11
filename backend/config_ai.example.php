@@ -41,4 +41,24 @@ return [
         "claude-sonnet-5-5" => ["etichetta" => "Sonnet 5.5", "input" => 2.00, "output" => 10.00],
         "claude-haiku-5-5"  => ["etichetta" => "Haiku 5.5",  "input" => 0.10, "output" => 0.50],
     ],
+
+    // Articoli AI di commento alla giornata (tutti i valori sono opzionali:
+    // se mancano valgono i default indicati).
+    "articolo" => [
+        // Lunghezza indicativa dell'articolo, in parole (default 500)
+        "parole_target" => 500,
+        // Tetto di token di output: è il limite che rende garantito il
+        // "costo massimo" mostrato nell'anteprima (default 1800)
+        "max_token" => 1800,
+        // Token di output ipotizzati per il "costo tipico" (default 1100)
+        "token_output_tipico" => 1100,
+        // Quanti episodi storici della lega richiamare al massimo (default 3)
+        "max_episodi" => 3,
+        // Tetto di spesa mensile in USD sugli articoli generati; 0 = nessun tetto
+        "tetto_mensile_usd" => 0,
+        // Euro per 1 USD, solo per mostrare anche l'importo in euro (null = non mostrare)
+        "cambio_eur_per_usd" => null,
+        // Timeout in secondi della chiamata di generazione (default 120)
+        "timeout_generazione" => 120,
+    ],
 ];

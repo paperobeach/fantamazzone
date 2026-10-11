@@ -279,6 +279,36 @@ CREATE TABLE `NEW_ALLENATORI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_ARTICOLI`
+--
+
+CREATE TABLE `NEW_ARTICOLI` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `stagione` int NOT NULL,
+  `giornata` int NOT NULL,
+  `titolo` varchar(250) NOT NULL DEFAULT '',
+  `sommario` text,
+  `testo` mediumtext,
+  `stato` varchar(10) NOT NULL DEFAULT 'bozza' COMMENT 'bozza | pubblicato',
+  `modello` varchar(60) NOT NULL DEFAULT '',
+  `troncato` char(1) NOT NULL DEFAULT 'N' COMMENT 'Y = risposta interrotta per limite di token',
+  `token_input_stimati` int DEFAULT NULL,
+  `costo_stimato_usd` decimal(10,6) DEFAULT NULL,
+  `token_input` int DEFAULT NULL,
+  `token_output` int DEFAULT NULL,
+  `costo_usd` decimal(10,6) DEFAULT NULL,
+  `creato_da` varchar(50) NOT NULL DEFAULT '',
+  `episodi_usati` varchar(200) NOT NULL DEFAULT '' COMMENT 'id NEW_EPISODI_LEGA separati da virgola',
+  `data_generazione` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `data_pubblicazione` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_stagione_giornata` (`stagione`,`giornata`),
+  KEY `idx_data_generazione` (`data_generazione`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_CALENDARIO`
 --
 
@@ -332,6 +362,24 @@ CREATE TABLE `NEW_CALENDARIO_SERIE_A` (
   `squadra_ospite` varchar(50) NOT NULL,
   `prima_partita` char(1) NOT NULL DEFAULT 'N' COMMENT 'S = prima partita della giornata',
   `stato_orario` varchar(30) NOT NULL DEFAULT '' COMMENT 'Es. Ufficiale, Orario da definire'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_EPISODI_LEGA`
+--
+
+CREATE TABLE `NEW_EPISODI_LEGA` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `data_episodio` date DEFAULT NULL,
+  `titolo` varchar(150) NOT NULL,
+  `descrizione` text NOT NULL,
+  `tag` varchar(200) NOT NULL DEFAULT '',
+  `utenze` varchar(500) NOT NULL DEFAULT '' COMMENT 'NEW_UTENZE.utenza separate da virgola',
+  `attivo` char(1) NOT NULL DEFAULT 'Y',
+  `ultimo_utilizzo` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -563,6 +611,24 @@ CREATE TABLE `NEW_PARAMETRI_STAGIONE` (
   `codice` varchar(50) NOT NULL,
   `etichetta` varchar(150) NOT NULL,
   `valore` text NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_PROFILI_FANTALLENATORE`
+--
+
+CREATE TABLE `NEW_PROFILI_FANTALLENATORE` (
+  `utenza` varchar(50) NOT NULL COMMENT 'NEW_UTENZE.utenza',
+  `soprannome` varchar(100) NOT NULL DEFAULT '',
+  `carattere` text COMMENT 'Carattere, manie, modo di giocare',
+  `squadra_cuore` varchar(100) NOT NULL DEFAULT '',
+  `tormentoni` text COMMENT 'Frasi o abitudini ricorrenti',
+  `rivalita` text COMMENT 'Rivalità con altri fantallenatori',
+  `note` text COMMENT 'Altre informazioni utili',
+  `data_aggiornamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`utenza`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

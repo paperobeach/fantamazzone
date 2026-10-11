@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper
 } from 'lucide-react'
 
 const NAV = [
@@ -38,6 +38,7 @@ const ADMIN_NAV = [
 
 // Menu "AI": visibile solo alle utenze con NEW_UTENZE.abilita_ai = 'Y'.
 const AI_NAV = [
+  { to: '/ai/articolo', icon: Newspaper, label: 'Genera articolo' },
   { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
 ]
 

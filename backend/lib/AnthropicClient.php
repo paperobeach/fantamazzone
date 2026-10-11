@@ -11,7 +11,7 @@
 //   ai_ambiente()                    diagnostica dell'ambiente PHP
 //   ai_sonda_rete()                  prova di raggiungibilità (gratuita) di
 //                                    api.anthropic.com e di host di controllo
-//   ai_chiamata($endpoint, $payload) POST JSON verso Anthropic
+//   ai_chiamata($endpoint, $payload, $timeoutSec = null)  POST JSON verso Anthropic
 //   ai_conta_token($modello, $messaggi, $system)  token di input (gratuito)
 //   ai_messaggio($modello, $messaggi, $maxToken, $system)  generazione
 //   ai_costo_usd($modello, $tokIn, $tokOut)       costo in USD
@@ -19,7 +19,8 @@
 //                                    utenza con NEW_UTENZE.abilita_ai = 'Y'
 // ============================================================
 
-const AI_BASE_URL = "https://api.anthropic.com";
+// Sovrascrivibile (define prima dell'include) solo per i test con un server finto.
+if (!defined("AI_BASE_URL")) define("AI_BASE_URL", "https://api.anthropic.com");
 
 /** Carica config_ai.php; restituisce null se il file non esiste o non è valido. */
 function ai_config(): ?array
@@ -173,7 +174,7 @@ function ai_sonda_rete(): array
  * Ritorna ["ok"=>bool, "http"=>int, "ms"=>int, "dati"=>array|null, "errore"=>string|null].
  * Non lancia eccezioni e non include mai la chiave nei messaggi di errore.
  */
-function ai_chiamata(string $endpoint, array $payload): array
+function ai_chiamata(string $endpoint, array $payload, ?int $timeoutSec = null): array
 {
     $cfg = ai_config();
     if (!ai_chiave_configurata()) {
@@ -182,7 +183,7 @@ function ai_chiamata(string $endpoint, array $payload): array
     }
 
     $url     = AI_BASE_URL . $endpoint;
-    $timeout = (int) ($cfg["timeout"] ?? 25);
+    $timeout = $timeoutSec ?? (int) ($cfg["timeout"] ?? 25);
     $body    = json_encode($payload, JSON_UNESCAPED_UNICODE);
     $headers = [
         "content-type: application/json",
@@ -254,11 +255,11 @@ function ai_conta_token(string $modello, array $messaggi, ?string $system = null
 }
 
 /** Genera un messaggio (A PAGAMENTO). */
-function ai_messaggio(string $modello, array $messaggi, int $maxToken, ?string $system = null): array
+function ai_messaggio(string $modello, array $messaggi, int $maxToken, ?string $system = null, ?int $timeoutSec = null): array
 {
     $payload = ["model" => $modello, "max_tokens" => $maxToken, "messages" => $messaggi];
     if ($system !== null && $system !== "") $payload["system"] = $system;
-    return ai_chiamata("/v1/messages", $payload);
+    return ai_chiamata("/v1/messages", $payload, $timeoutSec);
 }
 
 /** Costo in USD dato il numero di token, secondo il listino di config_ai.php (null se modello ignoto). */

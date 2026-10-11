@@ -273,6 +273,23 @@ export const adminEliminaBackup = (bk_ids, { utenza, password, conferma, accetta
 export const aiConnessione = (stagione, { utenza, password, azione = 'test' }) =>
   post('admin/ai_test.php', { stagione, utenza, password, azione })
 
+// ── AI: articolo di commento alla giornata (admin/ai_articolo.php) ──
+// POST → Body { stagione, utenza, password, azione, giornata, [modello, prompt_hash] }
+//        Credenziali di una utenza con NEW_UTENZE.abilita_ai = 'Y'.
+//        azione 'anteprima' (GRATUITA) → costo previsto per ogni modello
+//          { giornata, riepilogo, prompt_hash, max_token, parole_target,
+//            spesa_mese_usd, tetto_mensile_usd, cambio_eur,
+//            modelli[{ modello, etichetta, token_input, approssimato,
+//                      costo_tipico_usd, costo_massimo_usd, entro_tetto }],
+//            prompt_utente }
+//        azione 'genera' (A PAGAMENTO) → richiede modello e il prompt_hash
+//        dell'anteprima; salva la BOZZA in NEW_ARTICOLI
+//          { articolo{ id, titolo, sommario, testo, stato, modello, troncato },
+//            formato_ok, token_input, token_output, costo_usd,
+//            costo_stimato_usd, costo_massimo_usd, ms }
+export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash }) =>
+  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash })
+
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +
 //        Allenatori + Utenze). Se la stagione non ha ancora dati,

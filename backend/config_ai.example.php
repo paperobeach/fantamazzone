@@ -48,9 +48,12 @@ return [
         // Lunghezza indicativa dell'articolo, in parole (default 500)
         "parole_target" => 500,
         // Tetto di token di output: è il limite che rende garantito il
-        // "costo massimo" mostrato nell'anteprima (default 1800)
+        // "costo massimo" mostrato nell'anteprima (default 1800). Se gli
+        // articoli risultano troncati, alzalo (es. 3000) e porta di
+        // conseguenza anche "token_output_tipico".
         "max_token" => 1800,
-        // Token di output ipotizzati per il "costo tipico" (default 1100)
+        // Token di output ipotizzati per il "costo tipico" (default 1100):
+        // tienilo vicino alla lunghezza reale degli articoli generati
         "token_output_tipico" => 1100,
         // Quanti episodi storici della lega richiamare al massimo (default 3)
         "max_episodi" => 3,

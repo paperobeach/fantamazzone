@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getGiornataCorrente, aiArticolo } from '../api/client'
+import { Link } from 'react-router-dom'
 import { PageHeader, Spinner } from '../components/ui'
+import { Importo, Avviso, fmtUsd } from '../components/AiUi'
 import {
   Newspaper, Calculator, Sparkles, Lock, CheckCircle2, XCircle, AlertTriangle, ChevronDown,
 } from 'lucide-react'
@@ -23,42 +25,6 @@ import {
 // Accesso: solo utenze con NEW_UTENZE.abilita_ai = 'Y'. Ogni chiamata
 // richiede utenza e password, verificate lato server.
 // ============================================================
-
-// Importi in USD (e in euro, se config_ai.php ha "cambio_eur_per_usd")
-function fmtUsd(n) {
-  if (n == null) return '—'
-  if (n > 0 && n < 0.0001) return '<$0.0001'
-  return `$${Number(n).toFixed(n < 1 ? 4 : 2)}`
-}
-function fmtEur(n, cambio) {
-  if (n == null || cambio == null) return null
-  const e = Number(n) * cambio
-  if (e > 0 && e < 0.0001) return '<€0.0001'
-  return `€${e.toFixed(e < 1 ? 4 : 2)}`
-}
-function Importo({ usd, cambio }) {
-  const eur = fmtEur(usd, cambio)
-  return (
-    <span className="tabular-nums">
-      {fmtUsd(usd)}{eur && <span className="text-slate-500"> (≈ {eur})</span>}
-    </span>
-  )
-}
-
-function Avviso({ children, tono = 'gold', icona: Icona = AlertTriangle }) {
-  const stili = tono === 'red'
-    ? 'bg-red-500/5 border-red-500/20 text-red-200'
-    : tono === 'green'
-      ? 'bg-green-500/5 border-green-500/20 text-green-200'
-      : 'bg-gold-500/5 border-gold-500/20 text-gold-100'
-  const col = tono === 'red' ? 'text-red-400' : tono === 'green' ? 'text-green-400' : 'text-gold-400'
-  return (
-    <div className={`rounded-lg px-4 py-3 flex gap-3 border text-sm ${stili}`}>
-      <Icona className={`w-4 h-4 flex-shrink-0 mt-0.5 ${col}`} />
-      <div className="min-w-0">{children}</div>
-    </div>
-  )
-}
 
 export default function AiArticolo() {
   const { utente, ultimaStagione, stagione } = useApp()
@@ -337,7 +303,10 @@ export default function AiArticolo() {
               token usati {risultato.token_input} in / {risultato.token_output} out.
             </Avviso>
             <p className="text-xs text-slate-500">
-              La modifica e la pubblicazione delle bozze arriveranno nella prossima fase.
+              Rileggi, modifica e pubblica la bozza da{' '}
+              <Link to={`/ai/articoli?id=${risultato.articolo.id}`} className="text-grass-400 hover:underline">
+                Gestione articoli
+              </Link>.
             </p>
           </div>
 

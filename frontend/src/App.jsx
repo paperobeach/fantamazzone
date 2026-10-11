@@ -29,6 +29,10 @@ const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
 const AiTest = lazy(() => import('./pages/AiTest'))
 const AiArticolo = lazy(() => import('./pages/AiArticolo'))
+const AiArticoli = lazy(() => import('./pages/AiArticoli'))
+const AiContesto = lazy(() => import('./pages/AiContesto'))
+const Gazzetta = lazy(() => import('./pages/Gazzetta'))
+const GazzettaArticolo = lazy(() => import('./pages/GazzettaArticolo'))
 
 function PageLoader() {
   return (
@@ -107,6 +111,8 @@ function AppShell() {
                   <Route path="/statistiche"  element={<Statistiche />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
+                  <Route path="/gazzetta"     element={<Gazzetta />} />
+                  <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={
                     <ProtectedRoute><Formazione /></ProtectedRoute>
                   } />
@@ -116,6 +122,12 @@ function AppShell() {
                   } />
                   <Route path="/ai/articolo" element={
                     <AiRoute><AiArticolo /></AiRoute>
+                  } />
+                  <Route path="/ai/articoli" element={
+                    <AiRoute><AiArticoli /></AiRoute>
+                  } />
+                  <Route path="/ai/contesto" element={
+                    <AiRoute><AiContesto /></AiRoute>
                   } />
                   <Route path="/ai/test" element={
                     <AiRoute><AiTest /></AiRoute>

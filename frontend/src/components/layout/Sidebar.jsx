@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen
 } from 'lucide-react'
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
   { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },
   { to: '/champions',    icon: Shield,       label: 'Champions'     },
+  { to: '/gazzetta',     icon: Newspaper,    label: 'La Gazzetta'   },
 ]
 
 // Menu "Gestione squadra": disponibile solo per gli utenti loggati,
@@ -39,6 +40,8 @@ const ADMIN_NAV = [
 // Menu "AI": visibile solo alle utenze con NEW_UTENZE.abilita_ai = 'Y'.
 const AI_NAV = [
   { to: '/ai/articolo', icon: Newspaper, label: 'Genera articolo' },
+  { to: '/ai/articoli', icon: FileText, label: 'Gestione articoli' },
+  { to: '/ai/contesto', icon: BookOpen, label: 'Profili ed episodi' },
   { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
 ]
 

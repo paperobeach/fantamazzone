@@ -273,6 +273,29 @@ export const adminEliminaBackup = (bk_ids, { utenza, password, conferma, accetta
 export const aiConnessione = (stagione, { utenza, password, azione = 'test' }) =>
   post('admin/ai_test.php', { stagione, utenza, password, azione })
 
+// ── Gazzetta: articoli AI pubblicati (articoli.php, pubblico) ──
+// GET ?stagione=2026 → [{ id, giornata, titolo, sommario, data_pubblicazione }]
+// GET ?id=12         → { id, stagione, giornata, titolo, sommario, testo, data_pubblicazione }
+export const getArticoli = (stagione) => get('articoli.php', { stagione })
+export const getArticolo = (id)       => get('articoli.php', { id })
+
+// ── AI: gestione articoli generati (admin/ai_articoli.php) ─────
+// POST → Body { stagione, utenza, password, azione, ... } (utenza con abilita_ai = 'Y')
+//        azione 'elenco' [filtro_stagione] → { articoli[], spesa_mese_usd, spesa_totale_usd, cambio_eur }
+//        'dettaglio' {id} | 'salva' {id, titolo, sommario, testo} | 'pubblica' {id}
+//        | 'bozza' {id} | 'elimina' {id}  → articolo aggiornato (pubblica: + sostituiti)
+export const aiArticoli = (stagione, body) =>
+  post('admin/ai_articoli.php', { stagione, ...body })
+
+// ── AI: profili ed episodi della lega (admin/ai_contesto.php) ──
+// POST → Body { stagione, utenza, password, tipo: 'profili'|'episodi', azione, ... }
+//        profili: 'elenco' → { profili[], utenze[] } | 'salva' {utenza_profilo, soprannome, carattere,
+//                 squadra_cuore, tormentoni, rivalita, note} | 'elimina' {utenza_profilo}
+//        episodi: 'elenco' → { episodi[] } | 'salva' {id?, data_episodio, titolo, descrizione, tag,
+//                 utenze (CSV), attivo} | 'elimina' {id}
+export const aiContesto = (stagione, body) =>
+  post('admin/ai_contesto.php', { stagione, ...body })
+
 // ── AI: articolo di commento alla giornata (admin/ai_articolo.php) ──
 // POST → Body { stagione, utenza, password, azione, giornata, [modello, prompt_hash] }
 //        Credenziali di una utenza con NEW_UTENZE.abilita_ai = 'Y'.

@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
@@ -25,10 +25,20 @@ const TEAM_NAV = [
   { to: '/formazione',   icon: ClipboardList,label: 'Inserimento formazione' },
 ]
 
-// Menu Admin: suddiviso in tre sezioni.
+// Menu Admin: suddiviso in tre sezioni. "Avvio stagione" e "Utility"
+// sono compresse di default (si aprono da sole se la pagina corrente
+// appartiene alla sezione).
 const ADMIN_SECTIONS = [
   {
+    title: 'Gestione stagione',
+    defaultOpen: true,
+    items: [
+      { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
+    ],
+  },
+  {
     title: 'Avvio stagione',
+    defaultOpen: false,
     items: [
       { to: '/importa-calendario-serie-a',  icon: CalendarDays, label: 'Importa calendario Serie A' },
       { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
@@ -37,13 +47,8 @@ const ADMIN_SECTIONS = [
     ],
   },
   {
-    title: 'Gestione stagione',
-    items: [
-      { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
-    ],
-  },
-  {
     title: 'Utility',
+    defaultOpen: false,
     items: [
       { to: '/riapertura-giornata',         icon: RotateCcw, label: 'Riapri giornata' },
       { to: '/reset-stagione',              icon: Eraser,    label: 'Reset stagione' },
@@ -53,12 +58,78 @@ const ADMIN_SECTIONS = [
 ]
 
 // Menu "AI": visibile solo alle utenze con NEW_UTENZE.abilita_ai = 'Y'.
-const AI_NAV = [
-  { to: '/ai/articolo', icon: Newspaper, label: 'Genera articolo' },
-  { to: '/ai/articoli', icon: FileText, label: 'Gestione articoli' },
-  { to: '/ai/contesto', icon: BookOpen, label: 'Profili ed episodi' },
-  { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
+// La sezione "Configura" è compressa di default.
+const AI_SECTIONS = [
+  {
+    title: 'Genera',
+    defaultOpen: true,
+    items: [
+      { to: '/ai/articolo', icon: Newspaper, label: 'Genera articolo' },
+    ],
+  },
+  {
+    title: 'Configura',
+    defaultOpen: false,
+    items: [
+      { to: '/ai/articoli', icon: FileText, label: 'Gestione articoli' },
+      { to: '/ai/contesto', icon: BookOpen, label: 'Profili ed episodi' },
+      { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
+    ],
+  },
 ]
+
+// Sezione di menu comprimibile. Si apre automaticamente quando la pagina
+// corrente è una delle sue voci.
+function NavSection({ title, icon: TitleIcon, items, defaultOpen, accent }) {
+  const { pathname } = useLocation()
+  const containsActive = items.some(i => pathname === i.to || pathname.startsWith(i.to + '/'))
+  const [open, setOpen] = useState(defaultOpen || containsActive)
+
+  useEffect(() => {
+    if (containsActive) setOpen(true)
+  }, [containsActive])
+
+  const activeCls = accent === 'gold'
+    ? 'bg-gold-500/10 text-gold-400 font-medium'
+    : 'bg-grass-500/10 text-grass-400 font-medium'
+  const iconCls = accent === 'gold' ? 'text-gold-400' : 'text-grass-500'
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="w-full pt-3 pb-1 px-2 flex items-center justify-between text-slate-700 hover:text-slate-500 transition-colors"
+      >
+        <span className="text-[9px] text-mono tracking-widest uppercase flex items-center gap-1">
+          {TitleIcon && <TitleIcon className="w-2.5 h-2.5" />} {title}
+        </span>
+        <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${open ? '' : '-rotate-90'}`} />
+      </button>
+      {open && items.map(({ to, icon: Icon, label }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+              isActive
+                ? activeCls
+                : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? iconCls : ''}`} />
+              {label}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </div>
+  )
+}
 
 export default function Sidebar({ open = false, onClose = () => {} }) {
   const { stagioni, stagione, changeStagione, utente, doLogout, isAdmin, canAi } = useApp()
@@ -196,62 +267,12 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           </>
         )}
 
-        {canAi && (
-          <>
-            <div className="pt-3 pb-1 px-2">
-              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" /> AI
-              </p>
-            </div>
-            {AI_NAV.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                    isActive
-                      ? 'bg-grass-500/10 text-grass-400 font-medium'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-grass-500' : ''}`} />
-                    {label}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </>
-        )}
+        {canAi && AI_SECTIONS.map(sec => (
+          <NavSection key={sec.title} {...sec} title={`AI · ${sec.title}`} icon={Sparkles} accent="grass" />
+        ))}
 
-        {isAdmin && ADMIN_SECTIONS.map(({ title, items }) => (
-          <div key={title}>
-            <div className="pt-3 pb-1 px-2">
-              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">Admin · {title}</p>
-            </div>
-            {items.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                    isActive
-                      ? 'bg-gold-500/10 text-gold-400 font-medium'
-                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-gold-400' : ''}`} />
-                    {label}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </div>
+        {isAdmin && ADMIN_SECTIONS.map(sec => (
+          <NavSection key={sec.title} {...sec} title={`Admin · ${sec.title}`} accent="gold" />
         ))}
       </nav>
 

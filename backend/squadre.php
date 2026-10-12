@@ -28,8 +28,12 @@ if ($id !== null) {
                               COALESCE(ns.ammonizioni, 0)  AS ammonizioni,
                               COALESCE(ns.espulsioni, 0)   AS espulsioni,
                               COALESCE(ns.autogol, 0)      AS autogol,
-                              COALESCE(ns.rigorep, 0)      AS rigori_parati,
-                              COALESCE(ns.rigores, 0)      AS rigori_sbagliati
+                              -- Mapping rigori: rigores = Rp + Rf (parati o realizzati),
+                              -- rigorep = Rs (sbagliati). Il portiere ha i parati,
+                              -- gli altri ruoli i realizzati.
+                              CASE WHEN g.ruolo = 1 THEN COALESCE(ns.rigores, 0) ELSE 0 END AS rigori_parati,
+                              CASE WHEN g.ruolo = 1 THEN 0 ELSE COALESCE(ns.rigores, 0) END AS rigori_segnati,
+                              COALESCE(ns.rigorep, 0)      AS rigori_sbagliati
                        FROM NEW_GIOCATORI g
                        LEFT JOIN NEW_STATISTICHE ns
                               ON ns.id_giocatore = g.id AND ns.stagione = g.stagione

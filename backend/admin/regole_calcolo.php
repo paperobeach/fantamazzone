@@ -94,7 +94,7 @@ const ALGORITMI_DEFAULT = [
     ],
     'ATTACCO' => [
         'algoritmo' => 'bonus_voto_netto_v1',
-        'descrizione' => 'Bonus all\'attaccante senza gol fatto, in base al voto netto già maturato',
+        'descrizione' => 'Bonus all\'attaccante senza gol fatto, in base al solo voto puro (senza bonus/malus)',
         'parametri' => [
             'fasce' => [
                 ['da' => 6.0, 'a' => 6.49, 'bonus' => 0.5],

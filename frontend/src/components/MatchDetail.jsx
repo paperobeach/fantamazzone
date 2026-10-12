@@ -77,19 +77,26 @@ export function NomeGiocatore({ g }) {
 // Ogni evento compare solo se il giocatore lo ha avuto; con più di uno
 // viene aggiunto il moltiplicatore (×2). Al posto di una colonna per ogni
 // bonus/malus, le icone stanno accanto al nome.
+// Mapping rigori (vedi backend/admin/calcolo_giornata.php):
+//   rigores = Rp + Rf  → rigori parati (portiere) o realizzati (altri ruoli)
+//   rigorep = Rs       → rigori sbagliati
+// Per questo 'rigores' ha due voci distinte, scelte in base al ruolo.
 export const EVENTI = [
   { k: 'reti',        icona: '⚽',  titolo: 'Gol',               tono: 'bonus' },
   { k: 'assist',      icona: '🅰️', titolo: 'Assist',            tono: 'bonus' },
-  { k: 'rigorep',     icona: '🧤',  titolo: 'Rigore parato',     tono: 'bonus' },
+  { k: 'rigores',     id: 'rigore_segnato', icona: '🎯', titolo: 'Rigore segnato', tono: 'bonus', ruolo: 'campo' },
+  { k: 'rigores',     id: 'rigore_parato',  icona: '🧤', titolo: 'Rigore parato',  tono: 'bonus', ruolo: 'portiere' },
   { k: 'retis',       icona: '🥅',  titolo: 'Gol subiti',        tono: 'malus' },
   { k: 'autogol',     icona: '🔴',  titolo: 'Autogol',           tono: 'malus' },
-  { k: 'rigores',     icona: '❌',  titolo: 'Rigore sbagliato',  tono: 'malus' },
+  { k: 'rigorep',     icona: '❌',  titolo: 'Rigore sbagliato',  tono: 'malus' },
   { k: 'ammonizioni', icona: '🟨',  titolo: 'Ammonizione',       tono: 'malus' },
   { k: 'espulsioni',  icona: '🟥',  titolo: 'Espulsione',        tono: 'malus' },
 ]
 
 export function EventiGiocatore({ g }) {
+  const portiere = Number(g.ruolo) === 1
   const presenti = EVENTI
+    .filter(e => !e.ruolo || (e.ruolo === 'portiere') === portiere)
     .map(e => ({ ...e, n: Number(g[e.k]) || 0 }))
     .filter(e => e.n > 0)
   if (!presenti.length) return null
@@ -97,7 +104,7 @@ export function EventiGiocatore({ g }) {
     <span className="inline-flex items-center gap-1 flex-wrap">
       {presenti.map(e => (
         <span
-          key={e.k}
+          key={e.id ?? e.k}
           title={`${e.titolo}${e.n > 1 ? ` ×${e.n}` : ''}`}
           className={`inline-flex items-center gap-0.5 px-1.5 py-1 rounded-md text-[11px] leading-none ring-1 ${
             e.tono === 'bonus'
@@ -119,7 +126,7 @@ export function LegendaEventi() {
   return (
     <div className="border-t border-white/5 px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-600">
       {EVENTI.map(e => (
-        <span key={e.k} className="inline-flex items-center gap-1">
+        <span key={e.id ?? e.k} className="inline-flex items-center gap-1">
           <span aria-hidden="true">{e.icona}</span>{e.titolo}
         </span>
       ))}

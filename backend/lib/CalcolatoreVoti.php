@@ -174,28 +174,30 @@ final class CalcolatoreVoti
     // quindi "puro", senza alcuna quota di modificatore attacco.
     //
     // Il contributo del singolo attaccante si applica solo a chi NON ha
-    // già un bonus da gol fatto, in funzione del suo voto "netto" (voto
-    // + bonus/malus già maturati, gol fatto escluso, dato che qui per
-    // definizione non ce n'è).
+    // già un bonus da gol fatto, in funzione del suo VOTO PURO (voto
+    // base, senza alcun bonus/malus: né assist, né ammonizioni, ecc.),
+    // coerentemente con difesa e centrocampo che usano anch'essi voti
+    // puri.
     //
-    // $votoNetto: risultato di puntiGiocatore() per quell'attaccante
-    //   (già comprensivo di eventuali assist/ammonizioni/ecc.)
-    public static function bonusAttaccoSenzaGol(float $votoNetto, array $parametri): float
+    // $votoPuro: voto base dell'attaccante (campo 'voto' delle statistiche)
+    public static function bonusAttaccoSenzaGol(float $votoPuro, array $parametri): float
     {
-        return round(self::valoreFasciaPerSoglia($votoNetto, $parametri['fasce'] ?? []), 2);
+        return round(self::valoreFasciaPerSoglia($votoPuro, $parametri['fasce'] ?? []), 2);
     }
 
     // Somma, per l'intera squadra, i contributi bonusAttaccoSenzaGol()
     // di tutti gli attaccanti titolari idonei (con voto, senza gol
     // fatto). È questo il valore che diventa la voce "attacco" dei
     // modificatori di squadra in calcolaPartita()/calcolaSquadra().
+    // Il parametro $bonusConfig non è più usato per il calcolo (il voto
+    // è puro) ed è mantenuto per compatibilità con i chiamanti.
     public static function modificatoreAttacco(array $attaccanti, array $bonusConfig, array $parametri): float
     {
         $totale = 0.0;
         foreach ($attaccanti as $stat) {
-            $punti = self::puntiGiocatore($stat, $bonusConfig);
-            if ($punti === null || self::haBonusGolFatto($stat)) continue;
-            $totale += self::bonusAttaccoSenzaGol($punti, $parametri);
+            if (!empty($stat['sv']) || $stat['voto'] === null) continue;
+            if (self::haBonusGolFatto($stat)) continue;
+            $totale += self::bonusAttaccoSenzaGol((float) $stat['voto'], $parametri);
         }
         return round($totale, 2);
     }

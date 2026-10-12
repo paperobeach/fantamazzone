@@ -73,7 +73,7 @@ export default function SquadraDetail() {
                   <th className="text-center whitespace-nowrap">Amm.</th>
                   <th className="text-center whitespace-nowrap">Esp.</th>
                   <th className="text-center whitespace-nowrap">Autogol</th>
-                  <th className="text-center whitespace-nowrap">Rigori parati</th>
+                  <th className="text-center whitespace-nowrap">{Number(r) === 1 ? 'Rigori parati' : 'Rigori segnati'}</th>
                   <th className="text-center whitespace-nowrap">Rigori sbagliati</th>
                 </tr>
               </thead>
@@ -123,8 +123,8 @@ export default function SquadraDetail() {
                         : <span className="text-slate-700 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      {Number(g.rigori_parati) > 0
-                        ? <span className="font-mono text-xs text-slate-300">{g.rigori_parati}</span>
+                      {Number(Number(r) === 1 ? g.rigori_parati : g.rigori_segnati) > 0
+                        ? <span className="font-mono text-xs text-slate-300">{Number(r) === 1 ? g.rigori_parati : g.rigori_segnati}</span>
                         : <span className="text-slate-700 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-2.5 text-center">

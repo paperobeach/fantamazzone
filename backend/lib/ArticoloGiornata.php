@@ -205,7 +205,7 @@ function art_dati_giornata(int $stagione, int $giornata): array
                        WHERE v.stagione = $stagione AND v.giornata = $giornata");
     $ruoli = [1 => "P", 2 => "D", 3 => "C", 4 => "A"];
     $conVoto = [];
-    $eventi = ["marcatori" => [], "autogol" => [], "espulsi" => [], "rigori_parati" => [], "rigori_sbagliati" => []];
+    $eventi = ["marcatori" => [], "autogol" => [], "espulsi" => [], "rigori_segnati" => [], "rigori_parati" => [], "rigori_sbagliati" => []];
     $riserveUfficio = [];
     foreach ($voti as $v) {
         $idSq = (int) $v["id_squadra"];
@@ -225,8 +225,13 @@ function art_dati_giornata(int $stagione, int $giornata): array
         if ((int) $v["reti"] > 0)       $eventi["marcatori"][]        = $ev + ["gol" => (int) $v["reti"]];
         if ((int) $v["autogol"] > 0)    $eventi["autogol"][]          = $ev;
         if ((int) $v["espulsioni"] > 0) $eventi["espulsi"][]          = $ev;
-        if ((int) $v["rigorep"] > 0)    $eventi["rigori_parati"][]    = $ev;
-        if ((int) $v["rigores"] > 0)    $eventi["rigori_sbagliati"][] = $ev;
+        // Mapping rigori: rigores = Rp + Rf (parato se portiere, altrimenti
+        // segnato), rigorep = Rs (sbagliato).
+        if ((int) $v["rigores"] > 0) {
+            $chiave = (int) $v["ruolo"] === 1 ? "rigori_parati" : "rigori_segnati";
+            $eventi[$chiave][] = $ev;
+        }
+        if ((int) $v["rigorep"] > 0)    $eventi["rigori_sbagliati"][] = $ev;
     }
     usort($conVoto, fn($a, $b) => [$b["totale"], $a["giocatore"]] <=> [$a["totale"], $b["giocatore"]]);
     $migliori = array_slice($conVoto, 0, 5);

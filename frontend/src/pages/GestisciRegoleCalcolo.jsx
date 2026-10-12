@@ -116,7 +116,7 @@ function SezioneAlgoritmo({ tipo, config, onChange, readOnly = false }) {
   const descrizioni = {
     DIFESA: 'Bonus/malus alla squadra STESSA (non all\'avversaria) in base alla media voto dei propri difensori titolari, corretto in base al modulo schierato.',
     CENTROCAMPO: 'Bonus/malus incrociato in base alla differenza fra le somme dei voti dei centrocampisti delle due squadre, a parità di numero (i mancanti si equiparano con un voto fittizio).',
-    ATTACCO: 'Bonus al singolo attaccante titolare privo di bonus da gol fatto, in funzione del voto netto già maturato con gli altri bonus/malus.',
+    ATTACCO: 'Bonus al singolo attaccante titolare privo di bonus da gol fatto, in funzione del solo voto puro (bonus/malus, assist compresi, esclusi).',
   }
 
   return (

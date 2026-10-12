@@ -25,16 +25,31 @@ const TEAM_NAV = [
   { to: '/formazione',   icon: ClipboardList,label: 'Inserimento formazione' },
 ]
 
-// Menu Admin: voci attuali tranne "Pannello Admin".
-const ADMIN_NAV = [
-  { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
-  { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializzazione stagione' },
-  { to: '/importa-calendario-serie-a',  icon: CalendarDays, label: 'Importa calendario Serie A' },
-  { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
-  { to: '/riapertura-giornata',          icon: RotateCcw, label: 'Riapri giornata' },
-  { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
-  { to: '/reset-stagione',              icon: Eraser,    label: 'Reset stagione' },
-  { to: '/ripristino-stagione',         icon: ArchiveRestore, label: 'Ripristino stagione' },
+// Menu Admin: suddiviso in tre sezioni.
+const ADMIN_SECTIONS = [
+  {
+    title: 'Avvio stagione',
+    items: [
+      { to: '/importa-calendario-serie-a',  icon: CalendarDays, label: 'Importa calendario Serie A' },
+      { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
+      { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializza stagione' },
+      { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
+    ],
+  },
+  {
+    title: 'Gestione stagione',
+    items: [
+      { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
+    ],
+  },
+  {
+    title: 'Utility',
+    items: [
+      { to: '/riapertura-giornata',         icon: RotateCcw, label: 'Riapri giornata' },
+      { to: '/reset-stagione',              icon: Eraser,    label: 'Reset stagione' },
+      { to: '/ripristino-stagione',         icon: ArchiveRestore, label: 'Ripristino stagione' },
+    ],
+  },
 ]
 
 // Menu "AI": visibile solo alle utenze con NEW_UTENZE.abilita_ai = 'Y'.
@@ -211,12 +226,12 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
           </>
         )}
 
-        {isAdmin && (
-          <>
+        {isAdmin && ADMIN_SECTIONS.map(({ title, items }) => (
+          <div key={title}>
             <div className="pt-3 pb-1 px-2">
-              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">Admin</p>
+              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">Admin · {title}</p>
             </div>
-            {ADMIN_NAV.map(({ to, icon: Icon, label }) => (
+            {items.map(({ to, icon: Icon, label }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -236,8 +251,8 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
                 )}
               </NavLink>
             ))}
-          </>
-        )}
+          </div>
+        ))}
       </nav>
 
       {/* User footer */}

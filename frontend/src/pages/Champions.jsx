@@ -117,7 +117,7 @@ function CalendarioGirone({ turni }) {
         <div key={`${t.giornata_camp}-${t.giornata}`} className="border-t border-white/5">
           <div className="px-4 py-1.5 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 flex justify-between">
             <span>{t.label}</span>
-            <span>Giornata {t.giornata}</span>
+            <span>Giornata fantacampionato {t.giornata_camp}</span>
           </div>
           {t.partite.map((p, i) => <Partita key={i} p={p} />)}
           {t.riposa?.map(r => (
@@ -166,9 +166,15 @@ function Semifinale({ t }) {
   const [a, b] = t.aggregato
   return (
     <div className="card overflow-hidden">
-      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500">Andata</div>
+      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 flex justify-between">
+        <span>Andata</span>
+        {t.andata?.giornata && <span>Giornata fantacampionato {t.andata.giornata}</span>}
+      </div>
       {t.andata && <Partita p={t.andata} />}
-      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 border-t border-white/5">Ritorno</div>
+      <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 border-t border-white/5 flex justify-between">
+        <span>Ritorno</span>
+        {t.ritorno?.giornata && <span>Giornata fantacampionato {t.ritorno.giornata}</span>}
+      </div>
       {t.ritorno ? <Partita p={t.ritorno} /> : <p className="px-4 py-2.5 text-xs text-slate-600 text-center">Da definire</p>}
       {t.completa && a && b && (
         <div className="px-4 py-2.5 border-t border-white/5 text-center text-sm">
@@ -189,7 +195,7 @@ function PartitaFinale({ titolo, p }) {
     <div className="card overflow-hidden">
       <div className="px-4 py-2 bg-pitch-900/60 text-[11px] uppercase tracking-wider text-slate-500 flex justify-between">
         <span>{titolo}</span>
-        {p.giornata && <span>Giornata {p.giornata}</span>}
+        {p.giornata && <span>Giornata fantacampionato {p.giornata}</span>}
       </div>
       <Partita p={p} />
     </div>

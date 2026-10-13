@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getTopFlop } from '../api/client'
-import { PageHeader, LoadingState, ErrorState, RoleBadge, TabBar } from '../components/ui'
+import { PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../components/ui'
 import { PitchFormation } from '../components/PitchFormation'
 
 const RUOLO_ORDER = { '1': 0, '2': 1, '3': 2, '4': 3 }
@@ -28,11 +28,13 @@ function ElevenGrid({ players, isTop }) {
   )
 }
 
-export default function TopFlop() {
+// competizione: 'CAMP' (Top/Flop 11 del campionato) | 'CHAMP' (solo Champions)
+export default function TopFlop({ competizione = 'CAMP' }) {
   const { stagione } = useApp()
+  const champ = competizione === 'CHAMP'
   const { data, loading, error, refetch } = useFetch(
-    () => getTopFlop(stagione),
-    [stagione]
+    () => getTopFlop(stagione, null, competizione),
+    [stagione, competizione]
   )
   const [view, setView] = useState('campo')
 
@@ -46,10 +48,15 @@ export default function TopFlop() {
 
   return (
     <div className="animate-fade-up">
-      <PageHeader label="Stagione" title="Top 11 / Flop 11">
+      <PageHeader label={champ ? 'Champions' : 'Stagione'} title={champ ? 'Top 11 / Flop 11 Champions' : 'Top 11 / Flop 11'}>
         <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
       </PageHeader>
 
+      {champ && !data?.top11?.length && !data?.flop11?.length && (
+        <EmptyState label="Nessun dato Champions disponibile per questa stagione" />
+      )}
+
+      {(!champ || data?.top11?.length > 0 || data?.flop11?.length > 0) && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
@@ -77,6 +84,14 @@ export default function TopFlop() {
             : <ElevenGrid players={data?.flop11} isTop={false} />}
         </div>
       </div>
+      )}
+
+      {champ && (
+        <p className="text-xs text-slate-600 mt-4">
+          Calcolate sulle sole partite di Champions: media fantapunti dei giocatori che hanno raggiunto il numero
+          minimo di presenze, calcolato come per il campionato sulle partite Champions disputate.
+        </p>
+      )}
     </div>
   )
 }

@@ -203,6 +203,76 @@ final class CalcolatoreVoti
     }
 
     // ------------------------------------------------------------
+    // Regole correttive sui gol di squadra, applicate DOPO la
+    // conversione punteggio -> gol tramite le fasce (FASCE_GOL_PUNTEGGIO).
+    //
+    // $ptCasa/$ptOspite: punteggi totali finali (fattore casa incluso)
+    // $golCasa/$golOspite: gol derivati dalle sole fasce
+    // $regole: soglie, tutte facoltative (default tra parentesi)
+    //   diff_min         (3)  distacco minimo in punti per "staccare"
+    //   soglia_pareggio  (66) sotto questa quota la regola (a) diventa 0-0
+    //   soglia_omaggio   (59) quota per il gol omaggio della regola (c)
+    //
+    // Regole:
+    //  a. due squadre in fasce di gol diverse ma con distacco < diff_min:
+    //     la squadra in svantaggio ottiene il gol che serve a pareggiare
+    //     (con fasce adiacenti è esattamente +1 gol);
+    //  b. se in (a) una delle due squadre è sotto soglia_pareggio la
+    //     partita finisce 0-0 anziché in parità;
+    //  c. se una squadra ha meno di soglia_omaggio punti, l'avversaria
+    //     riceve un gol omaggio, purché abbia raggiunto soglia_omaggio e
+    //     stacchi di almeno diff_min punti.
+    // (a/b e c sono mutuamente esclusive: distacco < diff_min vs >= diff_min)
+    //
+    // Ritorna ['golf_casa', 'golf_ospite', 'regola' => null|'a'|'b'|'c',
+    //          'nota' => string]
+    // ------------------------------------------------------------
+    public static function applicaRegoleGolPartita(
+        float $ptCasa, float $ptOspite, int $golCasa, int $golOspite, array $regole = []
+    ): array {
+        $diffMin   = (float) ($regole['diff_min']        ?? 3);
+        $sogliaPar = (float) ($regole['soglia_pareggio'] ?? 66);
+        $sogliaOmg = (float) ($regole['soglia_omaggio']  ?? 59);
+
+        $esito = ['golf_casa' => $golCasa, 'golf_ospite' => $golOspite, 'regola' => null, 'nota' => ''];
+
+        // tolleranza per gli errori di arrotondamento sui punteggi decimali
+        $stacca = (abs($ptCasa - $ptOspite) + 1e-9) >= $diffMin;
+
+        if (!$stacca) {
+            // a./b. fasce diverse ma distacco insufficiente
+            if ($golCasa !== $golOspite) {
+                if (min($ptCasa, $ptOspite) < $sogliaPar) {
+                    $esito['golf_casa'] = 0;
+                    $esito['golf_ospite'] = 0;
+                    $esito['regola'] = 'b';
+                    $esito['nota'] = "fasce diverse con distacco < $diffMin e una squadra sotto $sogliaPar punti: 0-0";
+                } else {
+                    $max = max($golCasa, $golOspite);
+                    $esito['golf_casa'] = $max;
+                    $esito['golf_ospite'] = $max;
+                    $esito['regola'] = 'a';
+                    $esito['nota'] = "fasce diverse con distacco < $diffMin: gol aggiuntivo alla squadra in svantaggio, pareggio $max-$max";
+                }
+            }
+            return $esito;
+        }
+
+        // c. gol omaggio: la squadra sotto soglia_omaggio regala un gol
+        //    all'avversaria che ha raggiunto soglia_omaggio e stacca >= diff_min
+        $casaAlta = $ptCasa > $ptOspite;
+        $ptBasso  = $casaAlta ? $ptOspite : $ptCasa;
+        $ptAlto   = $casaAlta ? $ptCasa : $ptOspite;
+        if ($ptBasso < $sogliaOmg && $ptAlto >= $sogliaOmg) {
+            if ($casaAlta) $esito['golf_casa']++; else $esito['golf_ospite']++;
+            $esito['regola'] = 'c';
+            $esito['nota'] = "gol omaggio alla squadra " . ($casaAlta ? 'di casa' : 'ospite')
+                           . ": avversaria sotto $sogliaOmg punti";
+        }
+        return $esito;
+    }
+
+    // ------------------------------------------------------------
     // Helper: individua il bonus della fascia [da, a] (estremi inclusi,
     // null = illimitato) in cui ricade $valore. Le fasce non devono
     // necessariamente essere ordinate nella configurazione: vengono

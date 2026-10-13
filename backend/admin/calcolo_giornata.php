@@ -48,7 +48,16 @@
 //   - golf (gol fatti) di NEW_RISULTATI: derivato dal punteggio totale
 //     finale della squadra (fattore casa incluso) tramite le fasce del
 //     parametro di stagione FASCE_GOL_PUNTEGGIO; gols (gol subiti) =
-//     golf della squadra avversaria
+//     golf della squadra avversaria. Sui gol così ottenuti si applicano
+//     le regole correttive di CalcolatoreVoti::applicaRegoleGolPartita:
+//       a. fasce diverse ma distacco < 3 punti: la squadra in svantaggio
+//          pareggia (gol aggiuntivo);
+//       b. come (a) ma con una squadra sotto i 66 punti: 0-0;
+//       c. squadra sotto i 59 punti: gol omaggio all'avversaria se ha
+//          almeno 59 punti e stacca di almeno 3 punti.
+//     Soglie modificabili da "Gestisci regole di calcolo" → sezione
+//     "Casi particolari" (parametri di stagione GOL_DISTACCO_MIN_PUNTI,
+//     GOL_SOGLIA_PAREGGIO, GOL_SOGLIA_OMAGGIO; default 3 / 66 / 59).
 //   - giocatore "senza voto" (sv) → NEW_VOTI: voto = 0, giocata = 0,
 //     totale = 0 (stesso trattamento già riservato dalla tabella
 //     esistente ai giocatori non entrati in campo)
@@ -145,6 +154,16 @@ $fasceGolPunteggio           = json_decode($config['parametri']['FASCE_GOL_PUNTE
     ['da' => null, 'a' => null, 'gol' => 0], // nessuna fascia configurata: 0 gol per tutti, per non bloccare il calcolo
 ];
 $fattoreCasaValore = (float) ($config['bonus']['FATTORE_CASA'] ?? 0);
+
+// Soglie delle regole correttive sui gol (vedi
+// CalcolatoreVoti::applicaRegoleGolPartita), modificabili in "Gestisci
+// regole di calcolo" → "Casi particolari". Se assenti valgono i
+// default 3 / 66 / 59.
+$regoleGol = [
+    'diff_min'        => is_numeric($config['parametri']['GOL_DISTACCO_MIN_PUNTI'] ?? null) ? (float) $config['parametri']['GOL_DISTACCO_MIN_PUNTI'] : 3,
+    'soglia_pareggio' => is_numeric($config['parametri']['GOL_SOGLIA_PAREGGIO'] ?? null)    ? (float) $config['parametri']['GOL_SOGLIA_PAREGGIO']    : 66,
+    'soglia_omaggio'  => is_numeric($config['parametri']['GOL_SOGLIA_OMAGGIO'] ?? null)     ? (float) $config['parametri']['GOL_SOGLIA_OMAGGIO']     : 59,
+];
 
 // Parametro numerico di stagione con default di riserva (vuoto = default)
 function parametro_numerico(array $config, string $codice, float $default): float
@@ -493,6 +512,17 @@ try {
         $golfCasa   = gol_da_punteggio($risultato['casa']['totale_squadra'], $fasceGolPunteggio);
         $golfOspite = gol_da_punteggio($risultato['ospite']['totale_squadra'], $fasceGolPunteggio);
 
+        // regole correttive a/b/c sui gol (pareggi forzati, 0-0, gol omaggio)
+        $esitoGol = CalcolatoreVoti::applicaRegoleGolPartita(
+            $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+            $golfCasa, $golfOspite, $regoleGol
+        );
+        if ($esitoGol['regola'] !== null) {
+            $warning[] = "Campionato - squadre $idCasa-$idOspite (giornata $giornata): regola gol {$esitoGol['regola']} - {$esitoGol['nota']} ($golfCasa-$golfOspite → {$esitoGol['golf_casa']}-{$esitoGol['golf_ospite']})";
+        }
+        $golfCasa   = $esitoGol['golf_casa'];
+        $golfOspite = $esitoGol['golf_ospite'];
+
         salvaRigaRisultato(
             $conn, $stagione, $giornata, $idCasa, $idOspite,
             $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
@@ -568,6 +598,17 @@ try {
 
         $golfCasa   = gol_da_punteggio($risultato['casa']['totale_squadra'], $fasceGolPunteggio);
         $golfOspite = gol_da_punteggio($risultato['ospite']['totale_squadra'], $fasceGolPunteggio);
+
+        // regole correttive a/b/c sui gol (pareggi forzati, 0-0, gol omaggio)
+        $esitoGol = CalcolatoreVoti::applicaRegoleGolPartita(
+            $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+            $golfCasa, $golfOspite, $regoleGol
+        );
+        if ($esitoGol['regola'] !== null) {
+            $warning[] = "Champions - squadre $idCasa-$idOspite (giornata $giornata): regola gol {$esitoGol['regola']} - {$esitoGol['nota']} ($golfCasa-$golfOspite → {$esitoGol['golf_casa']}-{$esitoGol['golf_ospite']})";
+        }
+        $golfCasa   = $esitoGol['golf_casa'];
+        $golfOspite = $esitoGol['golf_ospite'];
 
         salvaRigaRisultatoChampions(
             $conn, $stagione, $giornata, $girone, $idCasa, $idOspite,

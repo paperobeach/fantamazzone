@@ -5,6 +5,7 @@
 //   Fase finale · semifinali A/R (1A-2B, 1B-2A), finale con replay,
 //                 supplementari e calci di rigore in caso di parità
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getChampions, getDettaglioPartita } from '../api/client'
@@ -19,51 +20,90 @@ const FASI = [
   { id: 'finale', label: 'Fase finale', sub: 'Semifinali e finale' },
 ]
 
-// ── Fase 1 ────────────────────────────────────────────────────────────────
-function ClassificaGirone({ squadre, qualificano }) {
+// ── Fase a gironi ─────────────────────────────────────────────────────────
+// Badge di posizione: stesso stile della classifica campionato. Le squadre
+// che si qualificano hanno il badge verde, quelle eliminate il badge rosso.
+function posizioneGirone(i, qualificano) {
+  if (i < qualificano) {
+    return {
+      label: 'Qualificata',
+      badgeClass: 'bg-gradient-to-br from-grass-400 to-grass-600 text-pitch-950 ring-1 ring-grass-300/60',
+      rowBorderClass: 'border-l-2 border-l-grass-400',
+    }
+  }
+  return {
+    label: 'Eliminata',
+    badgeClass: 'bg-red-500/20 text-red-300 ring-1 ring-red-400/40',
+    rowBorderClass: 'border-l-2 border-l-red-400/60 bg-black/20',
+  }
+}
+
+// Classifica del girone: stesso layout della Classifica Generale del
+// campionato (card con intestazione, tabella con colonna Pts evidenziata).
+function ClassificaGirone({ girone, squadre, qualificano }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="fanta-table min-w-[420px]">
-        <thead>
-          <tr>
-            <th>#</th><th>Squadra</th>
-            <th className="text-center">G</th>
-            <th className="text-center">V</th>
-            <th className="text-center">N</th>
-            <th className="text-center">P</th>
-            <th className="text-center">GF</th>
-            <th className="text-center">GS</th>
-            <th className="text-center">Pts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {squadre.map((sq, i) => {
-            const qualificata = i < qualificano
-            return (
-              <tr key={sq.id_squadra} className={qualificata ? '' : 'opacity-60'}>
-                <td className="px-4 py-2.5 text-slate-600 font-mono text-xs">
-                  <span className={qualificata ? 'text-grass-400' : 'text-red-400'}>{i + 1}</span>
-                </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <TeamLogo logo={sq.logo} nome={sq.nome} size="sm" />
-                    <span className="text-slate-200 font-medium text-sm">{sq.nome}</span>
-                  </div>
-                </td>
-                <td className="px-2 py-2.5 text-center text-slate-500 text-sm">{sq.giocate}</td>
-                <td className="px-2 py-2.5 text-center text-slate-400 text-sm">{sq.vinte}</td>
-                <td className="px-2 py-2.5 text-center text-slate-400 text-sm">{sq.nulle}</td>
-                <td className="px-2 py-2.5 text-center text-slate-400 text-sm">{sq.perse}</td>
-                <td className="px-2 py-2.5 text-center text-slate-400 text-sm">{sq.golf}</td>
-                <td className="px-2 py-2.5 text-center text-slate-500 text-sm">{sq.gols}</td>
-                <td className="px-2 py-2.5 text-center">
-                  <span className="font-bold text-display text-lg text-white">{sq.punti}</span>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+    <div className="card overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/5">
+        <h2 className="text-sm font-semibold text-slate-300">Classifica Girone {girone}</h2>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="fanta-table min-w-[560px]">
+          <thead>
+            <tr>
+              <th className="w-10">#</th>
+              <th>Squadra</th>
+              <th className="text-center">PG</th>
+              <th className="text-center bg-grass-500/10">Pts</th>
+              <th className="text-center">V</th>
+              <th className="text-center">P</th>
+              <th className="text-center">S</th>
+              <th className="text-center">GF</th>
+              <th className="text-center">GS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {squadre.map((sq, i) => {
+              const pos = posizioneGirone(i, qualificano)
+              return (
+                <tr
+                  key={sq.id_squadra}
+                  className={`border-b border-white/[0.03] transition-colors hover:bg-white/[0.02] ${pos.rowBorderClass}`}
+                >
+                  <td className="px-4 py-3 text-center">
+                    <span
+                      title={pos.label}
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-bold text-display ${pos.badgeClass}`}
+                    >
+                      {i + 1}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      to={`/squadre/${sq.id_squadra}`}
+                      className="flex items-center gap-3 group"
+                    >
+                      <TeamLogo logo={sq.logo} nome={sq.nome} size="sm" />
+                      <span className="font-medium text-slate-200 group-hover:text-grass-400 transition-colors text-sm">
+                        {sq.nome}
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.giocate}</td>
+                  <td className="px-3 py-3 text-center bg-grass-500/10 border-x border-grass-500/20">
+                    <span className="text-display font-extrabold text-2xl text-grass-400">{sq.punti}</span>
+                  </td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.vinte}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.nulle}</td>
+                  <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.perse}</td>
+                  <td className="px-4 py-3 text-center text-slate-300 text-sm">{sq.golf}</td>
+                  <td className="px-4 py-3 text-center text-slate-500 text-sm">{sq.gols}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -132,7 +172,9 @@ function CalendarioGirone({ turni }) {
 }
 
 // Fase a gironi (fase1 / fase2): stessa struttura, cambia la sezione richiesta.
+// Si mostra un solo girone per volta, scelto con le schede in alto.
 function FaseGironi({ stagione, sezione, vuoto, nota }) {
+  const [selezionato, setSelezionato] = useState(null)
   const { data, loading, error, refetch } = useFetch(
     () => getChampions(stagione, sezione),
     [stagione, sezione]
@@ -143,18 +185,49 @@ function FaseGironi({ stagione, sezione, vuoto, nota }) {
   if (error) return <ErrorState message={error} onRetry={refetch} />
   if (!gironi.length) return <EmptyState label={vuoto} />
 
+  // se la selezione non esiste più (es. cambio stagione) si torna al primo girone
+  const g = gironi.find(x => x.girone === selezionato) ?? gironi[0]
+
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      {gironi.map(g => (
-        <div key={g.girone} className="card overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/5">
-            <h3 className="font-semibold text-slate-300">Girone {g.girone}</h3>
-          </div>
-          <ClassificaGirone squadre={g.squadre} qualificano={g.qualificano} />
-          <CalendarioGirone turni={g.turni} />
+    <div className="space-y-4">
+      {gironi.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto">
+          {gironi.map(x => (
+            <button
+              key={x.girone}
+              onClick={() => setSelezionato(x.girone)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                g.girone === x.girone ? 'bg-grass-500 text-pitch-950' : 'bg-pitch-900 text-slate-400 hover:text-slate-200 border border-white/5'
+              }`}
+            >
+              Girone {x.girone}
+            </button>
+          ))}
         </div>
-      ))}
-      <p className="text-xs text-slate-600 lg:col-span-2">
+      )}
+
+      <ClassificaGirone girone={g.girone} squadre={g.squadre} qualificano={g.qualificano} />
+
+      <div className="card overflow-hidden">
+        <div className="px-4 py-3 border-b border-white/5">
+          <h2 className="text-sm font-semibold text-slate-300">Calendario e risultati · Girone {g.girone}</h2>
+        </div>
+        <CalendarioGirone turni={g.turni} />
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-gradient-to-br from-grass-400 to-grass-600 ring-1 ring-grass-300/60" />
+          <span className="text-xs text-slate-600">Qualificata</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-red-500/20 ring-1 ring-red-400/40" />
+          <span className="text-xs text-slate-600">Eliminata</span>
+        </div>
+      </div>
+
+      <p className="text-xs text-slate-600">
         {nota} Parità in classifica: differenza reti, gol fatti, fantapunti totali.
       </p>
     </div>
@@ -290,12 +363,12 @@ export default function Champions() {
       </div>
 
       {fase === 'fase1' && (
-        <FaseGironi stagione={stagione} sezione="fase1"
+        <FaseGironi key="fase1" stagione={stagione} sezione="fase1"
           vuoto="Nessun girone della prima fase per questa stagione"
           nota="Le prime tre di ogni girone accedono alla Fase 2; l'ultima classificata è eliminata." />
       )}
       {fase === 'fase2' && (
-        <FaseGironi stagione={stagione} sezione="fase2"
+        <FaseGironi key="fase2" stagione={stagione} sezione="fase2"
           vuoto="Nessun girone della seconda fase per questa stagione"
           nota="Le prime due di ogni girone accedono alle semifinali; la terza è eliminata." />
       )}

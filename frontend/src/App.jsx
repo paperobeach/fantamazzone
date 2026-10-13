@@ -111,6 +111,7 @@ function AppShell() {
                   <Route path="/statistiche"  element={<Statistiche />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
+                  <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
                   <Route path="/gazzetta"     element={<Gazzetta />} />
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={

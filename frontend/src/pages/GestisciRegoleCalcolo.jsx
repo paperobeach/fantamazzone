@@ -314,6 +314,9 @@ const DEFAULT_PARAMETRI = {
   GIORNATA_SERIE_A_INIZIO: ['4', 'Giornata di Serie A di partenza'],
   ULTIMA_GIORNATA_FATTORE_CASA: ['28', 'Ultima giornata con fattore casa (vuoto = sempre)'],
   FORMAZIONE_CHAMPIONS_DIVERSA: ['1', 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)'],
+  GOL_DISTACCO_MIN_PUNTI: ['3', 'Punti di scarto minimo in fasce diverse'],
+  GOL_SOGLIA_PAREGGIO: ['66', 'Scarto minimo 1 a 0'],
+  GOL_SOGLIA_OMAGGIO: ['59', 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario'],
 }
 const DEFAULT_CHAMP_GIORNATE = {
   CHAMP_F1_A_T1: 2, CHAMP_F1_A_T2: 4, CHAMP_F1_A_T3: 6, CHAMP_F1_A_T4: 10, CHAMP_F1_A_T5: 12, CHAMP_F1_A_T6: 14,
@@ -654,6 +657,53 @@ export default function GestisciRegoleCalcolo() {
                         stepCampo={1}
                         readOnly={readOnly}
                       />
+                    </Sottosezione>
+
+                    <Sottosezione
+                      titolo="Casi particolari"
+                      descrizione="Regole correttive applicate ai gol ottenuti dalle fasce qui sopra, sui punteggi finali delle due squadre (fattore casa incluso)."
+                    >
+                      <div className="flex flex-wrap gap-6">
+                        <div className="max-w-[16rem]">
+                          <label className="text-xs text-slate-600 mb-1 block">Punti di scarto minimo in fasce diverse</label>
+                          <input
+                            type="number" min="0" step="0.5"
+                            value={getValoreParametro('GOL_DISTACCO_MIN_PUNTI', 3)}
+                            onChange={e => setValoreParametro('GOL_DISTACCO_MIN_PUNTI', e.target.value, 'Punti di scarto minimo in fasce diverse')}
+                            disabled={readOnly}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">
+                            Se le due squadre sono in fasce gol diverse ma distano meno di questi punti, la squadra in svantaggio pareggia (con fasce adiacenti ottiene 1 gol in più). Vale anche come distacco richiesto per il gol omaggio.
+                          </p>
+                        </div>
+                        <div className="max-w-[16rem]">
+                          <label className="text-xs text-slate-600 mb-1 block">Scarto minimo 1 a 0</label>
+                          <input
+                            type="number" min="0" step="0.5"
+                            value={getValoreParametro('GOL_SOGLIA_PAREGGIO', 66)}
+                            onChange={e => setValoreParametro('GOL_SOGLIA_PAREGGIO', e.target.value, 'Scarto minimo 1 a 0')}
+                            disabled={readOnly}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">
+                            Se il caso precedente si verifica con una delle due squadre sotto questo punteggio, la partita finisce 0-0 anziché in parità (es. 1-1).
+                          </p>
+                        </div>
+                        <div className="max-w-[16rem]">
+                          <label className="text-xs text-slate-600 mb-1 block">Punteggio minimo al di sotto del quale scatta 1 gol per avversario</label>
+                          <input
+                            type="number" min="0" step="0.5"
+                            value={getValoreParametro('GOL_SOGLIA_OMAGGIO', 59)}
+                            onChange={e => setValoreParametro('GOL_SOGLIA_OMAGGIO', e.target.value, 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario')}
+                            disabled={readOnly}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">
+                            Una squadra sotto questo punteggio regala un gol all'avversaria, purché questa lo abbia raggiunto e stacchi di almeno i punti di scarto minimo.
+                          </p>
+                        </div>
+                      </div>
                     </Sottosezione>
 
                     <Sottosezione

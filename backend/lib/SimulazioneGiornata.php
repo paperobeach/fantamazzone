@@ -450,6 +450,13 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
     ];
     $fattoreCasaValore = (float) ($config['bonus']['FATTORE_CASA'] ?? 0);
 
+    // Soglie delle regole correttive sui gol (default 3 / 66 / 59)
+    $regoleGol = [
+        'diff_min'        => sim_parametro_numerico($config, 'GOL_DISTACCO_MIN_PUNTI', 3),
+        'soglia_pareggio' => sim_parametro_numerico($config, 'GOL_SOGLIA_PAREGGIO', 66),
+        'soglia_omaggio'  => sim_parametro_numerico($config, 'GOL_SOGLIA_OMAGGIO', 59),
+    ];
+
     $configUfficio = [
         'max'            => max(0, (int) sim_parametro_numerico($config, 'RISERVE_UFFICIO_MAX', 1)),
         'voto_portiere'  => sim_parametro_numerico($config, 'VOTO_UFFICIO_PORTIERE', 3),
@@ -540,6 +547,17 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
 
             $golfCasa   = sim_gol_da_punteggio($ris['casa']['totale_squadra'], $fasceGolPunteggio);
             $golfOspite = sim_gol_da_punteggio($ris['ospite']['totale_squadra'], $fasceGolPunteggio);
+
+            // regole correttive a/b/c sui gol (pareggi forzati, 0-0, gol omaggio)
+            $esitoGol = CalcolatoreVoti::applicaRegoleGolPartita(
+                $ris['casa']['totale_squadra'], $ris['ospite']['totale_squadra'],
+                $golfCasa, $golfOspite, $regoleGol
+            );
+            if ($esitoGol['regola'] !== null) {
+                $warning[] = ($champ ? 'Champions' : 'Campionato') . " - squadre $idCasa-$idOspite: regola gol {$esitoGol['regola']} - {$esitoGol['nota']} ($golfCasa-$golfOspite → {$esitoGol['golf_casa']}-{$esitoGol['golf_ospite']})";
+            }
+            $golfCasa   = $esitoGol['golf_casa'];
+            $golfOspite = $esitoGol['golf_ospite'];
 
             sim_salva_riga_risultato(
                 $conn, $stagione, $giornata, $idCasa, $idOspite,

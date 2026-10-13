@@ -164,8 +164,13 @@ export const getStatistiche = (stagione, params = {}) =>
 
 // ── Top / Flop 11 ────────────────────────────────────────────
 
-export const getTopFlop = (stagione, tipo = null) =>
-  get('top_flop.php', { stagione, ...(tipo ? { tipo } : {}) })
+// competizione: 'CAMP' (campionato, default) | 'CHAMP' (solo partite di Champions)
+export const getTopFlop = (stagione, tipo = null, competizione = 'CAMP') =>
+  get('top_flop.php', {
+    stagione,
+    ...(tipo ? { tipo } : {}),
+    ...(competizione === 'CHAMP' ? { competizione: 'CHAMP' } : {}),
+  })
 
 // ── Champions ────────────────────────────────────────────────
 

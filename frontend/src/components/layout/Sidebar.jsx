@@ -7,16 +7,37 @@ import {
   ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen
 } from 'lucide-react'
 
-const NAV = [
-  { to: '/',              icon: Trophy,       label: 'Classifica'    },
-  { to: '/calendario',   icon: Calendar,     label: 'Calendario'    },
-  { to: '/live',         icon: Radio,        label: 'LIVE Giornata in corso' },
-  { to: '/squadre',      icon: Users,        label: 'Squadre'       },
-  { to: '/statistiche',  icon: BarChart2,    label: 'Statistiche'   },
-  { to: '/top-flop',     icon: Star,         label: 'Top / Flop 11' },
-  { to: '/champions',    icon: Shield,       label: 'Champions'     },
-  { to: '/gazzetta',     icon: Newspaper,    label: 'La Gazzetta'   },
+// Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
+const NAV_SECTIONS = [
+  {
+    title: 'Generale',
+    items: [
+      { to: '/squadre',      icon: Users,     label: 'Squadre'       },
+      { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
+      { to: '/statistiche',  icon: BarChart2, label: 'Statistiche'   },
+      { to: '/gazzetta',     icon: Newspaper, label: 'La Gazzetta'   },
+    ],
+  },
+  {
+    title: 'Campionato',
+    items: [
+      { to: '/calendario',   icon: Calendar,  label: 'Calendario'    },
+      { to: '/',             icon: Trophy,    label: 'Classifica'    },
+      { to: '/top-flop',     icon: Star,      label: 'Top / Flop 11' },
+    ],
+  },
+  {
+    title: 'Champions',
+    items: [
+      { to: '/champions',          icon: Shield, label: 'Risultati e classifica' },
+      { to: '/champions/top-flop', icon: Star,   label: 'Top / Flop 11' },
+    ],
+  },
 ]
+
+// Voci con rotta annidata (/champions e /champions/top-flop): evidenziano
+// solo la propria pagina, non anche quella annidata.
+const NAV_END = new Set(['/', '/champions'])
 
 // Menu "Gestione squadra": disponibile solo per gli utenti loggati,
 // per la gestione della propria squadra ("Formazione" è stata
@@ -217,26 +238,33 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
 
       {/* Navigation */}
       <nav className="flex-1 min-h-0 overflow-y-auto py-3 px-3 space-y-0.5">
-        {NAV.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
-                isActive
-                  ? 'bg-grass-500/10 text-grass-400 font-medium'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-grass-500' : ''}`} />
-                {label}
-              </>
-            )}
-          </NavLink>
+        {NAV_SECTIONS.map((sec, idx) => (
+          <div key={sec.title}>
+            <div className={`${idx === 0 ? 'pt-0' : 'pt-3'} pb-1 px-2`}>
+              <p className="text-[9px] text-mono tracking-widest uppercase text-slate-700">{sec.title}</p>
+            </div>
+            {sec.items.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={NAV_END.has(to)}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
+                    isActive
+                      ? 'bg-grass-500/10 text-grass-400 font-medium'
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.03]'
+                  }`
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-grass-500' : ''}`} />
+                    {label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
         ))}
 
         {utente && (

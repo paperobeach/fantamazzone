@@ -158,6 +158,11 @@ function parametri_default(): array
         ['codice' => 'FORMAZIONE_CHAMPIONS_DIVERSA', 'etichetta' => 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)', 'valore' => '1'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
+        // Casi particolari della conversione punteggio -> gol
+        // (CalcolatoreVoti::applicaRegoleGolPartita)
+        ['codice' => 'GOL_DISTACCO_MIN_PUNTI',       'etichetta' => 'Punti di scarto minimo in fasce diverse', 'valore' => '3'],
+        ['codice' => 'GOL_SOGLIA_PAREGGIO',          'etichetta' => 'Scarto minimo 1 a 0',                     'valore' => '66'],
+        ['codice' => 'GOL_SOGLIA_OMAGGIO',           'etichetta' => 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario', 'valore' => '59'],
     ];
 
     // Giornate di fantacampionato dei turni Champions (parametri CHAMP_*).
@@ -307,6 +312,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
             if ($cod === 'RISERVE_UFFICIO_MAX' && (!ctype_digit($val) || (int) $val > 11)) {
                 api_error("Il numero massimo di riserve d'ufficio deve essere un intero tra 0 e 11", 400);
+            }
+            if (in_array($cod, ['GOL_DISTACCO_MIN_PUNTI', 'GOL_SOGLIA_PAREGGIO', 'GOL_SOGLIA_OMAGGIO'], true)
+                && (!is_numeric($val) || (float) $val < 0)) {
+                api_error("I parametri dei casi particolari sui gol devono essere numeri >= 0", 400);
             }
             if (in_array($cod, ['VOTO_UFFICIO_PORTIERE', 'VOTO_UFFICIO_MOVIMENTO', 'VOTO_UFFICIO_AMMONITO'], true)
                 && (!is_numeric($val) || (float) $val < 0 || (float) $val > 10)) {

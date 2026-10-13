@@ -229,7 +229,8 @@ function FaseGironi({ stagione, sezione, vuoto, nota }) {
 
       <ClassificaGirone girone={g.girone} squadre={g.squadre} qualificano={g.qualificano} />
 
-      <div className="card overflow-hidden">
+      {/* Il calendario ha una larghezza propria: non segue quella della classifica */}
+      <div className="card overflow-hidden w-full max-w-3xl">
         <div className="px-4 py-3 border-b border-white/5">
           <h2 className="text-sm font-semibold text-slate-300">Calendario e risultati · Girone {g.girone}</h2>
         </div>

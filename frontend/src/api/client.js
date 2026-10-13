@@ -143,6 +143,12 @@ export const eliminaSimulazionePartita = (stagione, id_squadra, competizione = '
 export const getSquadre = (stagione)      => get('squadre.php', { stagione })
 export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id })
 
+// ── Dashboard squadra ────────────────────────────────────────
+// Tutti i dati della dashboard (albo, KPI, campionato, Champions,
+// prossima sfida) in un'unica chiamata.
+export const getDashboardSquadra = (stagione, id_squadra) =>
+  get('dashboard_squadra.php', { stagione, id_squadra })
+
 // ── Dettaglio partita ────────────────────────────────────────
 // (endpoint già "incontri.php": rinominato quando è stata rimossa
 //  la pagina "Incontri" dal front end — il dettaglio è ora

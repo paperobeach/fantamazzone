@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -43,6 +43,7 @@ const NAV_END = new Set(['/', '/champions'])
 // per la gestione della propria squadra ("Formazione" è stata
 // spostata qui e rinominata in "Inserimento formazione").
 const TEAM_NAV = [
+  { to: '/dashboard-squadra', icon: LayoutDashboard, label: 'Dashboard squadra' },
   { to: '/formazione',   icon: ClipboardList,label: 'Inserimento formazione' },
 ]
 

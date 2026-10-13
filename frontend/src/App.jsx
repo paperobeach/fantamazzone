@@ -17,6 +17,7 @@ const Statistiche = lazy(() => import('./pages/Statistiche'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
+const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
 const Login       = lazy(() => import('./pages/Login'))
 const Admin       = lazy(() => import('./pages/Admin'))
 const InserimentoRose = lazy(() => import('./pages/InserimentoRose'))
@@ -116,6 +117,9 @@ function AppShell() {
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={
                     <ProtectedRoute><Formazione /></ProtectedRoute>
+                  } />
+                  <Route path="/dashboard-squadra" element={
+                    <ProtectedRoute><DashboardSquadra /></ProtectedRoute>
                   } />
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={

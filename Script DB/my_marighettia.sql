@@ -264,6 +264,27 @@ CREATE TABLE `NEW_ACCESSI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_ALBO_ORO`
+--
+-- Albo d'oro storico per la "Dashboard squadra": una riga per ogni
+-- piazzamento di rilievo. La squadra e' identificata da NEW_UTENZE.utenza
+-- (stabile tra le stagioni, a differenza dell'id squadra).
+--   competizione: 'CAMP' (campionato) | 'CHAMP' (Champions)
+--   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP)
+--
+
+CREATE TABLE `NEW_ALBO_ORO` (
+  `stagione` int NOT NULL,
+  `competizione` varchar(5) NOT NULL COMMENT 'CAMP | CHAMP',
+  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa',
+  `utenza` varchar(50) NOT NULL COMMENT 'NEW_UTENZE.utenza',
+  PRIMARY KEY (`stagione`,`competizione`,`posizione`),
+  KEY `idx_albo_utenza` (`utenza`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_ALLENATORI`
 --
 

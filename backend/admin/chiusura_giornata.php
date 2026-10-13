@@ -14,6 +14,8 @@
 //        1. ricostruzione NEW_STATISTICHE
 //        2. ricostruzione NEW_GENERALE (classifica)
 //        3. ricostruzione NEW_TOP11 / NEW_FLOP11
+//        3b. ricostruzione NEW_STATISTICHE_CHAMP / NEW_TOP11_CHAMP /
+//            NEW_FLOP11_CHAMP (Top/Flop 11 della sola Champions)
 //        4. NEW_CALENDARIO_CK.ck_giocata = 'S'  (SOLO se 1-3 riusciti)
 //      Dopo il passo 4 la "giornata corrente" (vedi
 //      giornata_corrente.php: prima giornata dopo l'ultima chiusa)
@@ -191,6 +193,12 @@ $passiDef = [
         $av = agg_top_flop($conn, $stagione);
         foreach ($av as $a) $avvisi[] = $a;
         return empty($av) ? "completi" : count($av) . " avvisi";
+    }],
+    ["top_flop_champions", "Statistiche e Top 11 / Flop 11 Champions", function () use ($conn, $stagione, $giornata, &$avvisi) {
+        $n  = agg_statistiche_champions($conn, $stagione, $giornata);
+        $av = agg_top_flop_champions($conn, $stagione, $giornata);
+        foreach ($av as $a) $avvisi[] = $a;
+        return "$n giocatori" . (empty($av) ? "" : ", " . count($av) . " avvisi");
     }],
     ["chiusura", "Chiusura giornata", function () use ($conn, $stagione, $giornata) {
         $ck = query_one("SELECT ck_giocata FROM NEW_CALENDARIO_CK

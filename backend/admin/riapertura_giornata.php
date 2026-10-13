@@ -15,6 +15,8 @@
 //           giornata precedente (giornata - 1)
 //        2. ricostruzione NEW_GENERALE (classifica) fino alla precedente
 //        3. ricostruzione NEW_TOP11 / NEW_FLOP11 fino alla precedente
+//        3b. ricostruzione delle tabelle Champions (NEW_STATISTICHE_CHAMP,
+//            NEW_TOP11_CHAMP, NEW_FLOP11_CHAMP) fino alla precedente
 //        4. cancellazione della riga di NEW_CALENDARIO_CK (flag di
 //           chiusura rimosso) - SOLO se 1-3 sono riusciti
 //      Dopo il passo 4 la giornata corrente (giornata_corrente.php:
@@ -141,6 +143,13 @@ $passiDef = [
         $av = agg_top_flop($conn, $stagione);
         foreach ($av as $a) $avvisi[] = $a;
         return empty($av) ? "completi" : count($av) . " avvisi";
+    }],
+    ["top_flop_champions", "Statistiche e Top 11 / Flop 11 Champions", function () use ($conn, $stagione, $precedente, &$avvisi) {
+        // Con $precedente = 0 le tabelle vengono svuotate (nessun dato da inserire)
+        $n  = agg_statistiche_champions($conn, $stagione, $precedente);
+        $av = agg_top_flop_champions($conn, $stagione, $precedente);
+        foreach ($av as $a) $avvisi[] = $a;
+        return $precedente > 0 ? "$n giocatori (fino alla giornata $precedente)" : "svuotate";
     }],
     ["riapertura", "Riapertura giornata", function () use ($conn, $stagione, $giornata) {
         agg_esegui($conn, "DELETE FROM NEW_CALENDARIO_CK

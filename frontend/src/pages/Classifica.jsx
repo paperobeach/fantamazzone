@@ -2,16 +2,10 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getGenerale } from '../api/client'
-import { PageHeader, LoadingState, ErrorState, EmptyState, SignBadge } from '../components/ui'
-import { TrendingUp, TrendingDown, Minus, ChevronUp, ChevronDown } from 'lucide-react'
+import { PageHeader, LoadingState, ErrorState, EmptyState, SignBadge, TrendIcon } from '../components/ui'
+import { ChevronUp, ChevronDown } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import TeamLogo from '../components/TeamLogo'
-
-function TrendIcon({ segno }) {
-  if (segno === 'W') return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
-  if (segno === 'L') return <TrendingDown className="w-3.5 h-3.5 text-red-400" />
-  return <Minus className="w-3.5 h-3.5 text-slate-600" />
-}
 
 // Badge di posizione: campione (1°), secondo posto (2°), maglia nera (ultimo)
 function posizioneInfo(i, totale) {

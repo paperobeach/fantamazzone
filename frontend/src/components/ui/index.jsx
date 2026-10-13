@@ -1,4 +1,4 @@
-import { AlertCircle, RefreshCw, Inbox } from 'lucide-react'
+import { AlertCircle, RefreshCw, Inbox, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 
 // ── Spinner ───────────────────────────────────────────────────
 export function Spinner({ size = 'md', className = '' }) {
@@ -66,6 +66,13 @@ export function SignBadge({ segno }) {
   }
   const s = map[segno] ?? { cls: '', label: segno }
   return <span className={`stat-pill ${s.cls}`}>{s.label}</span>
+}
+
+// ── Trend icon (esito dell'ultima partita: V/N/P; W/L legacy) ─────────────
+export function TrendIcon({ segno }) {
+  if (segno === 'V' || segno === 'W') return <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+  if (segno === 'P' || segno === 'L') return <TrendingDown className="w-3.5 h-3.5 text-red-400" />
+  return <Minus className="w-3.5 h-3.5 text-slate-600" />
 }
 
 // ── Skeleton rows ─────────────────────────────────────────────

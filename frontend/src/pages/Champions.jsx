@@ -9,7 +9,7 @@ import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getChampions, getDettaglioPartita } from '../api/client'
-import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
+import { PageHeader, LoadingState, ErrorState, EmptyState, TrendIcon } from '../components/ui'
 import TeamLogo from '../components/TeamLogo'
 import { MatchResultRow } from '../components/MatchResult'
 import { MatchDetailPanel } from '../components/MatchDetail'
@@ -48,7 +48,7 @@ function ClassificaGirone({ girone, squadre, qualificano }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="fanta-table min-w-[560px]">
+        <table className="fanta-table min-w-[1080px]">
           <thead>
             <tr>
               <th className="w-10">#</th>
@@ -60,6 +60,14 @@ function ClassificaGirone({ girone, squadre, qualificano }) {
               <th className="text-center">S</th>
               <th className="text-center">GF</th>
               <th className="text-center">GS</th>
+              <th className="text-center">Media</th>
+              <th className="text-center">Media A</th>
+              <th className="text-center">Max</th>
+              <th className="text-center">Min</th>
+              <th className="text-center">Mod D</th>
+              <th className="text-center">Mod C</th>
+              <th className="text-center">Mod A</th>
+              <th className="text-center">Trend</th>
             </tr>
           </thead>
           <tbody>
@@ -98,6 +106,19 @@ function ClassificaGirone({ girone, squadre, qualificano }) {
                   <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.perse}</td>
                   <td className="px-4 py-3 text-center text-slate-300 text-sm">{sq.golf}</td>
                   <td className="px-4 py-3 text-center text-slate-500 text-sm">{sq.gols}</td>
+                  {[
+                    [sq.media, 1], [sq.media_a, 1], [sq.maxp, 1], [sq.minp, 1],
+                    [sq.media_mod_dif, 2], [sq.media_mod_cc, 2], [sq.media_mod_att, 2],
+                  ].map(([v, dec], k) => (
+                    <td key={k} className="px-4 py-3 text-center">
+                      <span className="font-mono text-xs text-slate-400">{Number(v ?? 0).toFixed(dec)}</span>
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex justify-center">
+                      <TrendIcon segno={sq.segno} />
+                    </div>
+                  </td>
                 </tr>
               )
             })}

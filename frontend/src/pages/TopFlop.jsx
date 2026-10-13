@@ -38,6 +38,10 @@ export default function TopFlop({ competizione = 'CAMP' }) {
   )
   const [view, setView] = useState('campo')
 
+  // un backend non aggiornato ignora "competizione" e restituirebbe i dati
+  // del campionato: in quel caso non si mostra nulla
+  const serverChamp = !champ || data?.competizione === 'CHAMP'
+
   if (loading) return <LoadingState label="Caricamento Top/Flop..." />
   if (error)   return <ErrorState message={error} onRetry={refetch} />
 
@@ -52,11 +56,15 @@ export default function TopFlop({ competizione = 'CAMP' }) {
         <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
       </PageHeader>
 
-      {champ && !data?.top11?.length && !data?.flop11?.length && (
-        <EmptyState label="Nessun dato Champions disponibile per questa stagione" />
+      {champ && !serverChamp && (
+        <EmptyState label="Il server non gestisce ancora la Top/Flop Champions: aggiornare backend/top_flop.php" />
       )}
 
-      {(!champ || data?.top11?.length > 0 || data?.flop11?.length > 0) && (
+      {champ && serverChamp && !data?.top11?.length && !data?.flop11?.length && (
+        <EmptyState label="Nessun dato Champions disponibile: nessuna giornata chiusa con partite di Champions" />
+      )}
+
+      {(!champ || (serverChamp && (data?.top11?.length > 0 || data?.flop11?.length > 0))) && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card overflow-hidden">
           <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
@@ -88,8 +96,8 @@ export default function TopFlop({ competizione = 'CAMP' }) {
 
       {champ && (
         <p className="text-xs text-slate-600 mt-4">
-          Calcolate sulle sole partite di Champions: media fantapunti dei giocatori che hanno raggiunto il numero
-          minimo di presenze, calcolato come per il campionato sulle partite Champions disputate.
+          Calcolate sulle sole partite di Champions e aggiornate alla chiusura di ogni giornata: media fantapunti
+          dei giocatori che hanno raggiunto il numero minimo di presenze, calcolato come per il campionato.
         </p>
       )}
     </div>

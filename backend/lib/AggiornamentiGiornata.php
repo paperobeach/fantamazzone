@@ -211,3 +211,122 @@ function agg_top_flop($conn, int $stagione): array
 
     return $avvisi;
 }
+
+// ============================================================
+// CHAMPIONS: statistiche e Top 11 / Flop 11
+//
+// Stessa logica del campionato (agg_statistiche + agg_top_flop) ma
+// sui voti della sola Champions (NEW_VOTI_CHAMP) e sulle tabelle
+// NEW_STATISTICHE_CHAMP, NEW_TOP11_CHAMP, NEW_FLOP11_CHAMP.
+// Vengono ricostruite alla chiusura della giornata di campionato in
+// cui si sono giocate le partite Champions (e dalla riapertura).
+// $giornata e' sempre la giornata di FANTACAMPIONATO: e' la stessa
+// usata per salvare NEW_VOTI_CHAMP e NEW_RISULTATI_CHAMP.
+// ============================================================
+
+// ------------------------------------------------------------
+// STATISTICHE giocatori Champions
+//
+// Considera solo i voti di partite Champions effettivamente disputate
+// (esiste il risultato della squadra in NEW_RISULTATI_CHAMP per quella
+// giornata). Colonne e formule come NEW_STATISTICHE; la squadra
+// riportata e' quella dell'ultima giornata Champions con voti.
+// ------------------------------------------------------------
+function agg_statistiche_champions($conn, int $stagione, int $giornata): int
+{
+    agg_esegui($conn, "DELETE FROM NEW_STATISTICHE_CHAMP WHERE stagione = $stagione", "Pulizia statistiche Champions");
+
+    $sql = "INSERT INTO NEW_STATISTICHE_CHAMP
+              (stagione, id_squadra, squadra, logo, id_giocatore, giocatore,
+               giocate, media, golf, gols, ammonizioni, espulsioni,
+               rigores, rigorep, autogol, ruolo, assist)
+            SELECT
+              a.stagione, u.id_squadra, s.nome, s.logo, a.id_giocatore, g.descrizione,
+              a.giocate,
+              CASE WHEN a.giocate > 0 THEN ROUND(a.totale / a.giocate, 2) ELSE 0 END,
+              a.reti, a.retis, a.ammonizioni, a.espulsioni,
+              a.rigores, a.rigorep, a.autogol, g.ruolo, a.assist
+            FROM (
+              SELECT v.stagione, v.id_giocatore,
+                     MAX(v.giornata)      AS ultima,
+                     SUM(v.giocata)       AS giocate,
+                     SUM(v.totale)        AS totale,
+                     SUM(v.reti)          AS reti,
+                     SUM(v.retis)         AS retis,
+                     SUM(v.ammonizioni)   AS ammonizioni,
+                     SUM(v.espulsioni)    AS espulsioni,
+                     SUM(v.rigores)       AS rigores,
+                     SUM(v.rigorep)       AS rigorep,
+                     SUM(v.autogol)       AS autogol,
+                     SUM(v.assist)        AS assist
+              FROM NEW_VOTI_CHAMP v
+              JOIN NEW_RISULTATI_CHAMP r ON r.stagione = v.stagione
+                                        AND r.giornata = v.giornata
+                                        AND r.squadra  = v.id_squadra
+              WHERE v.stagione = $stagione AND v.giornata <= $giornata AND v.rufficio = 0
+              GROUP BY v.stagione, v.id_giocatore
+            ) a
+            JOIN NEW_VOTI_CHAMP u ON u.stagione = a.stagione AND u.id_giocatore = a.id_giocatore
+                                 AND u.giornata = a.ultima
+            JOIN NEW_GIOCATORI g ON g.id = a.id_giocatore AND g.stagione = a.stagione AND g.flag <> 1
+            JOIN NEW_SQUADRE s   ON s.id = u.id_squadra   AND s.stagione = a.stagione";
+    agg_esegui($conn, $sql, "Ricostruzione statistiche Champions");
+
+    $n = query_one("SELECT COUNT(*) AS n FROM NEW_STATISTICHE_CHAMP WHERE stagione = $stagione");
+    return (int) $n['n'];
+}
+
+// ------------------------------------------------------------
+// TOP 11 / FLOP 11 Champions
+//
+// Come agg_top_flop(): modulo 1-3-4-3, candidati con
+//   giocate >= soglia, soglia = partite Champions della squadra che ne
+//   ha giocate di piu' (fino a $giornata) * percentuale / 100,
+// percentuale = parametro TOPFLOP_SOGLIA_PERCENTUALE (default 50).
+// Va eseguita DOPO agg_statistiche_champions(). Ritorna gli avvisi
+// (nessuno finche' non e' stata giocata alcuna partita Champions).
+// ------------------------------------------------------------
+function agg_top_flop_champions($conn, int $stagione, int $giornata): array
+{
+    $avvisi = [];
+
+    $pct = (float) agg_parametro_stagione($conn, $stagione, 'TOPFLOP_SOGLIA_PERCENTUALE', TOPFLOP_SOGLIA_PERCENTUALE_DEFAULT);
+    if ($pct < 0)   $pct = 0;
+    if ($pct > 100) $pct = 100;
+
+    $row = query_one("SELECT MAX(n) AS p FROM (
+                          SELECT COUNT(*) AS n FROM NEW_RISULTATI_CHAMP
+                          WHERE stagione = $stagione AND giornata <= $giornata
+                          GROUP BY squadra
+                      ) t");
+    $partiteg = (int) ($row['p'] ?? 0);
+    $soglia   = sprintf('%.4F', $partiteg * $pct / 100);
+
+    agg_esegui($conn, "DELETE FROM NEW_TOP11_CHAMP  WHERE stagione = $stagione", "Pulizia Top 11 Champions");
+    agg_esegui($conn, "DELETE FROM NEW_FLOP11_CHAMP WHERE stagione = $stagione", "Pulizia Flop 11 Champions");
+
+    if ($partiteg === 0) return $avvisi;   // nessuna partita Champions giocata
+
+    $nomiRuolo = [1 => 'portieri', 2 => 'difensori', 3 => 'centrocampisti', 4 => 'attaccanti'];
+
+    foreach (['NEW_TOP11_CHAMP' => 'DESC', 'NEW_FLOP11_CHAMP' => 'ASC'] as $tabella => $ordine) {
+        $etichetta = $tabella === 'NEW_TOP11_CHAMP' ? 'Top 11 Champions' : 'Flop 11 Champions';
+        foreach (TOPFLOP_COMPOSIZIONE as $ruolo => $quanti) {
+            agg_esegui($conn, "INSERT INTO $tabella
+                    (stagione, id_giocatore, giocatore, media, ruolo, giocate, id_squadra, squadra, logo)
+                SELECT stagione, id_giocatore, giocatore, media, ruolo, giocate, id_squadra, squadra, logo
+                FROM NEW_STATISTICHE_CHAMP
+                WHERE stagione = $stagione AND ruolo = $ruolo AND giocate >= $soglia
+                ORDER BY media $ordine, giocate DESC, id_giocatore
+                LIMIT $quanti", "Ricostruzione $etichetta");
+
+            $inseriti = mysqli_affected_rows($conn);
+            if ($inseriti < $quanti) {
+                $avvisi[] = "$etichetta: solo $inseriti $nomiRuolo[$ruolo] su $quanti idonei "
+                          . "(soglia minima $soglia giocate)";
+            }
+        }
+    }
+
+    return $avvisi;
+}

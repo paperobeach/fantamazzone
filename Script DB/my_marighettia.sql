@@ -401,6 +401,23 @@ CREATE TABLE `NEW_FLOP11` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
+--
+-- Struttura della tabella `NEW_FLOP11_CHAMP`
+--
+
+CREATE TABLE `NEW_FLOP11_CHAMP` (
+  `stagione` int NOT NULL DEFAULT '0',
+  `id_giocatore` int NOT NULL DEFAULT '0',
+  `giocatore` varchar(50) NOT NULL DEFAULT '',
+  `media` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `ruolo` int NOT NULL DEFAULT '0',
+  `giocate` int NOT NULL DEFAULT '0',
+  `id_squadra` int NOT NULL DEFAULT '0',
+  `squadra` varchar(50) NOT NULL DEFAULT '',
+  `logo` varchar(20) NOT NULL DEFAULT ''
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
 
 --
 -- Struttura della tabella `NEW_FORMAZIONI`
@@ -899,6 +916,31 @@ CREATE TABLE `NEW_STATISTICHE` (
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
+--
+-- Struttura della tabella `NEW_STATISTICHE_CHAMP`
+--
+
+CREATE TABLE `NEW_STATISTICHE_CHAMP` (
+  `stagione` int NOT NULL DEFAULT '0',
+  `id_squadra` int NOT NULL DEFAULT '0',
+  `squadra` varchar(50) NOT NULL DEFAULT '',
+  `logo` varchar(20) NOT NULL DEFAULT '',
+  `id_giocatore` int NOT NULL DEFAULT '0',
+  `giocatore` varchar(50) NOT NULL DEFAULT '',
+  `giocate` int NOT NULL DEFAULT '0',
+  `media` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `golf` int NOT NULL DEFAULT '0',
+  `gols` int NOT NULL DEFAULT '0',
+  `ammonizioni` int NOT NULL DEFAULT '0',
+  `espulsioni` int NOT NULL DEFAULT '0',
+  `rigores` int NOT NULL DEFAULT '0',
+  `rigorep` int NOT NULL DEFAULT '0',
+  `autogol` int NOT NULL DEFAULT '0',
+  `ruolo` int NOT NULL DEFAULT '0',
+  `assist` int NOT NULL
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
 
 --
 -- Struttura della tabella `NEW_STAT_RANGE`
@@ -936,6 +978,23 @@ CREATE TABLE `NEW_STAT_RANGE` (
 --
 
 CREATE TABLE `NEW_TOP11` (
+  `stagione` int NOT NULL DEFAULT '0',
+  `id_giocatore` int NOT NULL DEFAULT '0',
+  `giocatore` varchar(50) NOT NULL DEFAULT '',
+  `media` decimal(6,2) NOT NULL DEFAULT '0.00',
+  `ruolo` int NOT NULL DEFAULT '0',
+  `giocate` int NOT NULL DEFAULT '0',
+  `id_squadra` int NOT NULL DEFAULT '0',
+  `squadra` varchar(50) NOT NULL DEFAULT '',
+  `logo` varchar(20) NOT NULL DEFAULT ''
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+--
+-- Struttura della tabella `NEW_TOP11_CHAMP`
+--
+
+CREATE TABLE `NEW_TOP11_CHAMP` (
   `stagione` int NOT NULL DEFAULT '0',
   `id_giocatore` int NOT NULL DEFAULT '0',
   `giocatore` varchar(50) NOT NULL DEFAULT '',
@@ -1430,6 +1489,29 @@ ALTER TABLE `NEW_FLOP11`
   ADD KEY `id_squadra` (`id_squadra`),
   ADD KEY `id_giocatore` (`id_giocatore`),
   ADD KEY `id_giocatore_2` (`id_giocatore`);
+
+--
+-- Indici per le tabelle `NEW_FLOP11_CHAMP`
+--
+ALTER TABLE `NEW_FLOP11_CHAMP`
+  ADD KEY `stagione` (`stagione`),
+  ADD KEY `id_squadra` (`id_squadra`),
+  ADD KEY `id_giocatore` (`id_giocatore`);
+
+--
+-- Indici per le tabelle `NEW_TOP11_CHAMP`
+--
+ALTER TABLE `NEW_TOP11_CHAMP`
+  ADD KEY `stagione` (`stagione`),
+  ADD KEY `id_squadra` (`id_squadra`),
+  ADD KEY `id_giocatore` (`id_giocatore`);
+
+--
+-- Indici per le tabelle `NEW_STATISTICHE_CHAMP`
+--
+ALTER TABLE `NEW_STATISTICHE_CHAMP`
+  ADD KEY `stagione` (`stagione`),
+  ADD KEY `id_giocatore` (`id_giocatore`);
 
 --
 -- Indici per le tabelle `NEW_FORMAZIONI`

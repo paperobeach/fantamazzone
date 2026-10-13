@@ -34,7 +34,8 @@ function champions_carica_turni(int $stagione): array
     // stagioni storiche), come per il campionato: prima sono provvisori e
     // visibili solo nella pagina LIVE.
     $ris = [];
-    foreach (query_all("SELECT giornata, squadra AS id_squadra, ftotale, golf, punti, segno
+    foreach (query_all("SELECT giornata, squadra AS id_squadra, ftotale, golf, punti, segno,
+                               ftotale_a, modificatore, mod_cc, mod_att
                         FROM NEW_RISULTATI_CHAMP WHERE stagione = $stagione") as $r) {
         if (!sg_risultati_pubblici($stagione, (int) $r["giornata"])) continue;
         $ris[(int) $r["giornata"]][(int) $r["id_squadra"]] = $r;
@@ -73,6 +74,12 @@ function champions_carica_turni(int $stagione): array
                 "golf"    => $r ? (int) $r["golf"] : null,
                 "ftotale" => $r ? (float) $r["ftotale"] : null,
                 "punti"   => $r ? (int) $r["punti"] : null,
+                // dati per le colonne extra della classifica (come NEW_GENERALE)
+                "ftotale_a"   => $r ? (float) $r["ftotale_a"] : null,
+                "modificatore" => $r ? (float) $r["modificatore"] : null,
+                "mod_cc"      => $r ? (float) $r["mod_cc"] : null,
+                "mod_att"     => $r ? (float) $r["mod_att"] : null,
+                "segno"       => $r ? (string) $r["segno"] : null,
             ];
         };
 
@@ -146,7 +153,10 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
         $nuova = function ($sq) {
             return ["id_squadra" => $sq["id"], "nome" => $sq["nome"], "logo" => $sq["logo"],
                     "giocate" => 0, "vinte" => 0, "nulle" => 0, "perse" => 0,
-                    "golf" => 0, "gols" => 0, "punti" => 0, "ftotale" => 0.0];
+                    "golf" => 0, "gols" => 0, "punti" => 0, "ftotale" => 0.0,
+                    // colonne come la classifica del campionato (NEW_GENERALE)
+                    "_sum_a" => 0.0, "_sum_mod_dif" => 0.0, "_sum_mod_cc" => 0.0, "_sum_mod_att" => 0.0,
+                    "maxp" => null, "minp" => null, "segno" => ""];
         };
         foreach ($g["turni"] as $t) {
             foreach ($t["riposa"] as $r) {
@@ -164,6 +174,13 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
                     $c["gols"] += $altro["golf"];
                     $c["punti"] += $sq["punti"];
                     $c["ftotale"] += $sq["ftotale"];
+                    $c["_sum_a"] += $sq["ftotale_a"];
+                    $c["_sum_mod_dif"] += $sq["modificatore"];
+                    $c["_sum_mod_cc"]  += $sq["mod_cc"];
+                    $c["_sum_mod_att"] += $sq["mod_att"];
+                    $c["maxp"] = $c["maxp"] === null ? $sq["ftotale"] : max($c["maxp"], $sq["ftotale"]);
+                    $c["minp"] = $c["minp"] === null ? $sq["ftotale"] : min($c["minp"], $sq["ftotale"]);
+                    $c["segno"] = $sq["segno"];   // turni in ordine cronologico: resta l'ultimo
                     if ($sq["golf"] > $altro["golf"]) $c["vinte"]++;
                     elseif ($sq["golf"] < $altro["golf"]) $c["perse"]++;
                     else $c["nulle"]++;
@@ -171,6 +188,20 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
                 }
             }
         }
+        // Medie e valori derivati, come NEW_GENERALE (media/media_a su ftotale,
+        // medie dei modificatori), arrotondati a 2 decimali.
+        foreach ($cl as &$c) {
+            $n = max(1, $c["giocate"]);
+            $c["media"]         = round($c["ftotale"] / $n, 2);
+            $c["media_a"]       = round($c["_sum_a"] / $n, 2);
+            $c["media_mod_dif"] = round($c["_sum_mod_dif"] / $n, 2);
+            $c["media_mod_cc"]  = round($c["_sum_mod_cc"] / $n, 2);
+            $c["media_mod_att"] = round($c["_sum_mod_att"] / $n, 2);
+            $c["maxp"] = $c["maxp"] ?? 0.0;
+            $c["minp"] = $c["minp"] ?? 0.0;
+            unset($c["_sum_a"], $c["_sum_mod_dif"], $c["_sum_mod_cc"], $c["_sum_mod_att"]);
+        }
+        unset($c);
         $cl = array_values($cl);
         usort($cl, function ($a, $b) {
             return [$b["punti"], $b["golf"] - $b["gols"], $b["golf"], $b["ftotale"]]

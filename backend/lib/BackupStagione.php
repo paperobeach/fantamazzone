@@ -90,6 +90,9 @@ function bks_tabelle_backup(): array
         "NEW_STATISTICHE"           => "Statistiche giocatori",
         "NEW_TOP11"                 => "Top 11",
         "NEW_FLOP11"                => "Flop 11",
+        "NEW_STATISTICHE_CHAMP"     => "Statistiche giocatori (Champions)",
+        "NEW_TOP11_CHAMP"           => "Top 11 (Champions)",
+        "NEW_FLOP11_CHAMP"          => "Flop 11 (Champions)",
         "NEW_STAT_RANGE"            => "Statistiche per fasce (giornata)",
         "NEW_KULOVIC"               => "Statistiche per fasce (stagione)",
         // comunicazioni

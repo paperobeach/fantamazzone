@@ -12,6 +12,8 @@
 //      legge NEW_RISULTATI_CHAMP / NEW_VOTI_CHAMP)
 //
 // Risposta: dettaglio voti giocatori per ogni partita.
+// Ogni giocatore ha il flag "subentrato" (true se è entrato dalla
+// panchina al posto di un titolare senza voto).
 //
 // FALLBACK "SOLO FORMAZIONE": se i risultati della partita non sono
 // disponibili (giornata non chiusa, oppure partita senza righe in
@@ -214,6 +216,12 @@ foreach ($voti_raw as $v) {
     $v["ruolo"]            = (int)$v["ruolo"];
     $v["riserva_ufficio"]  = (int)$v["rufficio"] === 1;
     $v["ufficio_fittizio"] = (int)$v["ufficio_fittizio"] === 1;
+    // Subentrato dalla panchina: in formazione con maglia > 11 (panchina),
+    // con voto valido (giocata = 1) e non riserva d'ufficio. Un panchinaro
+    // entra a punteggio solo se ha sostituito un titolare senza voto.
+    $v["subentrato"]       = (int)($v["maglia"] ?? 0) > 11
+                             && (int)$v["giocata"] === 1
+                             && !$v["riserva_ufficio"];
     $voti_per_squadra[(int)$v["id_squadra"]][] = $v;
 }
 

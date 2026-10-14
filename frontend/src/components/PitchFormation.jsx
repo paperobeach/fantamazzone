@@ -1,5 +1,6 @@
 // ── Pitch formation (modulo 3-4-3) ─────────────────────────────
 import TeamLogo from './TeamLogo'
+import { PitchField } from './PitchField'
 
 // Posizioni percentuali (x, y) sul campo per il modulo 3-4-3.
 // y = 0 rete avversaria (attacco), y = 100 propria porta (difesa).
@@ -47,20 +48,7 @@ export function PitchFormation({ players, isTop }) {
 
   return (
     <div>
-      <div
-        className="relative w-full aspect-[3/4] rounded-xl overflow-hidden border border-white/10"
-        style={{
-          background: 'repeating-linear-gradient(0deg, #123822 0px, #123822 36px, #0e2e1c 36px, #0e2e1c 72px)',
-        }}
-      >
-        {/* segnaletica campo */}
-        <div className="absolute inset-3 border border-white/25 rounded-sm" />
-        <div className="absolute left-1/2 top-3 bottom-3 w-px bg-white/25 -translate-x-1/2" />
-        <div className="absolute left-1/2 top-1/2 w-20 h-20 sm:w-24 sm:h-24 border border-white/25 rounded-full -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute left-1/2 top-1/2 w-1.5 h-1.5 rounded-full bg-white/25 -translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute left-1/2 bottom-3 w-36 sm:w-40 h-14 sm:h-16 border border-white/25 border-b-0 -translate-x-1/2" />
-        <div className="absolute left-1/2 top-3 w-36 sm:w-40 h-14 sm:h-16 border border-white/25 border-t-0 -translate-x-1/2" />
-
+      <PitchField centerDot>
         {placed.map(({ x, y, player }, i) => (
           <div
             key={i}
@@ -70,7 +58,7 @@ export function PitchFormation({ players, isTop }) {
             <PlayerToken player={player} isTop={isTop} />
           </div>
         ))}
-      </div>
+      </PitchField>
 
       {leftovers.length > 0 && (
         <p className="text-[11px] text-slate-600 mt-2">

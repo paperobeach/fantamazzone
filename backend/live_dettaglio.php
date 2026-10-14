@@ -115,6 +115,11 @@ foreach ($voti_raw as $v) {
     $v["ufficio_fittizio"] = (int) $v["ufficio_fittizio"] === 1;
     $v["provvisorio"]      = (int) $v["provvisorio"] === 1;
     $v["manuale"]          = (int) $v["manuale"] === 1;
+    // Subentrato dalla panchina: maglia > 11, voto valido (giocata = 1),
+    // non riserva d'ufficio
+    $v["subentrato"]       = (int) ($v["maglia"] ?? 0) > 11
+                             && (int) $v["giocata"] === 1
+                             && !$v["riserva_ufficio"];
     // Origine del voto, mostrata come icona nel dettaglio per giocatore
     $v["origine"] = $v["riserva_ufficio"] ? "ufficio"
                   : ($v["provvisorio"] ? "provvisorio"

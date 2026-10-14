@@ -14,6 +14,7 @@ import {
   PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge, StatCard, TabBar,
 } from '../components/ui'
 import TeamLogo from '../components/TeamLogo'
+import { PitchLineup } from '../components/PitchLineup'
 
 // ── Utilità ──────────────────────────────────────────────────
 
@@ -480,11 +481,21 @@ function AreaProssima({ d }) {
         {!fm.mia && !fm.avversario ? (
           <Vuoto>Nessuna formazione ancora inserita per questa partita.</Vuoto>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 md:divide-x divide-white/5">
-            {[[d.squadra.nome, fm.mia], [a.nome, fm.avversario]].map(([nome, lista]) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
+            {[
+              { nome: d.squadra.nome, logo: d.squadra.logo, lista: fm.mia },
+              { nome: a.nome,         logo: a.logo,         lista: fm.avversario },
+            ].map(({ nome, logo, lista }) => (
               <div key={nome}>
-                <p className="px-4 py-2 text-xs font-semibold text-slate-400 bg-white/[0.02] border-b border-white/5">{nome}</p>
-                {lista ? <Lineup giocatori={lista} /> : <Vuoto>Formazione non inserita</Vuoto>}
+                <div className="flex items-center gap-2 mb-3">
+                  <TeamLogo logo={logo} nome={nome} size="sm" />
+                  <p className="text-sm font-semibold text-slate-300 truncate">{nome}</p>
+                </div>
+                {lista
+                  ? <PitchLineup players={lista} />
+                  : <div className="rounded-xl border border-dashed border-white/10 aspect-[3/4] flex items-center justify-center">
+                      <p className="text-sm text-slate-600">Formazione non inserita</p>
+                    </div>}
               </div>
             ))}
           </div>
@@ -583,7 +594,11 @@ export default function DashboardSquadra() {
                     {f.inserita ? 'inserita' : f.titolari > 0 ? `incompleta (${f.titolari}/11 titolari)` : 'non ancora inserita'}
                   </span>
                 </p>
-                {inizio && <p className="text-xs text-slate-500">Prima partita di Serie A della giornata: {inizio}</p>}
+                {inizio && (
+                  <p className="text-xs text-slate-500">
+                    Prima partita della {f.giornata_serie_a}ª giornata di Serie A: {inizio}
+                  </p>
+                )}
               </>
             )}
           </div>

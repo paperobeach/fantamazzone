@@ -1,4 +1,4 @@
-import { Briefcase, Clock, Pencil, Radio, MinusCircle } from 'lucide-react'
+import { ArrowRightLeft, Briefcase, Clock, Pencil, Radio, MinusCircle } from 'lucide-react'
 import { RoleBadge } from './ui'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
@@ -73,6 +73,22 @@ export function NomeGiocatore({ g }) {
   )
 }
 
+// ── Etichetta "Subentrato": il giocatore è entrato dalla panchina ──
+// (flag g.subentrato calcolato da backend/dettaglio_partita.php e
+//  backend/live_dettaglio.php)
+export function BadgeSubentrato({ g }) {
+  if (!g.subentrato) return null
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wide leading-none text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40"
+      title="Subentrato dalla panchina al posto di un titolare senza voto"
+    >
+      <ArrowRightLeft className="w-3 h-3 shrink-0" aria-hidden="true" />
+      Subentrato
+    </span>
+  )
+}
+
 // ── Eventi (bonus / malus) del singolo giocatore, mostrati come icone ──
 // Ogni evento compare solo se il giocatore lo ha avuto; con più di uno
 // viene aggiunto il moltiplicatore (×2). Al posto di una colonna per ogni
@@ -130,6 +146,9 @@ export function LegendaEventi() {
           <span aria-hidden="true">{e.icona}</span>{e.titolo}
         </span>
       ))}
+      <span className="inline-flex items-center gap-1">
+        <ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden="true" />Subentrato dalla panchina
+      </span>
     </div>
   )
 }
@@ -180,11 +199,12 @@ export function GiocatoriTable({ giocatori, soloFormazione = false }) {
       </thead>
       <tbody>
         {lista.map((g, i) => (
-          <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : g.provvisorio ? 'bg-sky-400/[0.05]' : g.manuale ? 'bg-violet-400/[0.05]' : ''}`}>
+          <tr key={i} className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${g.riserva_ufficio ? 'bg-amber-400/[0.04]' : g.provvisorio ? 'bg-sky-400/[0.05]' : g.manuale ? 'bg-violet-400/[0.05]' : g.subentrato ? 'bg-emerald-400/[0.06]' : ''}`}>
             <td className="px-3 py-2"><RoleBadge ruolo={g.ruolo} /></td>
             <td className="px-3 py-2 text-slate-300 font-medium">
               <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                 <NomeGiocatore g={g} />
+                <BadgeSubentrato g={g} />
                 <EventiGiocatore g={g} />
               </div>
             </td>

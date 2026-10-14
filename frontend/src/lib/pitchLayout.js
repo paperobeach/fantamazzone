@@ -28,17 +28,25 @@ function rowSlots(n, y, margin = 14) {
   return Array.from({ length: n }, (_, i) => ({ x: margin + i * step, y }))
 }
 
+// Slot per un dato numero di difensori / centrocampisti / attaccanti
+// (il portiere è sempre 1): [{ ruolo, x, y }]. Esposta separatamente per
+// poter disegnare anche una formazione già salvata/incompleta, senza
+// dover passare da un modulo valido.
+export function getSlotsForConteggio({ d, c, a }) {
+  const slots = []
+  slots.push({ ruolo: '1', ...rowSlots(1, 91)[0] })
+  rowSlots(d, 72).forEach(s => slots.push({ ruolo: '2', ...s }))
+  rowSlots(c, 46).forEach(s => slots.push({ ruolo: '3', ...s }))
+  rowSlots(a, 18).forEach(s => slots.push({ ruolo: '4', ...s }))
+  return slots
+}
+
 // Restituisce l'elenco ordinato degli slot per il modulo scelto:
 // [{ ruolo, x, y }] — sempre 1 portiere + d difensori + c centrocampisti + a attaccanti
 export function getSlotsForModulo(modulo) {
   const cfg = MODULI[modulo]
   if (!cfg) return []
-  const slots = []
-  slots.push({ ruolo: '1', ...rowSlots(1, 91)[0] })
-  rowSlots(cfg.d, 72).forEach(s => slots.push({ ruolo: '2', ...s }))
-  rowSlots(cfg.c, 46).forEach(s => slots.push({ ruolo: '3', ...s }))
-  rowSlots(cfg.a, 18).forEach(s => slots.push({ ruolo: '4', ...s }))
-  return slots
+  return getSlotsForConteggio(cfg)
 }
 
 // Conteggio atteso dei ruoli per un modulo, comprensivo del portiere

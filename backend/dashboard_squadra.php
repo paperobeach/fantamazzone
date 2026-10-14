@@ -347,10 +347,21 @@ $classifica = $gen ? [
 $conclusa  = $ultimaCalendario === 0 || $ultimaChiusa >= $ultimaCalendario;
 $giornataF = $conclusa ? $ultimaCalendario : $ultimaChiusa + 1;
 
+// La giornata di fantacampionato NON coincide con quella di Serie A:
+// GIORNATA_SERIE_A_INIZIO (Gestisci regole di calcolo) indica la giornata
+// di Serie A corrispondente alla 1ª di fantacampionato (stessa regola di
+// admin/voti_serie_a.php: serie_a = fanta + inizio - 1).
 $inizio = null;
+$giornataSerieA = null;
 if (!$conclusa) {
+    $par = query_one("SELECT valore FROM NEW_PARAMETRI_STAGIONE
+                      WHERE stagione = $stagione AND codice = 'GIORNATA_SERIE_A_INIZIO'");
+    $v = $par ? trim((string) $par["valore"]) : "";
+    $inizioSerieA = ($v !== "" && ctype_digit($v) && (int) $v >= 1) ? (int) $v : 1;
+    $giornataSerieA = $giornataF + $inizioSerieA - 1;
+
     $p = query_one("SELECT data_partita, ora_partita FROM NEW_CALENDARIO_SERIE_A
-                    WHERE stagione = $stagione AND giornata = $giornataF
+                    WHERE stagione = $stagione AND giornata = $giornataSerieA
                     ORDER BY data_partita ASC, COALESCE(ora_partita, '23:59:59') ASC
                     LIMIT 1");
     if ($p) $inizio = $p["data_partita"] . " " . ($p["ora_partita"] ?: "00:00:00");
@@ -360,6 +371,7 @@ $nTit = query_one("SELECT COUNT(*) AS n FROM NEW_FORMAZIONI
                      AND MAGLIA BETWEEN 1 AND 11");
 $formazione = [
     "giornata"        => $giornataF,
+    "giornata_serie_a" => $giornataSerieA,
     "stagione_conclusa" => $conclusa,
     "titolari"        => (int) ($nTit["n"] ?? 0),
     "inserita"        => (int) ($nTit["n"] ?? 0) === 11,

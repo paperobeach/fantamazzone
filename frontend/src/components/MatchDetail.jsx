@@ -1,4 +1,5 @@
-import { ArrowRightLeft, Briefcase, Clock, Pencil, Radio, MinusCircle } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRightLeft, Briefcase, ChevronDown, Clock, Pencil, Radio, MinusCircle, UserMinus } from 'lucide-react'
 import { RoleBadge } from './ui'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
@@ -81,10 +82,25 @@ export function BadgeSubentrato({ g }) {
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wide leading-none text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40"
-      title="Subentrato dalla panchina al posto di un titolare senza voto"
+      title={g.sostituisce
+        ? `Subentrato dalla panchina al posto di ${g.sostituisce}`
+        : 'Subentrato dalla panchina al posto di un titolare senza voto'}
     >
       <ArrowRightLeft className="w-3 h-3 shrink-0" aria-hidden="true" />
       Subentrato
+    </span>
+  )
+}
+
+// ── Etichetta "Sostituito": titolare senza voto rimpiazzato (si vede in panchina) ──
+export function BadgeSostituito() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wide leading-none text-rose-300 bg-rose-500/15 ring-1 ring-rose-500/40"
+      title="Titolare senza voto, sostituito"
+    >
+      <UserMinus className="w-3 h-3 shrink-0" aria-hidden="true" />
+      Sostituito
     </span>
   )
 }
@@ -149,6 +165,9 @@ export function LegendaEventi() {
       <span className="inline-flex items-center gap-1">
         <ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden="true" />Subentrato dalla panchina
       </span>
+      <span className="inline-flex items-center gap-1">
+        <UserMinus className="w-3 h-3 text-rose-400" aria-hidden="true" />Titolare sostituito
+      </span>
     </div>
   )
 }
@@ -158,7 +177,8 @@ export function LegendaEventi() {
 // Con soloFormazione (partita senza risultati) mostra la sola formazione
 // inserita: titolari e panchina, senza voti.
 export function GiocatoriTable({ giocatori, soloFormazione = false }) {
-  const lista = giocatori ?? []
+  // I titolari sostituiti (g.in_panchina) compaiono solo nella sezione panchina
+  const lista = (giocatori ?? []).filter(g => soloFormazione || !g.in_panchina)
 
   if (soloFormazione) {
     if (!lista.length) {
@@ -221,6 +241,53 @@ export function GiocatoriTable({ giocatori, soloFormazione = false }) {
   )
 }
 
+// ── Panchina di una squadra (visibile a richiesta) ──
+// Elenco "panchina" restituito da dettaglio_partita.php / live_dettaglio.php:
+// panchinari (subentrati / non entrati) e titolari sostituiti, questi ultimi
+// con il badge "Sostituito" e il nome di chi li ha rimpiazzati.
+export function PanchinaTable({ panchina }) {
+  const lista = panchina ?? []
+  if (!lista.length) {
+    return <p className="px-3 py-3 text-center text-xs text-slate-600">Panchina non disponibile</p>
+  }
+  return (
+    <table className="w-full text-xs">
+      <tbody>
+        <tr>
+          <td colSpan={2} className="px-3 py-1.5 bg-white/[0.02] text-[10px] font-mono uppercase tracking-widest text-slate-600">Panchina</td>
+        </tr>
+        {lista.map((p, i) => (
+          <tr
+            key={`${p.id_giocatore}-${i}`}
+            className={`border-b border-white/[0.03] hover:bg-white/[0.02] ${
+              p.stato === 'subentrato' ? 'bg-emerald-400/[0.06]' :
+              p.stato === 'sostituito' ? 'bg-rose-400/[0.05]' : ''
+            }`}
+          >
+            <td className="px-3 py-2 w-8"><RoleBadge ruolo={p.ruolo} /></td>
+            <td className="px-3 py-2 font-medium">
+              <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                <span className={p.stato === 'non_entrato' ? 'text-slate-500' : 'text-slate-300'}>{p.giocatore}</span>
+                {p.stato === 'subentrato' && <BadgeSubentrato g={{ subentrato: true, sostituisce: p.sostituisce }} />}
+                {p.stato === 'sostituito' && <BadgeSostituito />}
+                {p.stato === 'non_entrato' && (
+                  <span className="text-[10px] font-mono uppercase tracking-wide text-slate-600">Non entrato</span>
+                )}
+              </div>
+              {p.stato === 'subentrato' && p.sostituisce && (
+                <p className="mt-0.5 text-[10px] text-slate-600">al posto di {p.sostituisce}</p>
+              )}
+              {p.stato === 'sostituito' && p.sostituito_da && (
+                <p className="mt-0.5 text-[10px] text-slate-600">sostituito da {p.sostituito_da}</p>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 // ── Riepilogo modificatori (difesa / centrocampo / attacco) di una squadra ──
 function ModBox({ label, value }) {
   const num = value === null || value === undefined ? null : Number(value)
@@ -250,6 +317,9 @@ export function ModificatoriRow({ squadra }) {
 
 // ── Dettaglio completo di una partita (usato nell'espansione) ──
 export function MatchDetailPanel({ casa, ospite, loading, error }) {
+  // Panchina nascosta in prima battuta: si apre a richiesta dell'utente
+  const [mostraPanchina, setMostraPanchina] = useState(false)
+
   if (loading) {
     return (
       <div className="border-t border-white/5 px-4 py-6 text-center text-xs font-mono text-slate-600 uppercase tracking-widest">
@@ -271,8 +341,26 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
       </div>
     )
   }
+  // Il pulsante compare solo se almeno una squadra ha dati di panchina
+  // (non nella modalità "solo formazione", che mostra già la panchina)
+  const haPanchina = !casa.solo_formazione && !ospite.solo_formazione
+    && ((casa.panchina?.length ?? 0) > 0 || (ospite.panchina?.length ?? 0) > 0)
+
   return (
     <>
+    {haPanchina && (
+      <div className="border-t border-white/5 px-3 py-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setMostraPanchina(v => !v)}
+          aria-expanded={mostraPanchina}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono uppercase tracking-wide text-slate-400 bg-white/[0.03] ring-1 ring-white/10 hover:bg-white/[0.06] hover:text-slate-200 transition-colors"
+        >
+          {mostraPanchina ? 'Nascondi panchina' : 'Mostra panchina'}
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${mostraPanchina ? 'rotate-180' : ''}`} aria-hidden="true" />
+        </button>
+      </div>
+    )}
     <div className="border-t border-white/5 grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-white/5">
       <div>
         <div className="px-3 py-2 border-b border-white/5">
@@ -280,6 +368,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
         </div>
         <ModificatoriRow squadra={casa} />
         <GiocatoriTable giocatori={casa.giocatori} soloFormazione={!!casa.solo_formazione} />
+        {haPanchina && mostraPanchina && <PanchinaTable panchina={casa.panchina} />}
       </div>
       <div>
         <div className="px-3 py-2 border-b border-white/5">
@@ -287,6 +376,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
         </div>
         <ModificatoriRow squadra={ospite} />
         <GiocatoriTable giocatori={ospite.giocatori} soloFormazione={!!ospite.solo_formazione} />
+        {haPanchina && mostraPanchina && <PanchinaTable panchina={ospite.panchina} />}
       </div>
     </div>
     {!casa.solo_formazione && <LegendaEventi />}

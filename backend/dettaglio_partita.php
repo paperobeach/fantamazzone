@@ -13,7 +13,9 @@
 //
 // Risposta: dettaglio voti giocatori per ogni partita.
 // Ogni giocatore ha il flag "subentrato" (true se è entrato dalla
-// panchina al posto di un titolare senza voto).
+// panchina al posto di un titolare senza voto). Ogni squadra ha anche
+// "panchina": panchinari (subentrati / non entrati) e titolari sostituiti
+// (vedi lib/PanchinaDettaglio.php); il front end la mostra a richiesta.
 //
 // FALLBACK "SOLO FORMAZIONE": se i risultati della partita non sono
 // disponibili (giornata non chiusa, oppure partita senza righe in
@@ -26,6 +28,7 @@
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
+require_once __DIR__ . "/lib/PanchinaDettaglio.php";
 
 $stagione    = param_int("stagione");
 $giornata    = param_int("giornata");
@@ -225,6 +228,15 @@ foreach ($voti_raw as $v) {
     $voti_per_squadra[(int)$v["id_squadra"]][] = $v;
 }
 
+// Panchina e sostituzioni (formazione + abbinamento sostituito/sostituto)
+$form_per_squadra = pd_carica_formazione($stagione, $giornata, $tForm, $ids);
+$panchina_per_squadra = [];
+foreach (array_unique($ids) as $idq) {
+    $voti_sq = $voti_per_squadra[$idq] ?? [];
+    $panchina_per_squadra[$idq] = pd_costruisci_panchina($form_per_squadra[$idq] ?? [], $voti_sq);
+    if ($voti_sq) $voti_per_squadra[$idq] = $voti_sq;
+}
+
 // Compongo risposta
 $output = [];
 foreach ($risultati as $r) {
@@ -246,6 +258,7 @@ foreach ($risultati as $r) {
             "num_cc"     => $r["num_cc_casa"]  !== null ? (int)$r["num_cc_casa"]    : null,
             "tot_cc"     => $r["tot_cc_casa"]  !== null ? (float)$r["tot_cc_casa"]  : null,
             "giocatori"  => $voti_per_squadra[$id_casa] ?? [],
+            "panchina"   => $panchina_per_squadra[$id_casa] ?? [],
         ],
         "ospite" => [
             "id"         => $id_ospite,
@@ -263,6 +276,7 @@ foreach ($risultati as $r) {
             "num_cc"     => $r["num_cc_ospite"]  !== null ? (int)$r["num_cc_ospite"]    : null,
             "tot_cc"     => $r["tot_cc_ospite"]  !== null ? (float)$r["tot_cc_ospite"]  : null,
             "giocatori"  => $voti_per_squadra[$id_ospite] ?? [],
+            "panchina"   => $panchina_per_squadra[$id_ospite] ?? [],
         ],
         "golf"   => (int)$r["golf"],
         "gols"   => (int)$r["gols"],

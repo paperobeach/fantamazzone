@@ -15,11 +15,14 @@
 // della giornata (id_squadra = squadra di casa): reale = NEW_RISULTATI_CHAMP /
 // NEW_VOTI_CHAMP, simulazione = NEW_SIMULAZIONE_*_CHAMP; le formazioni sono
 // quelle effettive di Champions (distinta se ammessa e salvata).
+// Ogni squadra ha anche "panchina" (panchinari e titolari sostituiti, vedi
+// lib/PanchinaDettaglio.php), mostrata a richiesta dal front end.
 // Disponibile solo per la giornata in corso (non chiusa).
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
+require_once __DIR__ . "/lib/PanchinaDettaglio.php";
 
 $stagione   = param_int("stagione");
 $id_squadra = param_int("id_squadra");
@@ -128,6 +131,15 @@ foreach ($voti_raw as $v) {
     $per_squadra[(int) $v["id_squadra"]][] = $v;
 }
 
+// Panchina e sostituzioni
+$form_per_squadra = pd_carica_formazione($stagione, $giornata, $tForm, [$id_casa, $id_ospite]);
+$panchina_per_squadra = [];
+foreach ([$id_casa, $id_ospite] as $idq) {
+    $voti_sq = $per_squadra[$idq] ?? [];
+    $panchina_per_squadra[$idq] = pd_costruisci_panchina($form_per_squadra[$idq] ?? [], $voti_sq);
+    if ($voti_sq) $per_squadra[$idq] = $voti_sq;
+}
+
 $num = fn($x) => $x !== null ? (float) $x : null;
 $int = fn($x) => $x !== null ? (int) $x : null;
 
@@ -142,6 +154,7 @@ api_success([
         "mod_cc"  => $num($r["mod_cc_casa"]),  "mod_att" => $num($r["mod_att_casa"]),
         "num_cc"  => $int($r["num_cc_casa"]),  "tot_cc"  => $num($r["tot_cc_casa"]),
         "giocatori" => $per_squadra[$id_casa] ?? [],
+        "panchina"  => $panchina_per_squadra[$id_casa] ?? [],
     ],
     "ospite" => [
         "id" => $id_ospite, "nome" => $r["nome_ospite"], "logo" => $r["logo_ospite"],
@@ -150,6 +163,7 @@ api_success([
         "mod_cc"  => $num($r["mod_cc_ospite"]),  "mod_att" => $num($r["mod_att_ospite"]),
         "num_cc"  => $int($r["num_cc_ospite"]),  "tot_cc"  => $num($r["tot_cc_ospite"]),
         "giocatori" => $per_squadra[$id_ospite] ?? [],
+        "panchina"  => $panchina_per_squadra[$id_ospite] ?? [],
     ],
     "calcolato_il" => $r["calcolato_il"], "simulato_da" => $r["simulato_da"],
     "golf" => (int) $r["golf"], "gols" => (int) $r["gols"],

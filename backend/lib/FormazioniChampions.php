@@ -101,7 +101,9 @@ function champions_rigori_previsti(int $stagione, int $giornata, int $idSquadra)
     $flag = champions_flag_supplementari($stagione);
     foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
         if ($p["casa"] !== $idSquadra && $p["ospite"] !== $idSquadra) continue;
-        return $p["cella"] !== null && !empty($flag[$p["cella"]]);
+        // Nelle semifinali l'andata non ha supplementari/rigori (solo il ritorno)
+        $andataSemi = in_array($p["girone"], ["S1", "S2"], true) && $p["giornata_champ"] < 2;
+        return $p["cella"] !== null && !$andataSemi && !empty($flag[$p["cella"]]);
     }
     return false;
 }

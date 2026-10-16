@@ -7,12 +7,14 @@
 // QUANDO SI GIOCANO
 //   Il turno deve avere il flag "supplementari e rigori" attivo nella
 //   configurazione del calendario Champions (parametri CHAMP_*_SUPPL, vedi
-//   lib/ChampionsCalendario.php: di default semifinale di ritorno, finale e
-//   replay della finale).
+//   lib/ChampionsCalendario.php): disponibile su tutte le giornate, di default
+//   attivo solo su semifinale di ritorno, finale e replay della finale.
 //   - Turno andata/ritorno (semifinali): dopo la SECONDA partita, solo se la
-//     somma dei gol delle due partite è in parità.
-//   - Turno a partita singola (finale, replay): dopo la partita stessa, solo
-//     se è finita in parità.
+//     somma dei gol delle due partite è in parità (il flag sull'andata non ha
+//     effetto).
+//   - Turno a partita singola (gironi, finale, replay): dopo la partita stessa,
+//     solo se è finita in parità. Nei gironi la classifica continua a usare il
+//     risultato dei tempi regolamentari.
 //   I supplementari decidono la sfida se cambiano la somma dei gol; se la
 //   parità resiste si va ai calci di rigore.
 //

@@ -253,19 +253,39 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, getFl
     const valore = getValore(cella.codice)
     const fuori = valore !== '' && Number(valore) > numeroGiornate
     return (
-      <select
-        value={valore}
-        disabled={readOnly}
-        onChange={e => setValore(cella, e.target.value)}
-        className={`fanta-input w-24 ${fuori ? 'border-red-500/50' : ''}`}
-        aria-label={cella.codice}
-      >
-        <option value="">{cella.opzionale ? 'non previsto' : '—'}</option>
-        {fuori && <option value={valore}>{valore}</option>}
-        {opzioni.map(g => (
-          <option key={g} value={g} disabled={g < (minimi[cella.codice] ?? 1)}>G. {g}</option>
-        ))}
-      </select>
+      <div className="flex items-center gap-2">
+        <select
+          value={valore}
+          disabled={readOnly}
+          onChange={e => setValore(cella, e.target.value)}
+          className={`fanta-input w-24 ${fuori ? 'border-red-500/50' : ''}`}
+          aria-label={cella.codice}
+        >
+          <option value="">{cella.opzionale ? 'non previsto' : '—'}</option>
+          {fuori && <option value={valore}>{valore}</option>}
+          {opzioni.map(g => (
+            <option key={g} value={g} disabled={g < (minimi[cella.codice] ?? 1)}>G. {g}</option>
+          ))}
+        </select>
+        {cella.supplementari && (
+          <label
+            className="inline-flex items-center gap-1 text-[11px] text-slate-500 cursor-pointer"
+            title={cella.codice === 'CHAMP_SF_T1'
+              ? 'Nessun effetto: nelle semifinali supplementari e rigori si giocano dopo il ritorno'
+              : 'In caso di parità: supplementari e calci di rigore'}
+          >
+            <input
+              type="checkbox"
+              className="w-3.5 h-3.5"
+              disabled={readOnly}
+              checked={getFlag(cella)}
+              onChange={e => setFlag(cella, e.target.checked)}
+              aria-label={`Supplementari e rigori: ${cella.codice}`}
+            />
+            Suppl.+rig.
+          </label>
+        )}
+      </div>
     )
   }
 
@@ -278,9 +298,10 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, getFl
           giornata 1 del girone A può cadere in G. 2 e la giornata 1 del girone B in G. 3. Le giornate
           di uno stesso girone devono essere crescenti e ogni fase inizia dopo la fine della precedente.
           Il calendario Champions viene creato da "Inizializzazione stagione" in base a questa
-          configurazione. La colonna "Suppl. + rigori" indica i turni che, in caso di parità, prevedono
-          supplementari e calci di rigore: nelle semifinali (andata/ritorno) si giocano dopo il ritorno
-          solo se la somma dei gol è in parità, nelle finali dopo la partita stessa.
+          configurazione. La casella "Suppl.+rig." di ogni giornata attiva, in caso di parità, supplementari e
+          calci di rigore (di default solo semifinale di ritorno, finale e replay). Nelle semifinali
+          (andata/ritorno) si giocano dopo il ritorno solo se la somma dei gol è in parità, nei turni a
+          partita singola dopo la partita stessa.
         </p>
         {!readOnly && (
           <button type="button" onClick={onPrecompila} className="btn-ghost text-xs">
@@ -312,9 +333,6 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, getFl
                   {fase.gironi.length > 0
                     ? fase.gironi.map(g => <th key={g} className="py-1 pr-3 font-medium">Girone {g}</th>)
                     : <th className="py-1 pr-3 font-medium">Giornata fantacampionato</th>}
-                  {fase.gironi.length === 0 && (
-                    <th className="py-1 pr-3 font-medium" title="In caso di parità si giocano supplementari e calci di rigore">Suppl. + rigori</th>
-                  )}
                 </tr>
               </thead>
               <tbody>
@@ -324,20 +342,6 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, getFl
                     {turno.celle.map(c => (
                       <td key={c.codice} className="py-1.5 pr-3">{Cella({ cella: c })}</td>
                     ))}
-                    {fase.gironi.length === 0 && (
-                      <td className="py-1.5 pr-3">
-                        {turno.celle[0].supplementari ? (
-                          <input
-                            type="checkbox"
-                            className="w-4 h-4"
-                            disabled={readOnly}
-                            checked={getFlag(turno.celle[0])}
-                            onChange={e => setFlag(turno.celle[0], e.target.checked)}
-                            aria-label={`Supplementari e rigori: ${turno.label}`}
-                          />
-                        ) : <span className="text-slate-700 text-xs">—</span>}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>

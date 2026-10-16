@@ -20,11 +20,10 @@
 //      parametro CHAMP_* (vedi lib/ChampionsCalendario.php); "suggerita"
 //      è la giornata del calendario Champions esistente (stagione stessa
 //      o precedente), usabile come valore di partenza.
-//      Nelle celle della fase finale che chiudono una sfida (semifinale di
-//      ritorno, finale, replay) compare anche "supplementari": true, con
+//      Ogni cella compare anche con "supplementari": true, con
 //      "supplementari_codice" (parametro CHAMP_*_SUPPL, valore 1/0) e
 //      "supplementari_default": il flag "in caso di parità si giocano
-//      supplementari e calci di rigore" (di default attivo su tutte e tre).
+//      supplementari e calci di rigore" (di default attivo solo su semifinale di ritorno, finale e replay).
 //      "algoritmi" contiene anche SUPPLEMENTARI ("calcolo supplementari":
 //      fasce somma punti -> gol dei supplementari, vedi CalcolatoreVoti).
 //      "modificabile" è true solo per l'ULTIMA stagione (MAX di
@@ -353,7 +352,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 // Flag supplementari e rigori: solo 1 / 0 e solo sulle celle che lo ammettono
                 if (!in_array($val, ['0', '1'], true)
                     || !champions_cella_ammette_suppl(substr($cod, 0, -strlen(CHAMPIONS_SUPPL_SUFFISSO)))) {
-                    api_error("Parametro \"$cod\" non valido: ammesso solo 0 o 1 sulla semifinale di ritorno, sulla finale e sul replay", 400);
+                    api_error("Parametro \"$cod\" non valido: ammesso solo 0 o 1 su una cella valida della Champions", 400);
                 }
             } elseif (strpos($cod, 'CHAMP_') === 0) {
                 $champ[$cod] = (string) ($p['valore'] ?? '');

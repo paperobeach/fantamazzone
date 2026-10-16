@@ -24,14 +24,16 @@
 //   CHAMP_FIN_T1             Finale
 //   CHAMP_FIN_REPLAY         Replay finale (opzionale)
 //   <codice cella>_SUPPL     Flag (1/0) "il turno prevede, in caso di parità,
-//                            supplementari e calci di rigore". Previsto solo
-//                            per i turni che chiudono una sfida: CHAMP_SF_T2
-//                            (semifinali ritorno), CHAMP_FIN_T1 (finale),
-//                            CHAMP_FIN_REPLAY. Di default è attivo su tutti e tre.
-//                            Nei turni andata/ritorno supplementari e rigori
-//                            si giocano dopo la seconda partita solo se la
-//                            somma dei gol è in parità; nei turni a partita
-//                            singola dopo la partita stessa.
+//                            supplementari e calci di rigore". Disponibile su
+//                            TUTTE le giornate della Champions (gironi, semifinali,
+//                            finale, replay). Default: attivo su CHAMP_SF_T2
+//                            (semifinali ritorno), CHAMP_FIN_T1 (finale) e
+//                            CHAMP_FIN_REPLAY, disattivo su tutte le altre.
+//                            Nei turni andata/ritorno (semifinali) supplementari e
+//                            rigori si giocano dopo la seconda partita solo se la
+//                            somma dei gol è in parità (il flag sull'andata non ha
+//                            effetto); nei turni a partita singola (gironi, finale,
+//                            replay) dopo la partita stessa.
 //
 // NEW_CALENDARIO_CHAMP (significato delle colonne, valido anche per i dati storici):
 //   GIORNATA        numero progressivo di giornata Champions
@@ -56,14 +58,20 @@ const CHAMPIONS_GIRONI = ['A', 'B'];
 const CHAMPIONS_SUPPL_SUFFISSO = '_SUPPL';
 
 /**
- * Celle (turni) che possono prevedere supplementari e rigori, con il valore
- * di default del flag: semifinale di ritorno e le due finali (finale e replay).
+ * Valore di default del flag "supplementari e rigori": attivo sulla semifinale
+ * di ritorno e sulle due finali (finale e replay), disattivo su tutte le altre
+ * giornate della Champions.
  */
 const CHAMPIONS_SUPPL_DEFAULT = [
     'CHAMP_SF_T2'      => true,
     'CHAMP_FIN_T1'     => true,
-    'CHAMP_FIN_REPLAY' => true,
 ];
+
+/** Default del flag per una cella (false se non è tra quelle attive di default). */
+function champions_default_suppl(string $codiceCella): bool
+{
+    return CHAMPIONS_SUPPL_DEFAULT[$codiceCella] ?? false;
+}
 
 /** Codice del parametro di configurazione del flag per una cella. */
 function champions_codice_suppl(string $codiceCella): string
@@ -71,10 +79,10 @@ function champions_codice_suppl(string $codiceCella): string
     return $codiceCella . CHAMPIONS_SUPPL_SUFFISSO;
 }
 
-/** La cella può prevedere supplementari e rigori? */
+/** Il codice è una cella valida della Champions (tutte possono avere il flag)? */
 function champions_cella_ammette_suppl(string $codiceCella): bool
 {
-    return array_key_exists($codiceCella, CHAMPIONS_SUPPL_DEFAULT);
+    return (bool) preg_match('/^CHAMP_(F[12]_[AB]_T[1-6]|SF_T[12]|FIN_T1|FIN_REPLAY)$/', $codiceCella);
 }
 
 /**
@@ -99,16 +107,22 @@ function champions_flag_supplementari(int $stagione): array
 /**
  * Codice della cella di configurazione a cui appartiene una partita di
  * Champions, dato il gruppo del calendario e il progressivo di giornata
- * Champions (NEW_CALENDARIO_CHAMP.GIORNATA). Null se non è una cella della
- * fase finale (le fasi a gironi non prevedono supplementari).
+ * Champions (NEW_CALENDARIO_CHAMP.GIORNATA). Null se il gruppo non è riconosciuto.
  */
 function champions_cella_da_gruppo(string $gruppo, int $giornataChamp): ?string
 {
-    switch (strtoupper(trim($gruppo))) {
+    $g = strtoupper(trim($gruppo));
+    $n = max(1, $giornataChamp);
+    switch ($g) {
         case 'S1':
-        case 'S2': return $giornataChamp >= 2 ? 'CHAMP_SF_T2' : 'CHAMP_SF_T1';
+        case 'S2': return $n >= 2 ? 'CHAMP_SF_T2' : 'CHAMP_SF_T1';
         case 'FI': return 'CHAMP_FIN_T1';
         case 'FR': return 'CHAMP_FIN_REPLAY';
+        // Gironi: fase 1 = A, B; fase 2 = C, D (che usano le celle A e B della fase 2)
+        case 'A':
+        case 'B':  return "CHAMP_F1_{$g}_T$n";
+        case 'C':  return "CHAMP_F2_A_T$n";
+        case 'D':  return "CHAMP_F2_B_T$n";
         default:   return null;
     }
 }
@@ -161,6 +175,15 @@ function champions_etichetta_gruppo(string $gruppo): string
  *
  * @return array [ ['id','label','gironi'=>[...],'turni'=>[['n','label','celle'=>[['codice','girone','opzionale']]]]] ]
  */
+/** Aggiunge a una cella le informazioni sul flag "supplementari e rigori". */
+function champions_cella_suppl(array $cella): array
+{
+    $cella["supplementari"]         = true;
+    $cella["supplementari_codice"]  = champions_codice_suppl($cella["codice"]);
+    $cella["supplementari_default"] = champions_default_suppl($cella["codice"]);
+    return $cella;
+}
+
 function champions_fasi(): array
 {
     $fasi = [];
@@ -173,7 +196,7 @@ function champions_fasi(): array
         for ($i = 1; $i <= $d['n']; $i++) {
             $celle = [];
             foreach (CHAMPIONS_GIRONI as $g) {
-                $celle[] = ["codice" => "CHAMP_{$d['sigla']}_{$g}_T$i", "girone" => $g, "opzionale" => false];
+                $celle[] = champions_cella_suppl(["codice" => "CHAMP_{$d['sigla']}_{$g}_T$i", "girone" => $g, "opzionale" => false]);
             }
             $turni[] = [
                 "n"     => $i,
@@ -192,13 +215,7 @@ function champions_fasi(): array
     ];
     $turni = [];
     foreach ($finale as $n => [$codice, $label, $opz]) {
-        $cella = ["codice" => $codice, "girone" => null, "opzionale" => $opz];
-        // Flag "supplementari e rigori" (solo turni che chiudono una sfida)
-        if (champions_cella_ammette_suppl($codice)) {
-            $cella["supplementari"]         = true;
-            $cella["supplementari_codice"]  = champions_codice_suppl($codice);
-            $cella["supplementari_default"] = CHAMPIONS_SUPPL_DEFAULT[$codice];
-        }
+        $cella = champions_cella_suppl(["codice" => $codice, "girone" => null, "opzionale" => $opz]);
         $turni[] = [
             "n"     => $n + 1,
             "label" => $label,

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, saveFormazione } from '../api/client'
+import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getRigoristi, saveFormazione } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, TabBar } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
+import { OrdineRigoristi, ordinaSecondo as ordinaRig } from '../components/OrdineRigoristi'
 import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info } from 'lucide-react'
 
@@ -201,7 +202,16 @@ export default function Formazione() {
   )
   const champPronta = !separata || Array.isArray(champSalvata) || !!errorChamp
 
-  const tuttoPronto = formazioniPronte && contestoPronto && champPronta
+  // Turno di Champions con supplementari e rigori: ordine dei rigoristi
+  const rigoriPrevisti = !!contesto?.rigori_previsti
+  const { data: rigoristiSalvati, error: errorRigoristi } = useFetch(
+    rigoriPrevisti ? () => getRigoristi(ultimaStagione, giornata, idSquadra) : null,
+    [ultimaStagione, idSquadra, giornata, rigoriPrevisti]
+  )
+  const rigoristiPronti = !rigoriPrevisti || Array.isArray(rigoristiSalvati) || !!errorRigoristi
+  const [rigoristi, setRigoristi] = useState(null) // null = ordine di default (per maglia)
+
+  const tuttoPronto = formazioniPronte && contestoPronto && champPronta && rigoristiPronti
 
   const statoIniziale = { modulo: MODULO_DEFAULT, titolari: [], panchina: [], tribuna: [] }
   const [comp, setComp]   = useState('CAMP')
@@ -249,8 +259,11 @@ export default function Formazione() {
       ? costruisciStato(champSalvata, rosa)
       : statoCamp
     setForms({ CAMP: statoCamp, CHAMP: statoChamp })
+    setRigoristi(rigoriPrevisti && Array.isArray(rigoristiSalvati) && rigoristiSalvati.length > 0
+      ? rigoristiSalvati.map(r => r.id_giocatore)
+      : null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idSquadra, giornata, rosa.length, formazioneSalvata, formazionePrecedente, champSalvata, separata, tuttoPronto])
+  }, [idSquadra, giornata, rosa.length, formazioneSalvata, formazionePrecedente, champSalvata, separata, tuttoPronto, rigoristiSalvati, rigoriPrevisti])
 
   const attesi = conteggioAtteso(modulo)
   const conteggio = { '1': 0, '2': 0, '3': 0, '4': 0 }
@@ -310,6 +323,12 @@ export default function Formazione() {
     return [...titolariPayload, ...panchinaPayload]
   }
 
+  // Titolari nell'ordine degli slot (maglia 1..11) e visibilità dell'ordine rigoristi:
+  // nella scheda Champions se la formazione è distinta, altrimenti sempre.
+  const titolariPerMaglia = formazioneCompleta ? buildGiocatoriPayload().slice(0, 11).map(g => g.id) : titolari
+  const mostraRigoristi = rigoriPrevisti && (!separata || comp === 'CHAMP')
+  const inviaRigoristi = mostraRigoristi && formazioneCompleta
+
   // Con la formazione Champions distinta ammessa, prima di salvare si
   // chiede se la formazione va salvata per entrambe le competizioni
   // (default NO); altrimenti si salva direttamente, come sempre.
@@ -331,7 +350,10 @@ export default function Formazione() {
     try {
       const res = await saveFormazione(
         ultimaStagione, giornata, idSquadra, buildGiocatoriPayload(),
-        separata ? comp : 'CAMP', separata && entrambe
+        separata ? comp : 'CAMP', separata && entrambe,
+        inviaRigoristi
+          ? (rigoristi ? [...ordinaRig(titolariPerMaglia, rigoristi), ...ordinaRig(panchina, rigoristi)] : [])
+          : undefined
       )
       // Salvata in entrambe: le due schede sono ora identiche.
       if (separata && entrambe) setForms(f => ({ CAMP: f[comp], CHAMP: f[comp] }))
@@ -428,6 +450,17 @@ export default function Formazione() {
             onChange={handleFormationChange}
             readOnly={readOnly}
           />
+
+          {mostraRigoristi && (
+            <OrdineRigoristi
+              rosa={rosa}
+              titolari={titolariPerMaglia}
+              panchina={panchina}
+              ordine={rigoristi}
+              onChange={(o) => { setRigoristi(o); setConfermaAperta(false); resetEsito() }}
+              readOnly={readOnly}
+            />
+          )}
 
           {/* Riepilogo + salvataggio */}
           <div className="card mt-6 p-4">

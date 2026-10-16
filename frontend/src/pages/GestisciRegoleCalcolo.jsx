@@ -9,7 +9,14 @@ const TIPI_ALGORITMO = [
   { value: 'DIFESA',      label: 'Difesa' },
   { value: 'CENTROCAMPO', label: 'Centrocampo' },
   { value: 'ATTACCO',     label: 'Attacco' },
+  { value: 'SUPPLEMENTARI', label: 'Calcolo supplementari' },
 ]
+
+// Default del calcolo supplementari (allineato a CalcolatoreVoti::ALGORITMO_SUPPLEMENTARI_DEFAULT)
+const SUPPLEMENTARI_DEFAULT = {
+  algoritmo: 'fasce_somma_v1',
+  parametri: { fasce: [{ da: 18, a: 23.99, gol: 1 }], ogni_punti: 6, gol_ogni: 1 },
+}
 
 // Le fasce sono condivise da più algoritmi/parametri: [{ da, a, [campo] }, ...]
 // da/a null = illimitato. campo/etichettaCampo permettono di riusare lo
@@ -117,6 +124,7 @@ function SezioneAlgoritmo({ tipo, config, onChange, readOnly = false }) {
     DIFESA: 'Bonus/malus alla squadra STESSA (non all\'avversaria) in base alla media voto dei propri difensori titolari, corretto in base al modulo schierato.',
     CENTROCAMPO: 'Bonus/malus incrociato in base alla differenza fra le somme dei voti dei centrocampisti delle due squadre, a parità di numero (i mancanti si equiparano con un voto fittizio).',
     ATTACCO: 'Bonus al singolo attaccante titolare privo di bonus da gol fatto, in funzione del solo voto puro (bonus/malus, assist compresi, esclusi).',
+    SUPPLEMENTARI: 'Supplementari (turni Champions con il flag attivo, in caso di parità): si sommano voto + bonus del primo panchinaro di difesa, centrocampo e attacco (0 se è entrato in campo; se è s.v. si passa al successivo del ruolo). La somma si converte in gol con queste fasce.',
   }
 
   return (
@@ -132,8 +140,36 @@ function SezioneAlgoritmo({ tipo, config, onChange, readOnly = false }) {
           fasce={parametri.fasce ?? []}
           onChange={fasce => setParametri({ ...parametri, fasce })}
           readOnly={readOnly}
+          {...(tipo === 'SUPPLEMENTARI' ? { campo: 'gol', etichettaCampo: 'Gol', stepCampo: 1 } : {})}
         />
       </div>
+
+      {tipo === 'SUPPLEMENTARI' && (
+        <div className="mt-6 pt-5 border-t border-white/[0.05] flex flex-wrap gap-6">
+          <div>
+            <label className="text-xs text-slate-600 mb-1 block">Oltre l'ultima fascia: un ulteriore gol ogni (punti)</label>
+            <input
+              type="number" min="0" step="0.5"
+              value={parametri.ogni_punti ?? 6}
+              onChange={e => setParametri({ ...parametri, ogni_punti: Number(e.target.value) })}
+              className="fanta-input w-28"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-600 mb-1 block">Gol aggiunti ogni passo</label>
+            <input
+              type="number" min="0" step="1"
+              value={parametri.gol_ogni ?? 1}
+              onChange={e => setParametri({ ...parametri, gol_ogni: Number(e.target.value) })}
+              className="fanta-input w-28"
+            />
+          </div>
+          <p className="text-[11px] text-slate-700 max-w-md">
+            Sotto la prima fascia 0 gol. Con i default: da 18 a 23,99 punti 1 gol, poi 1 gol ogni 6 punti
+            (24 = 2 gol, 30 = 3 gol, ...), contati a partire dall'inizio dell'ultima fascia.
+          </p>
+        </div>
+      )}
 
       {tipo === 'DIFESA' && (
         <div className="mt-6 pt-5 border-t border-white/[0.05]">
@@ -201,7 +237,7 @@ function calcolaMinimi(fasi, valoreDi) {
 
 // Associazione turni Champions → giornata di fantacampionato. Nelle fasi a
 // gironi ogni girone ha la propria colonna, indipendente dall'altra.
-function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, readOnly, onPrecompila }) {
+function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, getFlag, setFlag, readOnly, onPrecompila }) {
   const minimi = calcolaMinimi(fasi, getValore)
   const opzioni = Array.from({ length: numeroGiornate }, (_, i) => i + 1)
 
@@ -242,7 +278,9 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, readO
           giornata 1 del girone A può cadere in G. 2 e la giornata 1 del girone B in G. 3. Le giornate
           di uno stesso girone devono essere crescenti e ogni fase inizia dopo la fine della precedente.
           Il calendario Champions viene creato da "Inizializzazione stagione" in base a questa
-          configurazione.
+          configurazione. La colonna "Suppl. + rigori" indica i turni che, in caso di parità, prevedono
+          supplementari e calci di rigore: nelle semifinali (andata/ritorno) si giocano dopo il ritorno
+          solo se la somma dei gol è in parità, nelle finali dopo la partita stessa.
         </p>
         {!readOnly && (
           <button type="button" onClick={onPrecompila} className="btn-ghost text-xs">
@@ -274,6 +312,9 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, readO
                   {fase.gironi.length > 0
                     ? fase.gironi.map(g => <th key={g} className="py-1 pr-3 font-medium">Girone {g}</th>)
                     : <th className="py-1 pr-3 font-medium">Giornata fantacampionato</th>}
+                  {fase.gironi.length === 0 && (
+                    <th className="py-1 pr-3 font-medium" title="In caso di parità si giocano supplementari e calci di rigore">Suppl. + rigori</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -283,6 +324,20 @@ function CalendarioChampions({ fasi, numeroGiornate, getValore, setValore, readO
                     {turno.celle.map(c => (
                       <td key={c.codice} className="py-1.5 pr-3">{Cella({ cella: c })}</td>
                     ))}
+                    {fase.gironi.length === 0 && (
+                      <td className="py-1.5 pr-3">
+                        {turno.celle[0].supplementari ? (
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4"
+                            disabled={readOnly}
+                            checked={getFlag(turno.celle[0])}
+                            onChange={e => setFlag(turno.celle[0], e.target.checked)}
+                            aria-label={`Supplementari e rigori: ${turno.label}`}
+                          />
+                        ) : <span className="text-slate-700 text-xs">—</span>}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -325,6 +380,12 @@ const DEFAULT_CHAMP_GIORNATE = {
   CHAMP_F2_B_T1: 17, CHAMP_F2_B_T2: 18, CHAMP_F2_B_T3: 19, CHAMP_F2_B_T4: 21, CHAMP_F2_B_T5: 22, CHAMP_F2_B_T6: 23,
   CHAMP_SF_T1: 26, CHAMP_SF_T2: 28, CHAMP_FIN_T1: 30, CHAMP_FIN_REPLAY: 31,
 }
+// Flag "supplementari e rigori" (semifinale di ritorno, finale, replay), attivi di default
+const DEFAULT_SUPPL = {
+  CHAMP_SF_T2_SUPPL: 'Semifinali ritorno',
+  CHAMP_FIN_T1_SUPPL: 'Finale',
+  CHAMP_FIN_REPLAY_SUPPL: 'Replay finale',
+}
 function conDefault(parametri) {
   const out = [...parametri]
   const mancante = (cod) => !out.some(p => p.codice === cod && String(p.valore ?? '').trim() !== '')
@@ -340,6 +401,11 @@ function conDefault(parametri) {
   }
   for (const [cod, g] of Object.entries(DEFAULT_CHAMP_GIORNATE)) {
     if (mancante(cod)) imposta(cod, String(g), `Champions - ${cod}: giornata di fantacampionato`)
+  }
+  for (const [cod, nome] of Object.entries(DEFAULT_SUPPL)) {
+    if (!out.some(p => p.codice === cod)) {
+      out.push({ codice: cod, etichetta: `Champions - ${nome}: supplementari e rigori in caso di parità (1 = sì, 0 = no)`, valore: '1' })
+    }
   }
   return out
 }
@@ -415,6 +481,12 @@ export default function GestisciRegoleCalcolo() {
       }
     }
   }
+  const getFlagSuppl = (cella) => {
+    const v = getValoreParametro(cella.supplementari_codice, '')
+    return v === '' ? !!cella.supplementari_default : String(v) === '1'
+  }
+  const setFlagSuppl = (cella, attivo) =>
+    setValoreParametro(cella.supplementari_codice, attivo ? '1' : '0', `Champions - ${cella.codice}: supplementari e rigori (1 = sì, 0 = no)`)
   const numeroGiornate = Math.max(1, parseInt(getValoreParametro('NUMERO_GIORNATE', 34), 10) || 34)
 
   const salva = async () => {
@@ -576,7 +648,7 @@ export default function GestisciRegoleCalcolo() {
                   <h3 className="text-sm font-semibold text-slate-300 mb-2">{label}</h3>
                   <SezioneAlgoritmo
                     tipo={value}
-                    config={algoritmi[value] ?? { algoritmo: '', parametri: { fasce: [] } }}
+                    config={algoritmi[value] ?? (value === 'SUPPLEMENTARI' ? SUPPLEMENTARI_DEFAULT : { algoritmo: '', parametri: { fasce: [] } })}
                     onChange={config => setAlgoritmo(value, config)}
                     readOnly={readOnly}
                   />
@@ -636,6 +708,8 @@ export default function GestisciRegoleCalcolo() {
                         numeroGiornate={numeroGiornate}
                         getValore={(cod) => getValoreParametro(cod, '')}
                         setValore={setGiornataCella}
+                        getFlag={getFlagSuppl}
+                        setFlag={setFlagSuppl}
                         readOnly={readOnly}
                         onPrecompila={usaSuggerite}
                       />

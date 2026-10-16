@@ -23,6 +23,15 @@
 //   CHAMP_SF_T1/T2           Semifinali andata/ritorno (senza girone)
 //   CHAMP_FIN_T1             Finale
 //   CHAMP_FIN_REPLAY         Replay finale (opzionale)
+//   <codice cella>_SUPPL     Flag (1/0) "il turno prevede, in caso di parità,
+//                            supplementari e calci di rigore". Previsto solo
+//                            per i turni che chiudono una sfida: CHAMP_SF_T2
+//                            (semifinali ritorno), CHAMP_FIN_T1 (finale),
+//                            CHAMP_FIN_REPLAY. Di default è attivo su tutti e tre.
+//                            Nei turni andata/ritorno supplementari e rigori
+//                            si giocano dopo la seconda partita solo se la
+//                            somma dei gol è in parità; nei turni a partita
+//                            singola dopo la partita stessa.
 //
 // NEW_CALENDARIO_CHAMP (significato delle colonne, valido anche per i dati storici):
 //   GIORNATA        numero progressivo di giornata Champions
@@ -42,6 +51,67 @@
 
 /** Gironi delle fasi a gironi. */
 const CHAMPIONS_GIRONI = ['A', 'B'];
+
+/** Suffisso del parametro che attiva supplementari e rigori su una cella. */
+const CHAMPIONS_SUPPL_SUFFISSO = '_SUPPL';
+
+/**
+ * Celle (turni) che possono prevedere supplementari e rigori, con il valore
+ * di default del flag: semifinale di ritorno e le due finali (finale e replay).
+ */
+const CHAMPIONS_SUPPL_DEFAULT = [
+    'CHAMP_SF_T2'      => true,
+    'CHAMP_FIN_T1'     => true,
+    'CHAMP_FIN_REPLAY' => true,
+];
+
+/** Codice del parametro di configurazione del flag per una cella. */
+function champions_codice_suppl(string $codiceCella): string
+{
+    return $codiceCella . CHAMPIONS_SUPPL_SUFFISSO;
+}
+
+/** La cella può prevedere supplementari e rigori? */
+function champions_cella_ammette_suppl(string $codiceCella): bool
+{
+    return array_key_exists($codiceCella, CHAMPIONS_SUPPL_DEFAULT);
+}
+
+/**
+ * Flag supplementari/rigori per la stagione: codice cella => bool.
+ * Se il parametro non è stato salvato vale il default.
+ */
+function champions_flag_supplementari(int $stagione): array
+{
+    $out = CHAMPIONS_SUPPL_DEFAULT;
+    $rows = query_all("SELECT codice, valore FROM NEW_PARAMETRI_STAGIONE
+                       WHERE stagione = $stagione AND codice LIKE 'CHAMP\\_%\\_SUPPL'");
+    foreach ($rows as $r) {
+        $cella = substr((string) $r["codice"], 0, -strlen(CHAMPIONS_SUPPL_SUFFISSO));
+        if (!champions_cella_ammette_suppl($cella)) continue;
+        $v = trim((string) $r["valore"]);
+        if ($v === "1") $out[$cella] = true;
+        elseif ($v === "0") $out[$cella] = false;
+    }
+    return $out;
+}
+
+/**
+ * Codice della cella di configurazione a cui appartiene una partita di
+ * Champions, dato il gruppo del calendario e il progressivo di giornata
+ * Champions (NEW_CALENDARIO_CHAMP.GIORNATA). Null se non è una cella della
+ * fase finale (le fasi a gironi non prevedono supplementari).
+ */
+function champions_cella_da_gruppo(string $gruppo, int $giornataChamp): ?string
+{
+    switch (strtoupper(trim($gruppo))) {
+        case 'S1':
+        case 'S2': return $giornataChamp >= 2 ? 'CHAMP_SF_T2' : 'CHAMP_SF_T1';
+        case 'FI': return 'CHAMP_FIN_T1';
+        case 'FR': return 'CHAMP_FIN_REPLAY';
+        default:   return null;
+    }
+}
 
 /**
  * Raggruppa i codici GIRONE storici nel "gruppo" che forma le partite:
@@ -122,10 +192,17 @@ function champions_fasi(): array
     ];
     $turni = [];
     foreach ($finale as $n => [$codice, $label, $opz]) {
+        $cella = ["codice" => $codice, "girone" => null, "opzionale" => $opz];
+        // Flag "supplementari e rigori" (solo turni che chiudono una sfida)
+        if (champions_cella_ammette_suppl($codice)) {
+            $cella["supplementari"]         = true;
+            $cella["supplementari_codice"]  = champions_codice_suppl($codice);
+            $cella["supplementari_default"] = CHAMPIONS_SUPPL_DEFAULT[$codice];
+        }
         $turni[] = [
             "n"     => $n + 1,
             "label" => $label,
-            "celle" => [["codice" => $codice, "girone" => null, "opzionale" => $opz]],
+            "celle" => [$cella],
         ];
     }
     $fasi[] = ["id" => "finale", "label" => "Fase finale", "gironi" => [], "turni" => $turni];

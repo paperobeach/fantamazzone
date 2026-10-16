@@ -125,7 +125,11 @@ if ($champ) {
             r.num_cc   AS num_cc_casa,   r.tot_cc  AS tot_cc_casa,
             r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
             r2.num_cc  AS num_cc_ospite,  r2.tot_cc AS tot_cc_ospite,
-            r2.modificatore_a AS modificatore_a_ospite
+            r2.modificatore_a AS modificatore_a_ospite,
+            r.supp_giocati, r.supp_ftotale AS supp_ftotale_casa, r2.supp_ftotale AS supp_ftotale_ospite,
+            r.supp_golf, r.supp_gols,
+            r.rig_giocati, r.rig_golf, r.rig_gols, r.passa AS passa_casa, r2.passa AS passa_ospite,
+            r.dett_extra
         FROM NEW_RISULTATI_CHAMP r
         JOIN NEW_SQUADRE s1 ON s1.id = r.squadra      AND s1.stagione = r.stagione
         JOIN NEW_SQUADRE s2 ON s2.id = r.id_squadra_a AND s2.stagione = r.stagione
@@ -282,7 +286,32 @@ foreach ($risultati as $r) {
         "gols"   => (int)$r["gols"],
         "punti_casa" => (int)$r["punti"],
         "segno"  => $r["segno"],
-    ];
+    ] + ($champ ? ["extra" => dp_extra_champions($r)] : []);
 }
 
 api_success($output);
+
+// Supplementari e calci di rigore di una partita di Champions (null se non ce ne
+// sono stati). golf/gols della partita sono i gol dei tempi regolamentari.
+// "dettaglio" è il JSON salvato dal calcolo (giocatori dei supplementari,
+// sequenza dei rigori); "casa"/"ospite" sono riferiti alle due squadre della partita.
+function dp_extra_champions(array $r): ?array
+{
+    $supp = (int)($r["supp_giocati"] ?? 0) === 1;
+    $rig  = (int)($r["rig_giocati"] ?? 0) === 1;
+    $passa_casa   = (int)($r["passa_casa"] ?? 0) === 1;
+    $passa_ospite = (int)($r["passa_ospite"] ?? 0) === 1;
+    if (!$supp && !$rig && !$passa_casa && !$passa_ospite) return null;
+
+    $dett = !empty($r["dett_extra"]) ? json_decode($r["dett_extra"], true) : null;
+    return [
+        "supplementari" => $supp,
+        "rigori"        => $rig,
+        "supp_golf"     => ["casa" => (int)$r["supp_golf"], "ospite" => (int)$r["supp_gols"]],
+        "supp_punti"    => ["casa" => (float)$r["supp_ftotale_casa"], "ospite" => (float)($r["supp_ftotale_ospite"] ?? 0)],
+        "rig_golf"      => ["casa" => (int)$r["rig_golf"], "ospite" => (int)$r["rig_gols"]],
+        "passa"         => $passa_casa ? "casa" : ($passa_ospite ? "ospite" : null),
+        "andata"        => $dett["andata"] ?? null,
+        "dettaglio"     => $dett,
+    ];
+}

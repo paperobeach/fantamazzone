@@ -50,7 +50,7 @@ function champions_partite_giornata(int $stagione, int $giornata): array
 {
     // $giornata = giornata di FANTACAMPIONATO: si usa giornata_camp
     // (la colonna "giornata" è il progressivo Champions).
-    $righe = query_all("SELECT squadra, TRIM(girone) AS girone, posizione
+    $righe = query_all("SELECT squadra, TRIM(girone) AS girone, posizione, giornata
                         FROM NEW_CALENDARIO_CHAMP
                         WHERE stagione = $stagione AND giornata_camp = $giornata");
 
@@ -58,11 +58,21 @@ function champions_partite_giornata(int $stagione, int $giornata): array
     $riposa  = [];
     foreach (champions_raggruppa_righe($righe) as $gruppo => $rg) {
         $squadre = array_map(fn($r) => (int) $r["squadra"], $rg);
+        // Progressivo di giornata Champions del gruppo (NEW_CALENDARIO_CHAMP.GIORNATA):
+        // serve a riconoscere la cella di configurazione (es. semifinale di ritorno)
+        $giornataChamp = (int) ($rg[0]["giornata"] ?? 0);
         foreach (array_chunk($squadre, 2) as $coppia) {
             if (count($coppia) < 2) {
                 $riposa[] = ["girone" => (string) $gruppo, "id" => $coppia[0]];
             } else {
-                $partite[] = ["girone" => (string) $gruppo, "casa" => $coppia[0], "ospite" => $coppia[1]];
+                $partite[] = [
+                    "girone"         => (string) $gruppo,
+                    "casa"           => $coppia[0],
+                    "ospite"         => $coppia[1],
+                    "giornata_champ" => $giornataChamp,
+                    // codice della cella di configurazione (null nelle fasi a gironi)
+                    "cella"          => champions_cella_da_gruppo((string) $gruppo, $giornataChamp),
+                ];
             }
         }
     }
@@ -77,6 +87,21 @@ function champions_squadra_gioca_in_giornata(int $stagione, int $giornata, int $
 {
     foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
         if ($p["casa"] === $idSquadra || $p["ospite"] === $idSquadra) return true;
+    }
+    return false;
+}
+
+/**
+ * Nella giornata la squadra gioca un turno di Champions che prevede, in caso di
+ * parità, supplementari e calci di rigore (flag di configurazione del calendario
+ * Champions)? In tal caso l'allenatore può stabilire l'ordine dei rigoristi.
+ */
+function champions_rigori_previsti(int $stagione, int $giornata, int $idSquadra): bool
+{
+    $flag = champions_flag_supplementari($stagione);
+    foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
+        if ($p["casa"] !== $idSquadra && $p["ospite"] !== $idSquadra) continue;
+        return $p["cella"] !== null && !empty($flag[$p["cella"]]);
     }
     return false;
 }

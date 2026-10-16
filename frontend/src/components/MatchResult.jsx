@@ -21,8 +21,11 @@ export function ScoreBox({ risultato }) {
       <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
     </div>
   )
-  const { golf, gols } = risultato
-  const segno = segnoDa(risultato)
+  // Con i supplementari il risultato mostrato comprende i gol dei supplementari
+  // (risultato.supp = { casa, ospite }); i rigori sono in didascalia (EsitoExtra).
+  const golf = Number(risultato.golf) + Number(risultato.supp?.casa ?? 0)
+  const gols = Number(risultato.gols) + Number(risultato.supp?.ospite ?? 0)
+  const segno = risultato.supp ? (golf > gols ? 'V' : golf === gols ? 'N' : 'P') : segnoDa(risultato)
   return (
     <div className="flex items-center gap-2">
       <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
@@ -36,6 +39,20 @@ export function ScoreBox({ risultato }) {
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
       }`}>{gols}</span>
+    </div>
+  )
+}
+
+// ── Didascalia con l'esito dopo supplementari e rigori ──
+// risultato.supp = { casa, ospite } gol dei supplementari (null se non giocati)
+// risultato.rig  = { casa, ospite } rigori realizzati (null se non tirati)
+export function EsitoExtra({ risultato }) {
+  if (!risultato || (!risultato.supp && !risultato.rig)) return null
+  return (
+    <div className="text-[10px] font-mono uppercase tracking-wide text-amber-400 text-center leading-tight mt-0.5">
+      {risultato.supp && <span>d.t.s.</span>}
+      {risultato.supp && risultato.rig && <span> · </span>}
+      {risultato.rig && <span>rigori {risultato.rig.casa}-{risultato.rig.ospite}</span>}
     </div>
   )
 }
@@ -78,7 +95,8 @@ function Squadra({ squadra, lato }) {
 // ── Riga partita uniforme ──
 // Props:
 //  casa, ospite        { id, nome, logo }
-//  risultato           { golf, gols, segno?, ftotale_casa, ftotale_ospite } | null
+//  risultato           { golf, gols, segno?, ftotale_casa, ftotale_ospite, supp?, rig? } | null
+//                      (supp/rig: gol dei supplementari e rigori realizzati, solo Champions)
 //  maxScore/minScore   evidenziano i fantapunti più alto/basso della giornata
 //  expandable, open, onToggle   riga espandibile (chevron)
 //  centroExtra         contenuto aggiuntivo accanto al punteggio (es. etichetta Calc./Sim.)
@@ -105,7 +123,10 @@ export function MatchResultRow({
 
       <div className="flex-shrink-0 flex items-center gap-2">
         {centroExtra}
-        <ScoreBox risultato={risultato} />
+        <div className="flex flex-col items-center">
+          <ScoreBox risultato={risultato} />
+          <EsitoExtra risultato={risultato} />
+        </div>
       </div>
 
       <Squadra squadra={ospite} lato="ospite" />

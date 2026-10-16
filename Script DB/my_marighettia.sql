@@ -677,7 +677,7 @@ CREATE TABLE `NEW_PROFILI_FANTALLENATORE` (
 
 CREATE TABLE `NEW_REGOLE_ALGORITMI` (
   `stagione` int NOT NULL,
-  `tipo` enum('DIFESA','CENTROCAMPO','ATTACCO') NOT NULL,
+  `tipo` enum('DIFESA','CENTROCAMPO','ATTACCO','SUPPLEMENTARI') NOT NULL,
   `algoritmo` varchar(40) NOT NULL COMMENT 'Codice del modello di calcolo implementato in CalcolatoreVoti.php',
   `parametri` json NOT NULL COMMENT 'Variabili parametrizzabili del modello (fasce, aggiustamenti, ecc.)',
   `descrizione` varchar(150) DEFAULT NULL
@@ -696,6 +696,20 @@ CREATE TABLE `NEW_REGOLE_BONUS` (
   `valore` decimal(4,2) NOT NULL COMMENT 'Punti applicati per occorrenza (positivo = bonus, negativo = malus)',
   `ordine` int NOT NULL DEFAULT '0' COMMENT 'Ordine di visualizzazione nella pagina admin',
   `attivo` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Se 0 la voce non viene applicata (ma resta a storico)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_RIGORISTI_CHAMP`
+--
+
+CREATE TABLE `NEW_RIGORISTI_CHAMP` (
+  `STAGIONE` int NOT NULL DEFAULT '0',
+  `GIORNATA` int NOT NULL DEFAULT '0',
+  `ID_SQUADRA` int NOT NULL DEFAULT '0',
+  `ID_GIOCATORE` int NOT NULL DEFAULT '0',
+  `ORDINE` int NOT NULL DEFAULT '0' COMMENT 'Ordine di tiro: 1..11 titolari, poi i panchinari'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -748,7 +762,16 @@ CREATE TABLE `NEW_RISULTATI_CHAMP` (
   `mod_att` decimal(5,2) NOT NULL DEFAULT '0.00',
   `num_cc` int NOT NULL DEFAULT '0',
   `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
-  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00'
+  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `supp_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita ha avuto i supplementari',
+  `supp_ftotale` decimal(6,2) NOT NULL DEFAULT '0.00' COMMENT 'Punti dei 3 panchinari dei supplementari (squadra)',
+  `supp_golf` int NOT NULL DEFAULT '0' COMMENT 'Gol segnati ai supplementari',
+  `supp_gols` int NOT NULL DEFAULT '0' COMMENT 'Gol subiti ai supplementari',
+  `rig_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita e'' stata decisa ai calci di rigore',
+  `rig_golf` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati',
+  `rig_gols` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati dall''avversaria',
+  `passa` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la squadra vince la sfida (solo turni con supplementari/rigori)',
+  `dett_extra` text COMMENT 'JSON con il dettaglio di supplementari e rigori'
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
@@ -1605,6 +1628,12 @@ ALTER TABLE `NEW_REGOLE_ALGORITMI`
 --
 ALTER TABLE `NEW_REGOLE_BONUS`
   ADD PRIMARY KEY (`stagione`,`codice`);
+
+--
+-- Indici per le tabelle `NEW_RIGORISTI_CHAMP`
+--
+ALTER TABLE `NEW_RIGORISTI_CHAMP`
+  ADD PRIMARY KEY (`STAGIONE`,`GIORNATA`,`ID_SQUADRA`,`ID_GIOCATORE`);
 
 --
 -- Indici per le tabelle `NEW_RISULTATI`

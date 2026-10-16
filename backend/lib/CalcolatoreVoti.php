@@ -28,6 +28,28 @@
 final class CalcolatoreVoti
 {
     // ------------------------------------------------------------
+    // Configurazione di default del "calcolo supplementari"
+    // (NEW_REGOLE_ALGORITMI, tipo SUPPLEMENTARI). Usata per seminare la
+    // configurazione e come riserva quando la stagione non la ha ancora.
+    //   fasce       conversione somma punti -> gol: [da, a] estremi inclusi,
+    //               sotto la prima fascia 0 gol
+    //   ogni_punti  oltre l'ultima fascia, un ulteriore gol ogni N punti
+    //   gol_ogni    gol aggiunti ogni "ogni_punti" punti (default 1)
+    // Default: da 18 a 23,99 punti 1 gol, poi 1 gol ogni 6 punti.
+    // ------------------------------------------------------------
+    public const ALGORITMO_SUPPLEMENTARI_DEFAULT = [
+        'algoritmo'   => 'fasce_somma_v1',
+        'descrizione' => 'Gol dei supplementari dalla somma dei punti dei primi panchinari di difesa, centrocampo e attacco',
+        'parametri'   => [
+            'fasce'      => [
+                ['da' => 18, 'a' => 23.99, 'gol' => 1],
+            ],
+            'ogni_punti' => 6,
+            'gol_ogni'   => 1,
+        ],
+    ];
+
+    // ------------------------------------------------------------
     // 1) Punteggio del singolo giocatore (bonus/malus a voci fisse)
     // ------------------------------------------------------------
     //
@@ -270,6 +292,42 @@ final class CalcolatoreVoti
                            . ": avversaria sotto $sogliaOmg punti";
         }
         return $esito;
+    }
+
+    // ------------------------------------------------------------
+    // 6) Supplementari: gol dalla somma dei punti
+    // ------------------------------------------------------------
+    //
+    // $punti: somma di voti + bonus dei panchinari dei supplementari
+    // $parametri: dalla riga NEW_REGOLE_ALGORITMI (tipo=SUPPLEMENTARI)
+    //   - sotto la prima fascia: 0 gol;
+    //   - dentro una fascia [da, a]: i gol della fascia;
+    //   - oltre l'ultima fascia (a < $punti): i gol dell'ultima fascia
+    //     più "gol_ogni" ulteriori gol ogni "ogni_punti" punti, contati a
+    //     partire dal "da" dell'ultima fascia (es. 18 → 1 gol, 24 → 2,
+    //     30 → 3...).
+    public static function golSupplementari(float $punti, array $parametri): int
+    {
+        $fasce = array_values(array_filter($parametri['fasce'] ?? [], 'is_array'));
+        if (!$fasce) return 0;
+        usort($fasce, fn($x, $y) => (float) ($x['da'] ?? -INF) <=> (float) ($y['da'] ?? -INF));
+
+        $ultima = null;
+        foreach ($fasce as $f) {
+            $da = $f['da'] ?? null;
+            $a  = $f['a']  ?? null;
+            if ($da !== null && $punti < (float) $da) continue;
+            if ($a  !== null && $punti > (float) $a)  { $ultima = $f; continue; }
+            return (int) ($f['gol'] ?? 0);
+        }
+
+        // Oltre l'ultima fascia (oppure in un "buco" fra due fasce)
+        $ogni = (float) ($parametri['ogni_punti'] ?? 0);
+        if ($ultima === null || $ogni <= 0) return $ultima ? (int) ($ultima['gol'] ?? 0) : 0;
+        $ultimaFascia = end($fasce);
+        $base = (float) ($ultimaFascia['da'] ?? 0);
+        $passi = (int) floor((($punti - $base) + 1e-9) / $ogni);
+        return (int) ($ultimaFascia['gol'] ?? 0) + max(0, $passi) * (int) ($parametri['gol_ogni'] ?? 1);
     }
 
     // ------------------------------------------------------------

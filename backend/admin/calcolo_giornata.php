@@ -96,6 +96,14 @@
 // con quella di campionato. Voti in NEW_VOTI_CHAMP, risultati in
 // NEW_RISULTATI_CHAMP (stessi parametri di calcolo, fattore casa incluso).
 //
+// SUPPLEMENTARI E RIGORI (solo Champions): se il turno ha il flag attivo
+// (parametri CHAMP_*_SUPPL: di default semifinale di ritorno, finale e
+// replay) e la sfida è in parità (somma dei gol delle due partite nelle
+// semifinali, la partita stessa nelle finali) si calcolano i supplementari
+// e, se serve, i calci di rigore: vedi lib/ChampionsSupplementari.php.
+// L'esito è salvato nelle colonne supp_* / rig_* / passa / dett_extra di
+// NEW_RISULTATI_CHAMP; golf/gols restano i gol dei tempi regolamentari.
+//
 // Tutti i parametri di stagione non riconducibili a bonus/malus o
 // modificatori (sostituzioni, fattore casa, fasce gol) vivono in
 // NEW_PARAMETRI_STAGIONE, generica (codice => valore testuale): questo
@@ -107,6 +115,7 @@ require_once __DIR__ . "/../lib/CalcolatoreVoti.php";
 require_once __DIR__ . "/../lib/RegoleCalcolo.php";
 require_once __DIR__ . "/../lib/RisultatoPartita.php";
 require_once __DIR__ . "/../lib/FormazioniChampions.php";
+require_once __DIR__ . "/../lib/ChampionsSupplementari.php";
 
 mysqli_set_charset($conn, "utf8mb4");
 
@@ -296,6 +305,7 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
     $sostituzioniMovimento = 0;
     $sostituzioniPortiere  = 0;
     $riserveUfficio        = 0; // riserve d'ufficio già schierate (max: RISERVE_UFFICIO_MAX)
+    $sostitutiEntrati      = []; // panchinari entrati al posto di un titolare (servono ai supplementari)
 
     foreach ($titolari as $t) {
         $ruoloInt = (int) $t['ruolo'];
@@ -337,6 +347,7 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
                         $statCandidato = carica_stat_giocatore($conn, $stagione, $giornata, $idCandidato);
                         if (!$statCandidato['sv']) {
                             $sostituto = $statCandidato;
+                            $sostitutiEntrati[] = $idCandidato;
                             $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}";
                             if ($ruoloInt === 1) $sostituzioniPortiere++; else $sostituzioniMovimento++;
                             break;
@@ -373,7 +384,8 @@ function carica_formazione($conn, int $stagione, int $giornata, int $idSquadra, 
         }
     }
 
-    $formazione['modulo_difensori'] = count($formazione['difensori']);
+    $formazione['modulo_difensori']   = count($formazione['difensori']);
+    $formazione['sostituti_entrati']  = $sostitutiEntrati;
     return $formazione;
 }
 
@@ -556,6 +568,7 @@ try {
     // del campionato, fattore casa incluso (casa = prima squadra della
     // coppia in NEW_CALENDARIO_CHAMP).
     // --------------------------------------------------------
+    $flagSupplementari = champions_flag_supplementari($stagione);
     foreach (champions_partite_giornata($stagione, $giornata)['partite'] as $pc) {
         $idCasa   = $pc['casa'];
         $idOspite = $pc['ospite'];
@@ -610,6 +623,24 @@ try {
         $golfCasa   = $esitoGol['golf_casa'];
         $golfOspite = $esitoGol['golf_ospite'];
 
+        // Supplementari e rigori, se il turno li prevede e la sfida è in parità
+        $extra = null;
+        if ($pc['cella'] !== null && !empty($flagSupplementari[$pc['cella']])) {
+            $caricaStat = fn(int $idG) => carica_stat_giocatore($conn, $stagione, $giornata, $idG);
+            try {
+                $extra = champions_valuta_extra(
+                    $stagione, $giornata, $girone, (int) $pc['giornata_champ'],
+                    $idCasa, $idOspite, $golfCasa, $golfOspite,
+                    $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+                    $formazioneCasa, $formazioneOspite, $tabCasa, $tabOspite,
+                    $config, $caricaStat, $warning
+                );
+            } catch (Throwable $e) {
+                $warning[] = "Champions - squadre $idCasa-$idOspite: supplementari/rigori non calcolati ({$e->getMessage()})";
+                $extra = null;
+            }
+        }
+
         salvaRigaRisultatoChampions(
             $conn, $stagione, $giornata, $girone, $idCasa, $idOspite,
             $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
@@ -617,7 +648,8 @@ try {
             (int) round(-$risultato['ospite']['modificatori']['difesa']), (int) round(-$risultato['casa']['modificatori']['difesa']),
             $risultato['casa']['modificatori']['attacco'],
             $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo'],
-            $fattoreCampoCasa
+            $fattoreCampoCasa,
+            champions_colonne_extra($extra, $idCasa, $idOspite, $idCasa)
         );
         salvaRigaRisultatoChampions(
             $conn, $stagione, $giornata, $girone, $idOspite, $idCasa,
@@ -626,7 +658,8 @@ try {
             (int) round(-$risultato['casa']['modificatori']['difesa']), (int) round(-$risultato['ospite']['modificatori']['difesa']),
             $risultato['ospite']['modificatori']['attacco'],
             $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo'],
-            0
+            0,
+            champions_colonne_extra($extra, $idCasa, $idOspite, $idOspite)
         );
 
         $championsElaborate++;

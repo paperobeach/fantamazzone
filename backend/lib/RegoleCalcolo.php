@@ -21,6 +21,8 @@
 // default di riserva se il parametro non è stato configurato.
 // ============================================================
 
+require_once __DIR__ . "/CalcolatoreVoti.php";
+
 function caricaConfigurazioneCalcolo($conn, int $stagione): array
 {
     $bonusRows = query_all("SELECT codice, valore FROM NEW_REGOLE_BONUS
@@ -57,11 +59,18 @@ function caricaConfigurazioneCalcolo($conn, int $stagione): array
     $parametri = [];
     foreach ($parametriRows as $r) $parametri[$r["codice"]] = $r["valore"];
 
+    // Calcolo supplementari: facoltativo (stagioni configurate prima della sua
+    // introduzione) → se manca valgono i default (18-23,99 punti = 1 gol,
+    // poi 1 gol ogni 6 punti).
+    $supplementari = $algoritmi["SUPPLEMENTARI"]
+        ?? CalcolatoreVoti::ALGORITMO_SUPPLEMENTARI_DEFAULT["parametri"];
+
     return [
-        "bonus"       => $bonus,
-        "difesa"      => $algoritmi["DIFESA"],
-        "centrocampo" => $algoritmi["CENTROCAMPO"],
-        "attacco"     => $algoritmi["ATTACCO"],
+        "bonus"         => $bonus,
+        "difesa"        => $algoritmi["DIFESA"],
+        "centrocampo"   => $algoritmi["CENTROCAMPO"],
+        "attacco"       => $algoritmi["ATTACCO"],
+        "supplementari" => $supplementari,
         "parametri"   => $parametri, // codice => valore grezzo (stringa); vedi PARAMETRI_DEFAULT in regole_calcolo.php
     ];
 }

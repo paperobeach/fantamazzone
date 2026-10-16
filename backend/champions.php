@@ -35,7 +35,8 @@ function champions_carica_turni(int $stagione): array
     // visibili solo nella pagina LIVE.
     $ris = [];
     foreach (query_all("SELECT giornata, squadra AS id_squadra, ftotale, golf, punti, segno,
-                               ftotale_a, modificatore, mod_cc, mod_att
+                               ftotale_a, modificatore, mod_cc, mod_att,
+                               supp_giocati, supp_golf, supp_gols, rig_giocati, rig_golf, rig_gols, passa
                         FROM NEW_RISULTATI_CHAMP WHERE stagione = $stagione") as $r) {
         if (!sg_risultati_pubblici($stagione, (int) $r["giornata"])) continue;
         $ris[(int) $r["giornata"]][(int) $r["id_squadra"]] = $r;
@@ -80,6 +81,13 @@ function champions_carica_turni(int $stagione): array
                 "mod_cc"      => $r ? (float) $r["mod_cc"] : null,
                 "mod_att"     => $r ? (float) $r["mod_att"] : null,
                 "segno"       => $r ? (string) $r["segno"] : null,
+                // Supplementari e rigori (turni che li prevedono): "golf" resta il
+                // risultato dei tempi regolamentari, valido per la classifica dei gironi
+                "supp_golf"   => $r ? (int) $r["supp_golf"] : null,
+                "rig_golf"    => $r ? (int) $r["rig_golf"] : null,
+                "passa"       => $r ? (int) $r["passa"] === 1 : null,
+                "_supp"       => $r ? (int) $r["supp_giocati"] === 1 : false,
+                "_rig"        => $r ? (int) $r["rig_giocati"] === 1 : false,
             ];
         };
 
@@ -98,6 +106,9 @@ function champions_carica_turni(int $stagione): array
                 }
                 $casa = $lato($coppia[0]);
                 $ospite = $lato($coppia[1]);
+                $suppl = $casa["_supp"] || $ospite["_supp"];
+                $rigori = $casa["_rig"] || $ospite["_rig"];
+                unset($casa["_supp"], $casa["_rig"], $ospite["_supp"], $ospite["_rig"]);
                 $partite[] = [
                     "girone"  => $girone,
                     // Giornata di fantacampionato: serve per aprire il dettaglio
@@ -105,6 +116,9 @@ function champions_carica_turni(int $stagione): array
                     "casa"    => $casa,
                     "ospite"  => $ospite,
                     "giocata" => $casa["golf"] !== null && $ospite["golf"] !== null,
+                    // La partita è proseguita ai supplementari / ai calci di rigore
+                    "supplementari" => $suppl,
+                    "rigori"        => $rigori,
                 ];
             }
         }
@@ -214,11 +228,27 @@ function champions_gironi(array $turni, string $fase, int $qualificano): array
     return array_values($gironi);
 }
 
-// Lato vincente di una partita giocata (null se non giocata o pari).
+// Gol di una squadra comprensivi dei supplementari (i rigori non sono gol)
+function champions_gol_totali(array $lato): int
+{
+    return (int) $lato["golf"] + (int) ($lato["supp_golf"] ?? 0);
+}
+
+// Lato vincente di una partita giocata (null se non giocata o pari). Conta il
+// risultato dopo i supplementari; se è ancora pari decidono i calci di rigore
+// (colonna "passa" della squadra che supera il turno).
 function champions_vincitore(?array $p): ?array
 {
-    if (!$p || !$p["giocata"] || $p["casa"]["golf"] === $p["ospite"]["golf"]) return null;
-    $l = $p["casa"]["golf"] > $p["ospite"]["golf"] ? $p["casa"] : $p["ospite"];
+    if (!$p || !$p["giocata"]) return null;
+    $gc = champions_gol_totali($p["casa"]);
+    $go = champions_gol_totali($p["ospite"]);
+    if ($gc === $go) {
+        if (!empty($p["casa"]["passa"]))        $l = $p["casa"];
+        elseif (!empty($p["ospite"]["passa"]))  $l = $p["ospite"];
+        else return null;
+    } else {
+        $l = $gc > $go ? $p["casa"] : $p["ospite"];
+    }
     return ["id" => $l["id"], "nome" => $l["nome"], "logo" => $l["logo"]];
 }
 
@@ -285,6 +315,7 @@ switch ($sezione) {
             }
             // Aggregato sui due incontri
             $agg = [];
+            $passa = null; // squadra che supera il turno ai rigori (se disputati)
             foreach ([$pa, $pr] as $p) {
                 if (!$p) continue;
                 foreach (["casa", "ospite"] as $lt) {
@@ -292,15 +323,24 @@ switch ($sezione) {
                     if (!isset($agg[$sq["id"]])) {
                         $agg[$sq["id"]] = ["id" => $sq["id"], "nome" => $sq["nome"], "logo" => $sq["logo"], "golf" => 0];
                     }
-                    if ($p["giocata"]) $agg[$sq["id"]]["golf"] += $sq["golf"];
+                    // Aggregato = gol dei tempi regolamentari + eventuali supplementari
+                    if ($p["giocata"]) $agg[$sq["id"]]["golf"] += champions_gol_totali($sq);
+                    if ($p["giocata"] && !empty($sq["passa"])) $passa = $sq["id"];
                 }
             }
             $agg = array_values($agg);
             $complete = $pa["giocata"] && $pr && $pr["giocata"];
             $vincente = null;
-            if ($complete && count($agg) === 2 && $agg[0]["golf"] !== $agg[1]["golf"]) {
-                $w = $agg[0]["golf"] > $agg[1]["golf"] ? $agg[0] : $agg[1];
-                $vincente = ["id" => $w["id"], "nome" => $w["nome"], "logo" => $w["logo"]];
+            if ($complete && count($agg) === 2) {
+                if ($agg[0]["golf"] !== $agg[1]["golf"]) {
+                    $w = $agg[0]["golf"] > $agg[1]["golf"] ? $agg[0] : $agg[1];
+                    $vincente = ["id" => $w["id"], "nome" => $w["nome"], "logo" => $w["logo"]];
+                } elseif ($passa !== null) {
+                    // Aggregato in parità anche dopo i supplementari: decidono i rigori
+                    foreach ($agg as $a) {
+                        if ($a["id"] === $passa) $vincente = ["id" => $a["id"], "nome" => $a["nome"], "logo" => $a["logo"]];
+                    }
+                }
             }
             $semifinali[] = [
                 "andata"    => $pa,
@@ -309,6 +349,9 @@ switch ($sezione) {
                 "completa"  => $complete,
                 "pari"      => $complete && !$vincente,
                 "vincente"  => $vincente,
+                // il ritorno è proseguito ai supplementari / ai rigori
+                "supplementari" => !empty($pr["supplementari"]),
+                "rigori"        => !empty($pr["rigori"]),
             ];
         }
 
@@ -320,7 +363,7 @@ switch ($sezione) {
             if ($finale && $finale["giocata"] && !($replay && $replay["giocata"])) {
                 $nota = "Finale in parità: si gioca il replay.";
             } elseif ($replay && $replay["giocata"]) {
-                $nota = "Replay in parità: si decide ai supplementari e, se serve, ai calci di rigore.";
+                $nota = "Replay in parità: esito da definire (supplementari e rigori non previsti per questo turno).";
             }
         }
 

@@ -159,7 +159,10 @@ function champions_righe_finale(int $finalista1, int $finalista2, bool $replay =
 /** Risultato di una squadra in una giornata di campionato (NEW_RISULTATI_CHAMP) o null. */
 function champions_risultato_squadra(int $stagione, int $giornataCamp, int $squadra): ?array
 {
-    $r = query_one("SELECT golf, gols, punti, ftotale FROM NEW_RISULTATI_CHAMP
+    // golf/gols = gol dei tempi regolamentari; supp_golf = gol dei supplementari;
+    // passa = 1 se la squadra supera il turno (turni con supplementari e rigori)
+    $r = query_one("SELECT golf, gols, punti, ftotale, supp_golf, supp_gols, rig_golf, rig_gols, passa
+                    FROM NEW_RISULTATI_CHAMP
                     WHERE stagione = $stagione AND giornata = $giornataCamp AND squadra = $squadra
                     LIMIT 1");
     return $r ?: null;
@@ -224,23 +227,29 @@ function champions_classifica_gruppo(int $stagione, string $gruppo): array
 }
 
 /**
- * Vincitrice di una semifinale (S1/S2) sul totale dei gol dei due incontri.
- * In caso di parità non si decide da sole: serve l'indicazione manuale.
+ * Vincitrice di una semifinale (S1/S2) sul totale dei gol dei due incontri
+ * (supplementari compresi). Se la sfida è stata decisa ai calci di rigore (o
+ * comunque il turno di ritorno ha indicato la squadra che passa: colonna
+ * `passa`) si usa quell'esito. In caso di parità senza esito non si decide da
+ * sole: serve l'indicazione manuale.
  * @return int id squadra
  */
 function champions_vincitore_semifinale(int $stagione, string $semi): int
 {
     $tot = [];
+    $passa = null;
     foreach (champions_partite_gruppo($stagione, $semi) as $p) {
         foreach ([$p["casa"], $p["ospite"]] as $id) {
             $res = champions_risultato_squadra($stagione, $p["camp"], $id);
             if (!$res) throw new RuntimeException("Semifinale $semi incompleta: manca il risultato della squadra $id");
-            $tot[$id] = ($tot[$id] ?? 0) + (int) $res["golf"];
+            $tot[$id] = ($tot[$id] ?? 0) + (int) $res["golf"] + (int) $res["supp_golf"];
+            if ((int) $res["passa"] === 1) $passa = $id;
         }
     }
     if (count($tot) !== 2) throw new RuntimeException("Semifinale $semi non presente o non valida");
     $ids = array_keys($tot);
     if ($tot[$ids[0]] === $tot[$ids[1]]) {
+        if ($passa !== null) return (int) $passa; // decisa ai calci di rigore
         throw new RuntimeException("Semifinale $semi in parità sul totale dei gol: indicare manualmente la squadra vincitrice");
     }
     return $tot[$ids[0]] > $tot[$ids[1]] ? $ids[0] : $ids[1];
@@ -254,7 +263,11 @@ function champions_finale_esito(int $stagione): array
     $c = champions_risultato_squadra($stagione, $p["camp"], $p["casa"]);
     $o = champions_risultato_squadra($stagione, $p["camp"], $p["ospite"]);
     if (!$c || !$o) throw new RuntimeException("Finale non ancora giocata");
-    return ["casa" => $p["casa"], "ospite" => $p["ospite"], "pari" => (int) $c["golf"] === (int) $o["golf"]];
+    // Con supplementari e rigori attivi la finale è sempre decisa: parità solo se,
+    // anche dopo supplementari, nessuna squadra risulta vincente (nessun rigore tirato).
+    $pari = (int) $c["golf"] + (int) $c["supp_golf"] === (int) $o["golf"] + (int) $o["supp_golf"]
+        && (int) $c["passa"] === 0 && (int) $o["passa"] === 0;
+    return ["casa" => $p["casa"], "ospite" => $p["ospite"], "pari" => $pari];
 }
 
 // ------------------------------------------------------------

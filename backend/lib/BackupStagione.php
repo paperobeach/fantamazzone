@@ -79,6 +79,7 @@ function bks_tabelle_backup(): array
         // formazioni
         "NEW_FORMAZIONI"            => "Formazioni inserite",
         "NEW_FORMAZIONI_CHAMP"      => "Formazioni Champions (se diverse dal campionato)",
+        "NEW_RIGORISTI_CHAMP"       => "Ordine rigoristi Champions",
         "NEW_FORMAZIONI_CK"         => "Conferme formazioni",
         // risultati delle giornate chiuse
         "NEW_VOTI"                  => "Voti dei giocatori",

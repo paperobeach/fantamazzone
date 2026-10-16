@@ -7,8 +7,16 @@
 // GET  ?stagione=2024&giornata=5&id_squadra=3&modo=contesto      → { champions_in_giornata,
 //        separata_attiva, separata_ammessa }: se separata_ammessa è true l'utente può
 //        inserire una formazione Champions diversa da quella di campionato
+// GET  ?stagione=2024&giornata=5&id_squadra=3&modo=rigoristi     → [{id_giocatore, ordine}] ordine dei
+//        rigoristi salvato per la giornata (vuoto = nessuna lista: si parte dal portiere, per maglia)
 // POST { stagione, giornata, id_squadra, giocatori: [{id, maglia}],
-//        competizione: "CAMP" (default) | "CHAMP", entrambe: bool (default false) }
+//        competizione: "CAMP" (default) | "CHAMP", entrambe: bool (default false),
+//        rigoristi?: [idGiocatore, ...] }
+//      "rigoristi" (facoltativo) = ordine dei calci di rigore, solo per i turni di Champions
+//      che prevedono supplementari e rigori (flag del calendario Champions): titolari da 1 a
+//      11 poi panchinari. Viene salvato in NEW_RIGORISTI_CHAMP insieme alla formazione usata
+//      in Champions (quella Champions distinta o, se non è distinta, quella di campionato).
+//      Lista vuota/null = nessuna lista (cancella quella eventualmente salvata).
 //      "entrambe" = true salva la stessa formazione sia in campionato sia in
 //      Champions (solo se la formazione distinta è ammessa, altrimenti
 //      viene salvata solo quella di campionato).
@@ -97,6 +105,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 
+    // Ordine dei rigoristi: solo se il turno di Champions lo prevede e la formazione
+    // salvata è quella che userà la Champions (distinta se ammessa, altrimenti l'unica).
+    $rigoristi_salvati = null;
+    if (array_key_exists("rigoristi", $body)
+        && champions_rigori_previsti($stagione, $giornata, $id_squadra)
+        && (!$ammessa || in_array("CHAMP", $destinazioni, true))) {
+        $tab_rig = in_array("CHAMP", $destinazioni, true) ? formazione_tabella("CHAMP") : formazione_tabella("CAMP");
+        $lista_rig = is_array($body["rigoristi"]) ? $body["rigoristi"] : [];
+        $rigoristi_salvati = salva_rigoristi($stagione, $giornata, $id_squadra, $lista_rig, $tab_rig);
+    }
+
     // Rilegge la formazione appena salvata (fonte di verità: quello che
     // è realmente su DB, non l'input grezzo ricevuto) per capire se è
     // completa e per comporre il corpo della mail.
@@ -118,6 +137,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     api_success([
         "ok"            => true,
         "salvata_per"   => $destinazioni,
+        "rigoristi_salvati" => $rigoristi_salvati, // null = non applicabile; altrimenti numero di rigoristi in lista
         "email_inviata" => $esito_email["ok"],
         "motivo_email"  => $esito_email["motivo"], // null se inviata; altrimenti spiega il perché
     ]);
@@ -135,7 +155,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             "champions_in_giornata" => $gioca,
             "separata_attiva"       => $attiva,
             "separata_ammessa"      => $gioca && $attiva,
+            // Il turno di Champions prevede supplementari e rigori: l'allenatore può
+            // stabilire l'ordine dei rigoristi (titolari 1-11, poi panchinari)
+            "rigori_previsti"       => $gioca && champions_rigori_previsti($stagione, $giornata, $id_squadra),
         ]);
+    } elseif ((param_str("modo", false) ?? "") === "rigoristi") {
+        api_success(query_all("SELECT ID_GIOCATORE AS id_giocatore, ORDINE AS ordine
+                               FROM NEW_RIGORISTI_CHAMP
+                               WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_SQUADRA = $id_squadra
+                               ORDER BY ORDINE"));
     } else {
         $competizione = strtoupper(trim((string)(param_str("competizione", false) ?? "CAMP")));
         if (!in_array($competizione, ["CAMP", "CHAMP"], true)) {
@@ -157,6 +185,51 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         api_success($data);
     }
+}
+
+// ── Ordine dei rigoristi ────────────────────────────────────────
+// Salva in NEW_RIGORISTI_CHAMP l'ordine di tiro dei rigori per squadra+giornata.
+// L'ordine ricevuto viene riportato alla formazione realmente salvata ($tabella):
+// si scartano i giocatori non in formazione e i doppioni, i titolari (maglia 1-11)
+// vengono sempre prima dei panchinari (maglia > 11) e chi manca nella lista segue
+// per numero di maglia. Lista vuota = cancella la lista salvata (si andrà per
+// numero di maglia, dal portiere). Ritorna il numero di rigoristi salvati.
+function salva_rigoristi($stagione, $giornata, $id_squadra, array $ids, string $tabella): int {
+    global $conn;
+
+    mysqli_query($conn, "DELETE FROM NEW_RIGORISTI_CHAMP
+                         WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_SQUADRA = $id_squadra");
+    if (count($ids) === 0) return 0;
+
+    $formazione = query_all("SELECT ID_GIOCATORE AS id, MAGLIA AS maglia
+                             FROM $tabella
+                             WHERE STAGIONE = $stagione AND ID_SQUADRA = $id_squadra AND GIORNATA = $giornata
+                             ORDER BY MAGLIA");
+    $maglia = [];
+    foreach ($formazione as $r) $maglia[(int)$r["id"]] = (int)$r["maglia"];
+
+    $ricevuti = [];
+    foreach ($ids as $id) {
+        $id = (int)$id;
+        if (isset($maglia[$id]) && !in_array($id, $ricevuti, true)) $ricevuti[] = $id;
+    }
+
+    $ordinati = [];
+    foreach ([false, true] as $panchina) {
+        $gruppo = array_values(array_filter(array_keys($maglia), fn($id) => ($maglia[$id] > 11) === $panchina));
+        // prima quelli indicati dall'utente (nel suo ordine), poi i restanti per maglia
+        foreach ($ricevuti as $id) if (in_array($id, $gruppo, true)) $ordinati[] = $id;
+        $mancanti = array_values(array_filter($gruppo, fn($id) => !in_array($id, $ricevuti, true)));
+        usort($mancanti, fn($a, $b) => $maglia[$a] <=> $maglia[$b]);
+        foreach ($mancanti as $id) $ordinati[] = $id;
+    }
+
+    foreach ($ordinati as $i => $id) {
+        $ordine = $i + 1;
+        mysqli_query($conn, "INSERT INTO NEW_RIGORISTI_CHAMP (STAGIONE, GIORNATA, ID_SQUADRA, ID_GIOCATORE, ORDINE)
+                             VALUES ($stagione, $giornata, $id_squadra, $id, $ordine)");
+    }
+    return count($ordinati);
 }
 
 // ── Invio email di conferma ─────────────────────────────────────

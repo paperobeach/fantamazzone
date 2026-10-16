@@ -315,8 +315,81 @@ export function ModificatoriRow({ squadra }) {
   )
 }
 
+// ── Supplementari e calci di rigore (Champions) ──
+// extra = campo "extra" di dettaglio_partita.php (null se la partita non li ha avuti)
+function ExtraPanel({ casa, ospite, extra }) {
+  if (!extra || (!extra.supplementari && !extra.rigori)) return null
+  const det = extra.dettaglio ?? {}
+  const ruoli = { 2: 'D', 3: 'C', 4: 'A' }
+  const Squadra = ({ s, nomeSq }) => (
+    <div>
+      <p className="text-xs font-semibold text-slate-400 mb-1">
+        {nomeSq} · {Number(s?.punti ?? 0).toFixed(2)} punti = {s?.gol ?? 0} gol
+      </p>
+      <ul className="space-y-0.5">
+        {(s?.giocatori ?? []).map((g, i) => (
+          <li key={i} className="flex items-center gap-2 text-xs text-slate-400">
+            <span className="w-4 font-mono text-slate-600">{ruoli[g.ruolo]}</span>
+            <span className="flex-1 truncate">{g.nome ?? '—'}</span>
+            <span className="font-mono text-slate-500">{g.nota || (g.voto != null ? `voto ${g.voto}` : '')}</span>
+            <span className="font-mono text-slate-300 w-12 text-right">{Number(g.punti ?? 0).toFixed(2)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+  return (
+    <div className="border-t border-white/5 px-3 py-3 space-y-4">
+      {extra.andata && (
+        <p className="text-xs text-slate-500">
+          Gol dell'andata: {casa.nome} {extra.andata.casa} · {ospite.nome} {extra.andata.ospite}
+        </p>
+      )}
+      {extra.supplementari && (
+        <section>
+          <h4 className="text-[11px] uppercase tracking-wider text-amber-400 mb-2">
+            Supplementari · {extra.supp_golf.casa} - {extra.supp_golf.ospite}
+          </h4>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Squadra s={det.supp?.casa} nomeSq={casa.nome} />
+            <Squadra s={det.supp?.ospite} nomeSq={ospite.nome} />
+          </div>
+        </section>
+      )}
+      {extra.rigori && (
+        <section>
+          <h4 className="text-[11px] uppercase tracking-wider text-amber-400 mb-2">
+            Calci di rigore · {extra.rig_golf.casa} - {extra.rig_golf.ospite}
+            {det.rig?.oltranza ? ' (ad oltranza)' : ''}
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <tbody>
+                {(det.rig?.tiri ?? []).map(t => (
+                  <tr key={t.n} className="border-t border-white/[0.03]">
+                    <td className="py-1 pr-2 font-mono text-slate-600 w-8">{t.n}</td>
+                    <td className={`py-1 pr-2 ${t.casa.segna ? 'text-green-400' : 'text-red-400'}`}>
+                      {t.casa.nome} <span className="font-mono text-slate-500">{t.casa.voto ?? 's.v.'}</span> {t.casa.segna ? '✓' : '✗'}
+                    </td>
+                    <td className={`py-1 ${t.ospite.segna ? 'text-green-400' : 'text-red-400'}`}>
+                      {t.ospite.nome} <span className="font-mono text-slate-500">{t.ospite.voto ?? 's.v.'}</span> {t.ospite.segna ? '✓' : '✗'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+      {extra.passa && (
+        <p className="text-xs text-grass-400">Passa il turno: {extra.passa === 'casa' ? casa.nome : ospite.nome}</p>
+      )}
+    </div>
+  )
+}
+
 // ── Dettaglio completo di una partita (usato nell'espansione) ──
-export function MatchDetailPanel({ casa, ospite, loading, error }) {
+export function MatchDetailPanel({ casa, ospite, loading, error, extra = null }) {
   // Panchina nascosta in prima battuta: si apre a richiesta dell'utente
   const [mostraPanchina, setMostraPanchina] = useState(false)
 
@@ -379,6 +452,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error }) {
         {haPanchina && mostraPanchina && <PanchinaTable panchina={ospite.panchina} />}
       </div>
     </div>
+    <ExtraPanel casa={casa} ospite={ospite} extra={extra} />
     {!casa.solo_formazione && <LegendaEventi />}
     </>
   )

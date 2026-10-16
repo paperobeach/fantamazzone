@@ -85,6 +85,12 @@ function salvaRigaRisultato(
  * giornata = giornata di campionato in cui si gioca il turno.
  * Come per il campionato, una partita occupa DUE righe (una per squadra,
  * con i valori invertiti): vedi calcolo_giornata.php.
+ *
+ * golf/gols sono i gol dei tempi regolamentari (quelli che contano per la
+ * classifica dei gironi). Per i turni con supplementari e rigori $extra
+ * (vedi champions_colonne_extra() in ChampionsSupplementari.php) porta:
+ * supp_giocati, supp_ftotale, supp_golf, supp_gols, rig_giocati, rig_golf,
+ * rig_gols, passa (1 = la squadra supera il turno), dett_extra (JSON).
  */
 function salvaRigaRisultatoChampions(
     $conn,
@@ -103,7 +109,8 @@ function salvaRigaRisultatoChampions(
     int $numCc,
     float $totCc,
     float $modCc,
-    int $fattoreCampo
+    int $fattoreCampo,
+    array $extra = []
 ): array {
     if ($golf > $gols)       { $punti = 3; $segno = "V"; }
     elseif ($golf === $gols) { $punti = 1; $segno = "N"; }
@@ -112,15 +119,26 @@ function salvaRigaRisultatoChampions(
     $f   = fn(float $v) => sprintf("%.2f", $v);
     $gir = mysqli_real_escape_string($conn, mb_substr(trim($girone), 0, 2));
 
+    // Colonne di supplementari/rigori (tutte a zero per le partite normali)
+    $ex = $extra + [
+        "supp_giocati" => 0, "supp_ftotale" => 0.0, "supp_golf" => 0, "supp_gols" => 0,
+        "rig_giocati" => 0, "rig_golf" => 0, "rig_gols" => 0, "passa" => 0, "dett_extra" => null,
+    ];
+    $dett = $ex["dett_extra"] === null ? "NULL" : "'" . mysqli_real_escape_string($conn, (string) $ex["dett_extra"]) . "'";
+
     mysqli_query($conn, "DELETE FROM NEW_RISULTATI_CHAMP
                          WHERE stagione = $stagione AND giornata = $giornata AND squadra = $idSquadra");
     $ok = mysqli_query($conn, "INSERT INTO NEW_RISULTATI_CHAMP
         (stagione, giornata, squadra, ftotale, golf, gols, punti, segno, girone,
          id_squadra_a, ftotale_a, modificatore, modificatore_a, fattore_campo,
-         mod_att, num_cc, tot_cc, mod_cc)
+         mod_att, num_cc, tot_cc, mod_cc,
+         supp_giocati, supp_ftotale, supp_golf, supp_gols,
+         rig_giocati, rig_golf, rig_gols, passa, dett_extra)
         VALUES ($stagione, $giornata, $idSquadra, {$f($ftotale)}, $golf, $gols, $punti, '$segno', '$gir',
                 $idSquadraA, {$f($ftotaleA)}, $modificatore, $modificatoreA, $fattoreCampo,
-                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)})");
+                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)},
+                " . (int) $ex["supp_giocati"] . ", {$f((float) $ex["supp_ftotale"])}, " . (int) $ex["supp_golf"] . ", " . (int) $ex["supp_gols"] . ",
+                " . (int) $ex["rig_giocati"] . ", " . (int) $ex["rig_golf"] . ", " . (int) $ex["rig_gols"] . ", " . (int) $ex["passa"] . ", $dett)");
     if (!$ok) throw new Exception("Scrittura NEW_RISULTATI_CHAMP: " . mysqli_error($conn));
 
     return ["punti" => $punti, "segno" => $segno];

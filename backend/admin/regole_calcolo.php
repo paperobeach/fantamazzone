@@ -20,6 +20,13 @@
 //      parametro CHAMP_* (vedi lib/ChampionsCalendario.php); "suggerita"
 //      è la giornata del calendario Champions esistente (stagione stessa
 //      o precedente), usabile come valore di partenza.
+//      Nelle celle della fase finale che chiudono una sfida (semifinale di
+//      ritorno, finale, replay) compare anche "supplementari": true, con
+//      "supplementari_codice" (parametro CHAMP_*_SUPPL, valore 1/0) e
+//      "supplementari_default": il flag "in caso di parità si giocano
+//      supplementari e calci di rigore" (di default attivo su tutte e tre).
+//      "algoritmi" contiene anche SUPPLEMENTARI ("calcolo supplementari":
+//      fasce somma punti -> gol dei supplementari, vedi CalcolatoreVoti).
 //      "modificabile" è true solo per l'ULTIMA stagione (MAX di
 //      NEW_SQUADRE): le stagioni precedenti sono in sola lettura.
 //      Se l'ultima stagione non ha ancora configurazione, viene copiata
@@ -105,6 +112,9 @@ const ALGORITMI_DEFAULT = [
     ],
 ];
 
+// Calcolo supplementari: stessa fonte dei default usata dal motore di calcolo
+const ALGORITMO_SUPPLEMENTARI_DEFAULT = CalcolatoreVoti::ALGORITMO_SUPPLEMENTARI_DEFAULT;
+
 // Fasce di default per derivare i gol fatti di una squadra dal suo
 // punteggio totale (NEW_RISULTATI.golf). "da"/"a" null = illimitato.
 const FASCE_GOL_PUNTEGGIO_DEFAULT = [
@@ -139,6 +149,17 @@ const CHAMPIONS_GIORNATE_DEFAULT = [
     'CHAMP_FIN_T1' => 30, 'CHAMP_FIN_REPLAY' => 31,
 ];
 
+// Etichetta del flag "supplementari e rigori" di una cella Champions
+function etichetta_flag_suppl(string $cella): string
+{
+    $nomi = [
+        'CHAMP_SF_T2'      => 'Semifinali ritorno',
+        'CHAMP_FIN_T1'     => 'Finale',
+        'CHAMP_FIN_REPLAY' => 'Replay finale',
+    ];
+    return 'Champions - ' . ($nomi[$cella] ?? $cella) . ': supplementari e rigori in caso di parità (1 = sì, 0 = no)';
+}
+
 // Parametri di stagione non riconducibili a bonus/malus o modificatori.
 // Funzione (non const): una "const" non può contenere una chiamata di
 // funzione come json_encode() nell'inizializzatore.
@@ -169,6 +190,10 @@ function parametri_default(): array
     // Fase 2: i gironi C e D corrispondono alle celle di configurazione A e B.
     foreach (CHAMPIONS_GIORNATE_DEFAULT as $codice => $giornata) {
         $parametri[] = ['codice' => $codice, 'etichetta' => "Champions - $codice: giornata di fantacampionato", 'valore' => (string) $giornata];
+    }
+    // Flag "supplementari e rigori" (semifinale di ritorno, finale, replay)
+    foreach (CHAMPIONS_SUPPL_DEFAULT as $cella => $attivo) {
+        $parametri[] = ['codice' => champions_codice_suppl($cella), 'etichetta' => etichetta_flag_suppl($cella), 'valore' => $attivo ? '1' : '0'];
     }
     return $parametri;
 }
@@ -262,6 +287,8 @@ function semina_default(int $stagione, $conn): void
     foreach (ALGORITMI_DEFAULT as $tipo => $a) {
         salva_algoritmo($stagione, $tipo, $a['algoritmo'], $a['parametri'], $a['descrizione'], $conn);
     }
+    $s = ALGORITMO_SUPPLEMENTARI_DEFAULT;
+    salva_algoritmo($stagione, 'SUPPLEMENTARI', $s['algoritmo'], $s['parametri'], $s['descrizione'], $conn);
     foreach (parametri_default() as $p) {
         salva_parametro($stagione, $p['codice'], $p['etichetta'], $p['valore'], $conn);
     }
@@ -321,7 +348,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 && (!is_numeric($val) || (float) $val < 0 || (float) $val > 10)) {
                 api_error("Il voto d'ufficio deve essere un numero tra 0 e 10", 400);
             }
-            if (strpos($cod, 'CHAMP_') === 0) $champ[$cod] = (string) ($p['valore'] ?? '');
+            if (substr($cod, -strlen(CHAMPIONS_SUPPL_SUFFISSO)) === CHAMPIONS_SUPPL_SUFFISSO
+                && strpos($cod, 'CHAMP_') === 0) {
+                // Flag supplementari e rigori: solo 1 / 0 e solo sulle celle che lo ammettono
+                if (!in_array($val, ['0', '1'], true)
+                    || !champions_cella_ammette_suppl(substr($cod, 0, -strlen(CHAMPIONS_SUPPL_SUFFISSO)))) {
+                    api_error("Parametro \"$cod\" non valido: ammesso solo 0 o 1 sulla semifinale di ritorno, sulla finale e sul replay", 400);
+                }
+            } elseif (strpos($cod, 'CHAMP_') === 0) {
+                $champ[$cod] = (string) ($p['valore'] ?? '');
+            }
             if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {
                 $maxGiornate = (int) $p['valore'];
             }
@@ -368,7 +404,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     if (isset($input['algoritmi']) && is_array($input['algoritmi'])) {
         foreach ($input['algoritmi'] as $tipo => $a) {
-            if (!in_array($tipo, ['DIFESA', 'CENTROCAMPO', 'ATTACCO'], true)) {
+            if (!in_array($tipo, ['DIFESA', 'CENTROCAMPO', 'ATTACCO', 'SUPPLEMENTARI'], true)) {
                 api_error("Tipo di algoritmo non valido: \"$tipo\"", 400);
             }
             $algoritmo = trim((string) ($a['algoritmo'] ?? ''));
@@ -383,8 +419,20 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         api_error("Fascia non valida in \"$tipo\": \"$k\" deve essere numerico o vuoto", 400);
                     }
                 }
-                if (!isset($f['bonus']) || !is_numeric($f['bonus'])) {
-                    api_error("Fascia non valida in \"$tipo\": \"bonus\" deve essere numerico", 400);
+                // I supplementari convertono punti in GOL (intero >= 0), gli altri in bonus
+                $campoFascia = $tipo === 'SUPPLEMENTARI' ? 'gol' : 'bonus';
+                if (!isset($f[$campoFascia]) || !is_numeric($f[$campoFascia])) {
+                    api_error("Fascia non valida in \"$tipo\": \"$campoFascia\" deve essere numerico", 400);
+                }
+                if ($tipo === 'SUPPLEMENTARI' && ((float) $f['gol'] < 0 || (float) $f['gol'] != floor((float) $f['gol']))) {
+                    api_error("Fascia non valida in \"SUPPLEMENTARI\": i gol devono essere un intero >= 0", 400);
+                }
+            }
+            if ($tipo === 'SUPPLEMENTARI') {
+                foreach (['ogni_punti', 'gol_ogni'] as $k) {
+                    if (isset($parametri[$k]) && (!is_numeric($parametri[$k]) || (float) $parametri[$k] < 0)) {
+                        api_error("\"$k\" dei supplementari deve essere un numero >= 0", 400);
+                    }
                 }
             }
             if ($tipo === 'CENTROCAMPO' && isset($parametri['voto_fittizio']) && !is_numeric($parametri['voto_fittizio'])) {
@@ -460,6 +508,21 @@ if (empty($bonus) && empty($algoritmi) && empty($parametri)) {
     }
 }
 
+// Calcolo supplementari: stagioni configurate prima della sua introduzione.
+// Per l'ultima stagione (modificabile) si scrive la configurazione di default;
+// per le precedenti la si mostra soltanto, senza scrivere nulla.
+if (!isset($algoritmi['SUPPLEMENTARI']) && (!empty($algoritmi) || !empty($bonus))) {
+    $sd = ALGORITMO_SUPPLEMENTARI_DEFAULT;
+    if ($modificabile) {
+        salva_algoritmo($stagione, 'SUPPLEMENTARI', $sd['algoritmo'], $sd['parametri'], $sd['descrizione'], $conn);
+    }
+    $algoritmi['SUPPLEMENTARI'] = [
+        'algoritmo'   => $sd['algoritmo'],
+        'descrizione' => $sd['descrizione'],
+        'parametri'   => $sd['parametri'],
+    ];
+}
+
 // Struttura dei turni Champions, con la giornata suggerita dal calendario
 // esistente (stagione stessa o, in mancanza, precedente) per ogni cella.
 $suggerite = champions_suggerite($stagione);
@@ -482,6 +545,16 @@ $presenti = array_column($parametri, 'codice');
 foreach (champions_parametri_stagione($stagione) as $cod => $val) {
     if (!in_array($cod, $presenti, true)) {
         $parametri[] = ['codice' => $cod, 'etichetta' => $cod, 'valore' => $val];
+    }
+}
+
+// Flag "supplementari e rigori": se non ancora salvato si propone il default
+// (attivo su semifinale di ritorno, finale e replay).
+$flagSuppl = champions_flag_supplementari($stagione);
+foreach ($flagSuppl as $cella => $attivo) {
+    $cod = champions_codice_suppl($cella);
+    if (!in_array($cod, $presenti, true) && !in_array($cod, array_column($parametri, 'codice'), true)) {
+        $parametri[] = ['codice' => $cod, 'etichetta' => etichetta_flag_suppl($cella), 'valore' => $attivo ? '1' : '0'];
     }
 }
 

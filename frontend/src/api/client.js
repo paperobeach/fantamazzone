@@ -190,13 +190,22 @@ export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CA
   get('formazioni.php', { stagione, giornata, id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
 // Indica se per squadra+giornata è ammessa una formazione Champions diversa da quella di campionato:
-// { champions_in_giornata, separata_attiva, separata_ammessa }
+// { champions_in_giornata, separata_attiva, separata_ammessa, rigori_previsti }
 export const getFormazioneContesto = (stagione, giornata, id_squadra) =>
   get('formazioni.php', { stagione, giornata, id_squadra, modo: 'contesto' })
 
 // competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
-export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false) =>
-  post('formazioni.php', { stagione, giornata, id_squadra, giocatori, competizione, entrambe })
+// rigoristi (facoltativo): ordine dei calci di rigore [idGiocatore, ...] (titolari 1-11, poi panchinari),
+// solo per i turni di Champions che prevedono supplementari e rigori; [] = nessuna lista
+export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false, rigoristi = undefined) =>
+  post('formazioni.php', {
+    stagione, giornata, id_squadra, giocatori, competizione, entrambe,
+    ...(rigoristi !== undefined ? { rigoristi } : {}),
+  })
+
+// Ordine dei rigoristi salvato per squadra+giornata: [{ id_giocatore, ordine }]
+export const getRigoristi = (stagione, giornata, id_squadra) =>
+  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'rigoristi' })
 
 // ── Penalità ─────────────────────────────────────────────────
 

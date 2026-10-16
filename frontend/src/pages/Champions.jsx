@@ -142,6 +142,9 @@ function Partita({ p }) {
     gols: ospite.golf,
     ftotale_casa: casa.ftotale,
     ftotale_ospite: ospite.ftotale,
+    // supplementari e rigori (solo turni che li prevedono)
+    supp: p.supplementari ? { casa: casa.supp_golf, ospite: ospite.supp_golf } : null,
+    rig: p.rigori ? { casa: casa.rig_golf, ospite: ospite.rig_golf } : null,
   } : null
 
   // Dettaglio caricato on-demand alla prima apertura
@@ -165,7 +168,7 @@ function Partita({ p }) {
         onToggle={() => setOpen(o => !o)}
       />
       {open && (
-        <MatchDetailPanel casa={match?.casa} ospite={match?.ospite} loading={loading} error={error} />
+        <MatchDetailPanel casa={match?.casa} ospite={match?.ospite} extra={match?.extra} loading={loading} error={error} />
       )}
     </div>
   )
@@ -278,6 +281,7 @@ function Semifinale({ t }) {
           {t.vincente
             ? <span className="text-grass-400"> · passa {t.vincente.nome}</span>
             : <span className="text-amber-400"> · parità</span>}
+          {t.rigori ? <span className="text-slate-500"> (ai rigori)</span> : t.supplementari ? <span className="text-slate-500"> (dopo i supplementari)</span> : null}
         </div>
       )}
     </div>
@@ -342,7 +346,9 @@ function FaseFinale({ stagione }) {
 
       <p className="text-xs text-slate-600">
         Semifinali andata e ritorno (1ª girone A vs 2ª girone B, 1ª girone B vs 2ª girone A). In caso di parità
-        nella finale si gioca il replay; se persiste, supplementari e calci di rigore.
+        nella finale si gioca il replay. Nei turni che lo prevedono (configurazione calendario Champions)
+        la parità si risolve con supplementari e calci di rigore: nelle semifinali dopo il ritorno, se la
+        somma dei gol è pari; nelle finali dopo la partita stessa.
       </p>
     </div>
   )

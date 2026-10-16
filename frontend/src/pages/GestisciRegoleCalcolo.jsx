@@ -550,7 +550,7 @@ export default function GestisciRegoleCalcolo() {
             <TabBar
               tabs={[
                 { value: 'bonus', label: 'Bonus / malus' },
-                { value: 'modificatori', label: 'Modificatori di squadra' },
+                { value: 'modificatori', label: 'Algoritmi di calcolo' },
                 { value: 'parametri', label: 'Parametri stagione' },
               ]}
               active={tab}

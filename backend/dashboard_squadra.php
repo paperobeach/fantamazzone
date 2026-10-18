@@ -9,6 +9,10 @@
 //   kpi            miglior / peggior fantapunteggio, media, media avversari
 //   classifica     posizione e record in campionato
 //   formazione     giornata di riferimento, stato inserimento, link
+//   appuntamenti   prossimo match di campionato e di Champions (avversario,
+//                  casa/trasferta, giornata), scadenza per l'inserimento della
+//                  formazione (prima partita di Serie A della giornata) e
+//                  indicatori "formazione inserita" propria e degli avversari
 //   campionato     ultimi 5 risultati, serie, andamento posizione,
 //                  matrice vs le altre squadre, Top/Flop 11
 //   champions      ultimo risultato, matrice vs le altre squadre, Top/Flop 11
@@ -28,234 +32,11 @@
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/ChampionsCalendario.php";
+require_once __DIR__ . "/lib/FormazioniChampions.php";
+require_once __DIR__ . "/lib/DashboardSquadra.php";
 
 $stagione  = param_int("stagione");
 $idSquadra = param_int("id_squadra");
-
-// ── Helper ───────────────────────────────────────────────────
-
-function ds_segno($s): string
-{
-    $s = strtoupper(trim((string) $s));
-    if ($s === "W") return "V";
-    if ($s === "L") return "P";
-    return $s;
-}
-
-function ds_esc(string $v): string
-{
-    global $conn;
-    return mysqli_real_escape_string($conn, $v);
-}
-
-/** Partita dal punto di vista della squadra (riga di NEW_RISULTATI[_CHAMP]). */
-function ds_partita(array $r): array
-{
-    return [
-        "stagione"   => isset($r["stagione"]) ? (int) $r["stagione"] : null,
-        "giornata"   => (int) $r["giornata"],
-        "id_avv"     => isset($r["id_avv"]) ? (int) $r["id_avv"] : null,
-        "avversario" => $r["avversario"] ?? null,
-        "logo_avv"   => $r["logo_avv"] ?? null,
-        "golf"       => (int) $r["golf"],
-        "gols"       => (int) $r["gols"],
-        "ftotale"    => (float) $r["ftotale"],
-        "ftotale_a"  => (float) $r["ftotale_a"],
-        "punti"      => (int) $r["punti"],
-        "segno"      => ds_segno($r["segno"]),
-        "casa"       => isset($r["casa"]) && $r["casa"] !== null ? ((int) $r["casa"] === 1) : null,
-        "turno"      => $r["turno"] ?? null,
-    ];
-}
-
-/** Partite di campionato giocate (e pubbliche) di una squadra nella stagione. */
-function ds_partite_camp(int $stagione, int $id, callable $pub): array
-{
-    $rows = query_all("SELECT r.stagione, r.giornata, r.id_squadra_a AS id_avv,
-                              s.nome AS avversario, s.logo AS logo_avv,
-                              r.golf, r.gols, r.ftotale, r.ftotale_a, r.punti, r.segno,
-                              (cal.posizione % 2 = 1) AS casa
-                       FROM NEW_RISULTATI r
-                       JOIN NEW_SQUADRE s ON s.id = r.id_squadra_a AND s.stagione = r.stagione
-                       LEFT JOIN NEW_CALENDARIO cal ON cal.stagione = r.stagione
-                                                   AND cal.giornata = r.giornata
-                                                   AND cal.squadra  = r.id_squadra
-                       WHERE r.stagione = $stagione AND r.id_squadra = $id
-                       ORDER BY r.giornata");
-    $out = [];
-    foreach ($rows as $r) {
-        if (!$pub((int) $r["giornata"])) continue;
-        $out[] = ds_partita($r);
-    }
-    return $out;
-}
-
-/** Partite di Champions giocate (e pubbliche) di una squadra nella stagione. */
-function ds_partite_champ(int $stagione, int $id, callable $pub): array
-{
-    $rows = query_all("SELECT r.stagione, r.giornata, r.girone, r.id_squadra_a AS id_avv,
-                              s.nome AS avversario, s.logo AS logo_avv,
-                              r.golf, r.gols, r.ftotale, r.ftotale_a, r.punti, r.segno
-                       FROM NEW_RISULTATI_CHAMP r
-                       JOIN NEW_SQUADRE s ON s.id = r.id_squadra_a AND s.stagione = r.stagione
-                       WHERE r.stagione = $stagione AND r.squadra = $id
-                       ORDER BY r.giornata");
-    $out = [];
-    foreach ($rows as $r) {
-        if (!$pub((int) $r["giornata"])) continue;
-        $r["turno"] = champions_etichetta_gruppo(champions_gruppo_girone($r["girone"] ?? ""));
-        $out[] = ds_partita($r);
-    }
-    return $out;
-}
-
-/** Serie (corrente e record) calcolate sulla sequenza degli esiti V/N/P. */
-function ds_serie(array $segni): array
-{
-    $def = [
-        "vittorie"       => ["V"],
-        "imbattibilita"  => ["V", "N"],
-        "sconfitte"      => ["P"],
-        "senza_vittorie" => ["N", "P"],
-    ];
-    $out = [];
-    foreach ($def as $k => $set) {
-        $cur = 0; $best = 0;
-        foreach ($segni as $s) {
-            if (in_array($s, $set, true)) { $cur++; if ($cur > $best) $best = $cur; }
-            else $cur = 0;
-        }
-        $out[$k] = ["corrente" => $cur, "record" => $best];
-    }
-    return $out;
-}
-
-/** Top/Flop 11 della squadra (tab = NEW_TOP11 / NEW_FLOP11 / ..._CHAMP). */
-function ds_eleven(string $tab, int $stagione, int $id, string $ordine): array
-{
-    $rows = query_all("SELECT id_giocatore, giocatore, media, ruolo, giocate
-                       FROM $tab
-                       WHERE stagione = $stagione AND id_squadra = $id
-                       ORDER BY ruolo, media $ordine");
-    return array_map(fn($r) => [
-        "id_giocatore" => (int) $r["id_giocatore"],
-        "giocatore"    => $r["giocatore"],
-        "media"        => (float) $r["media"],
-        "ruolo"        => (int) $r["ruolo"],
-        "giocate"      => (int) $r["giocate"],
-    ], $rows);
-}
-
-/** Matrice contro ogni altra squadra: per ciascuna, gli incontri giocati. */
-function ds_matrice(array $squadre, int $idSquadra, array $partite): array
-{
-    $per = [];
-    foreach ($partite as $p) $per[$p["id_avv"]][] = [
-        "giornata" => $p["giornata"], "segno" => $p["segno"],
-        "golf" => $p["golf"], "gols" => $p["gols"],
-        "casa" => $p["casa"], "turno" => $p["turno"],
-    ];
-    $out = [];
-    foreach ($squadre as $s) {
-        $id = (int) $s["id"];
-        if ($id === $idSquadra) continue;
-        $out[] = [
-            "id" => $id, "nome" => $s["nome"], "logo" => $s["logo"],
-            "incontri" => $per[$id] ?? [],
-        ];
-    }
-    return $out;
-}
-
-/** Formazione inserita (NEW_FORMAZIONI) di una squadra in una giornata. */
-function ds_formazione(int $stagione, int $giornata, int $id): array
-{
-    $rows = query_all("SELECT f.MAGLIA AS maglia, f.ID_GIOCATORE AS id_giocatore,
-                              g.descrizione AS giocatore, g.ruolo
-                       FROM NEW_FORMAZIONI f
-                       JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
-                       WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id
-                       ORDER BY f.MAGLIA");
-    return array_map(fn($r) => [
-        "id_giocatore" => (int) $r["id_giocatore"],
-        "giocatore"    => $r["giocatore"],
-        "ruolo"        => (int) $r["ruolo"],
-        "maglia"       => (int) $r["maglia"],
-        "titolare"     => (int) $r["maglia"] >= 1 && (int) $r["maglia"] <= 11,
-    ], $rows);
-}
-
-/** Formazione schierata in una giornata chiusa, con voti e fantavoti. */
-function ds_formazione_con_voti(int $stagione, int $giornata, int $id): array
-{
-    $rows = query_all("SELECT f.MAGLIA AS maglia, f.ID_GIOCATORE AS id_giocatore,
-                              g.descrizione AS giocatore, g.ruolo,
-                              v.voto, v.totale, v.giocata
-                       FROM NEW_FORMAZIONI f
-                       JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
-                       LEFT JOIN NEW_VOTI v ON v.stagione = f.STAGIONE AND v.giornata = f.GIORNATA
-                                           AND v.id_squadra = f.ID_SQUADRA AND v.id_giocatore = f.ID_GIOCATORE
-                       WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id
-                       ORDER BY f.MAGLIA");
-    return array_map(fn($r) => [
-        "id_giocatore" => (int) $r["id_giocatore"],
-        "giocatore"    => $r["giocatore"],
-        "ruolo"        => (int) $r["ruolo"],
-        "maglia"       => (int) $r["maglia"],
-        "titolare"     => (int) $r["maglia"] >= 1 && (int) $r["maglia"] <= 11,
-        "voto"         => $r["voto"] !== null ? (float) $r["voto"] : null,
-        "totale"       => $r["totale"] !== null ? (float) $r["totale"] : null,
-        "giocata"      => $r["giocata"] !== null ? (int) $r["giocata"] === 1 : null,
-    ], $rows);
-}
-
-/** Storico scontri diretti tra due utenze, tutte le stagioni fino a $stagione. */
-function ds_storico(string $tabella, string $colCasa, bool $champ, int $stagione, string $uMe, string $uOpp, callable $pub): array
-{
-    $me  = ds_esc($uMe);
-    $opp = ds_esc($uOpp);
-    $extra = $champ ? ", r.girone" : "";
-    $rows = query_all("SELECT r.stagione, r.giornata, r.golf, r.gols, r.ftotale, r.ftotale_a,
-                              r.punti, r.segno $extra
-                       FROM $tabella r
-                       JOIN (SELECT DISTINCT stagione, id FROM NEW_UTENZE WHERE utenza = '$me')  um
-                         ON um.stagione = r.stagione AND um.id = r.$colCasa
-                       JOIN (SELECT DISTINCT stagione, id FROM NEW_UTENZE WHERE utenza = '$opp') uo
-                         ON uo.stagione = r.stagione AND uo.id = r.id_squadra_a
-                       WHERE r.stagione <= $stagione
-                       ORDER BY r.stagione DESC, r.giornata DESC");
-    $partite = [];
-    $riep = ["giocate" => 0, "vinte" => 0, "nulle" => 0, "perse" => 0,
-             "golf" => 0, "gols" => 0, "media_fp" => null, "media_fp_avv" => null];
-    $sumA = 0.0; $sumB = 0.0;
-    foreach ($rows as $r) {
-        if ((int) $r["stagione"] === $stagione && !$pub((int) $r["giornata"])) continue;
-        $seg = ds_segno($r["segno"]);
-        $riep["giocate"]++;
-        if ($seg === "V") $riep["vinte"]++;
-        elseif ($seg === "N") $riep["nulle"]++;
-        else $riep["perse"]++;
-        $riep["golf"] += (int) $r["golf"];
-        $riep["gols"] += (int) $r["gols"];
-        $sumA += (float) $r["ftotale"];
-        $sumB += (float) $r["ftotale_a"];
-        $partite[] = [
-            "stagione" => (int) $r["stagione"],
-            "giornata" => (int) $r["giornata"],
-            "golf"     => (int) $r["golf"],
-            "gols"     => (int) $r["gols"],
-            "ftotale"  => (float) $r["ftotale"],
-            "ftotale_a" => (float) $r["ftotale_a"],
-            "segno"    => $seg,
-            "turno"    => $champ ? champions_etichetta_gruppo(champions_gruppo_girone($r["girone"] ?? "")) : null,
-        ];
-    }
-    if ($riep["giocate"] > 0) {
-        $riep["media_fp"]     = round($sumA / $riep["giocate"], 2);
-        $riep["media_fp_avv"] = round($sumB / $riep["giocate"], 2);
-    }
-    return ["riepilogo" => $riep, "partite" => array_slice($partite, 0, 30)];
-}
 
 // ── Contesto: giornate pubbliche ─────────────────────────────
 
@@ -347,24 +128,10 @@ $classifica = $gen ? [
 $conclusa  = $ultimaCalendario === 0 || $ultimaChiusa >= $ultimaCalendario;
 $giornataF = $conclusa ? $ultimaCalendario : $ultimaChiusa + 1;
 
-// La giornata di fantacampionato NON coincide con quella di Serie A:
-// GIORNATA_SERIE_A_INIZIO (Gestisci regole di calcolo) indica la giornata
-// di Serie A corrispondente alla 1ª di fantacampionato (stessa regola di
-// admin/voti_serie_a.php: serie_a = fanta + inizio - 1).
 $inizio = null;
 $giornataSerieA = null;
 if (!$conclusa) {
-    $par = query_one("SELECT valore FROM NEW_PARAMETRI_STAGIONE
-                      WHERE stagione = $stagione AND codice = 'GIORNATA_SERIE_A_INIZIO'");
-    $v = $par ? trim((string) $par["valore"]) : "";
-    $inizioSerieA = ($v !== "" && ctype_digit($v) && (int) $v >= 1) ? (int) $v : 1;
-    $giornataSerieA = $giornataF + $inizioSerieA - 1;
-
-    $p = query_one("SELECT data_partita, ora_partita FROM NEW_CALENDARIO_SERIE_A
-                    WHERE stagione = $stagione AND giornata = $giornataSerieA
-                    ORDER BY data_partita ASC, COALESCE(ora_partita, '23:59:59') ASC
-                    LIMIT 1");
-    if ($p) $inizio = $p["data_partita"] . " " . ($p["ora_partita"] ?: "00:00:00");
+    [$giornataSerieA, $inizio] = ds_inizio_giornata($stagione, $giornataF);
 }
 $nTit = query_one("SELECT COUNT(*) AS n FROM NEW_FORMAZIONI
                    WHERE STAGIONE = $stagione AND GIORNATA = $giornataF AND ID_SQUADRA = $idSquadra
@@ -518,6 +285,61 @@ if (!$conclusa) {
     }
 }
 
+// ── Appuntamenti (intestazione fissa) ────────────────────────
+// Prossimo match di campionato e di Champions, limite per l'inserimento
+// della formazione e indicatori "formazione inserita" (mia e degli
+// avversari). Per gli avversari si espone solo lo stato (inserita sì/no),
+// non la formazione.
+
+$appCamp  = null;
+$appChamp = null;
+if (!$conclusa) {
+    $tabCamp = FORMAZIONE_TAB_CAMPIONATO;
+
+    $ac = ds_avversario_camp($stagione, $giornataF, $idSquadra);
+    $avvC = $ac ? ds_avversario($stagione, $ac["id_avv"]) : null;
+    if ($avvC) {
+        $appCamp = [
+            "giornata"         => $giornataF,
+            "giornata_serie_a" => $giornataSerieA,
+            "casa"             => $ac["casa"],
+            "scadenza"         => $inizio,
+            "avversario"       => $avvC,
+            "formazione_mia"   => ds_stato_formazione($tabCamp, $stagione, $giornataF, $idSquadra),
+            "formazione_avv"   => ds_stato_formazione($tabCamp, $stagione, $giornataF, $avvC["id"]),
+        ];
+    }
+
+    $pc = ds_prossima_champions($stagione, $idSquadra, $giornataF);
+    $avvH = $pc ? ds_avversario($stagione, $pc["id_avv"]) : null;
+    if ($pc && $avvH) {
+        $gC = $pc["giornata"];
+        if ($gC === $giornataF) {
+            $gSerieAC = $giornataSerieA;
+            $scadC    = $inizio;
+        } else {
+            [$gSerieAC, $scadC] = ds_inizio_giornata($stagione, $gC);
+        }
+        $tabMia = formazione_tabella_champions($stagione, $gC, $idSquadra);
+        $tabAvv = formazione_tabella_champions($stagione, $gC, $avvH["id"]);
+        $appChamp = [
+            "giornata"         => $gC,
+            "giornata_serie_a" => $gSerieAC,
+            "casa"             => $pc["casa"],
+            "turno"            => $pc["turno"],
+            "rigori"           => $pc["rigori"],
+            "scadenza"         => $scadC,
+            "avversario"       => $avvH,
+            "formazione_mia"   => ds_stato_formazione($tabMia, $stagione, $gC, $idSquadra),
+            "formazione_avv"   => ds_stato_formazione($tabAvv, $stagione, $gC, $avvH["id"]),
+        ];
+    }
+}
+$appuntamenti = [
+    "campionato" => $appCamp,
+    "champions"  => $appChamp,
+];
+
 api_success([
     "stagione"   => $stagione,
     "squadra"    => $squadra,
@@ -526,6 +348,7 @@ api_success([
     "kpi"        => $kpi,
     "classifica" => $classifica,
     "formazione" => $formazione,
+    "appuntamenti" => $appuntamenti,
     "campionato" => $campionato,
     "champions"  => $champions,
     "prossima"   => $prossima,

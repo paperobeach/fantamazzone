@@ -149,6 +149,11 @@ export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id }
 export const getDashboardSquadra = (stagione, id_squadra) =>
   get('dashboard_squadra.php', { stagione, id_squadra })
 
+// Area "Statistiche" della dashboard: risultati e classifica di UNA
+// competizione. competizione: 'CAMP' (default) | 'CHAMP'.
+export const getDashboardStatistiche = (stagione, id_squadra, competizione = 'CAMP') =>
+  get('dashboard_statistiche.php', { stagione, id_squadra, competizione })
+
 // ── Dettaglio partita ────────────────────────────────────────
 // (endpoint già "incontri.php": rinominato quando è stata rimossa
 //  la pagina "Incontri" dal front end — il dettaglio è ora

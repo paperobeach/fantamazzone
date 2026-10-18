@@ -12,7 +12,9 @@ import { Save, Trash2, Plus, ArrowLeft, CheckCircle2, AlertTriangle } from 'luci
 // "Profili ed episodi" — il contesto che rende gli articoli AI
 // personali: carattere, manie e rivalità di ogni fantallenatore (agganciati
 // al NOME UTENZA, che resta uguale tra le stagioni) ed episodi storici
-// della lega da richiamare quando c'entrano con la giornata.
+// della lega da richiamare quando c'entrano con la giornata e, nella scheda
+// "Contesto fisso", le informazioni stabili sulla lega e lo stile di scrittura
+// (sempre presenti nel prompt di ogni articolo).
 //
 // Accesso: solo utenze con NEW_UTENZE.abilita_ai = 'Y'; utenza e password
 // si inseriscono una volta e restano in memoria finché la pagina è aperta.
@@ -25,6 +27,13 @@ const PROFILO_VUOTO = {
 const EPISODIO_VUOTO = {
   id: 0, data_episodio: '', titolo: '', descrizione: '', tag: '', utenze: '', attivo: 'Y',
 }
+
+const FISSO_VUOTO = { id: 0, tipo_blocco: 'contesto', titolo: '', testo: '', ordine: 0, attivo: 'Y' }
+
+// Stima grossolana: circa 3,2 caratteri per token (italiano)
+const stimaToken = (caratteri) => Math.ceil(caratteri / 3.2)
+// Come il server: titolo + testo + 6 caratteri di intestazione per blocco
+const pesoBlocco = (b) => String(b.titolo ?? '').length + String(b.testo ?? '').length + 6
 
 const CAMPI_PROFILO = [
   { k: 'soprannome',    label: 'Soprannome',       riga: true,  max: 100 },
@@ -50,6 +59,9 @@ export default function AiContesto() {
   const [episodi,  setEpisodi]  = useState([])
   const [formP,    setFormP]    = useState(null)   // profilo in modifica
   const [formE,    setFormE]    = useState(null)   // episodio in modifica
+  const [fisso,    setFisso]    = useState(null)   // { blocchi[], max_caratteri_*, stile_default }
+  const [fissoErrore, setFissoErrore] = useState(null)
+  const [formF,    setFormF]    = useState(null)   // blocco di contesto fisso in modifica
   const [conferma, setConferma] = useState(false)
   const [busy,     setBusy]     = useState(false)
   const [errore,   setErrore]   = useState(null)
@@ -61,6 +73,9 @@ export default function AiContesto() {
   const caricaTutto = async () => {
     const [p, e] = await Promise.all([chiama('profili', 'elenco'), chiama('episodi', 'elenco')])
     setProfili(p.profili); setUtenze(p.utenze); setEpisodi(e.episodi)
+    // Il contesto fisso richiede Script DB/NEW_AI_GAZZETTA_EDIZIONE.sql: un errore qui non blocca il resto
+    try { setFisso(await chiama('fisso', 'elenco')); setFissoErrore(null) }
+    catch (er) { setFissoErrore(er.message) }
   }
 
   const entra = async () => {
@@ -77,7 +92,7 @@ export default function AiContesto() {
     finally { setBusy(false); setConferma(false) }
   }
 
-  const cambiaTab = (t) => { setTab(t); setFormP(null); setFormE(null); setMsg(null); setErrore(null); setConferma(false) }
+  const cambiaTab = (t) => { setTab(t); setFormP(null); setFormE(null); setFormF(null); setMsg(null); setErrore(null); setConferma(false) }
 
   // ── Profili ────────────────────────────────────────────────
   const profiloDi = (u) => profili.find(p => p.utenza.toLowerCase() === u.toLowerCase())
@@ -124,6 +139,22 @@ export default function AiContesto() {
     await chiama('episodi', 'elimina', { id: formE.id })
     setFormE(null)
   }, 'Episodio eliminato.')
+  // ── Contesto fisso ─────────────────────────────────────────
+  const apriFisso = (b) => {
+    setMsg(null); setErrore(null); setConferma(false)
+    setFormF(b ? {
+      id: b.id, tipo_blocco: b.tipo, titolo: b.titolo, testo: b.testo, ordine: b.ordine, attivo: b.attivo,
+    } : { ...FISSO_VUOTO })
+  }
+  const salvaFisso = () => esegui(async () => {
+    await chiama('fisso', 'salva', formF)
+    setFormF(null)
+  }, 'Blocco salvato.')
+  const eliminaFisso = () => esegui(async () => {
+    await chiama('fisso', 'elimina', { id: formF.id })
+    setFormF(null)
+  }, 'Blocco eliminato.')
+
   const toggleUtenza = (u) => setFormE(f => {
     const lista = csvToList(f.utenze)
     const ha = lista.some(x => x.toLowerCase() === u.toLowerCase())
@@ -151,7 +182,7 @@ export default function AiContesto() {
       {sbloccato && (
         <div className="max-w-3xl space-y-4">
           <TabBar
-            tabs={[{ value: 'profili', label: 'Profili' }, { value: 'episodi', label: 'Episodi' }]}
+            tabs={[{ value: 'profili', label: 'Profili' }, { value: 'episodi', label: 'Episodi' }, { value: 'fisso', label: 'Contesto fisso' }]}
             active={tab} onChange={cambiaTab}
           />
 
@@ -330,6 +361,138 @@ export default function AiContesto() {
                   </button>
                 ) : (
                   <button type="button" disabled={busy} onClick={eliminaEpisodio} className={BTN_DANGER}>
+                    <AlertTriangle className="w-4 h-4" /> Conferma eliminazione
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ───────── CONTESTO FISSO ───────── */}
+          {tab === 'fisso' && !formF && (
+            <div className="space-y-5">
+              <div className="flex items-start justify-between gap-4">
+                <p className="text-xs text-slate-500">
+                  Informazioni sempre valide sulla lega (storia, regole, personaggi, glossario, tormentoni collettivi)
+                  e lo stile di scrittura. Finiscono nel prompt di OGNI articolo, accanto a profili ed episodi:
+                  più sono lunghe, più costa ogni generazione.
+                </p>
+                {fisso && (
+                  <button type="button" onClick={() => apriFisso(null)} className={`${BTN_PRIMARY} flex-shrink-0`}>
+                    <Plus className="w-4 h-4" /> Nuovo
+                  </button>
+                )}
+              </div>
+              {fissoErrore && <Avviso tono="red">{fissoErrore}</Avviso>}
+
+              {fisso && ['contesto', 'stile'].map(t => {
+                const lista = fisso.blocchi.filter(b => b.tipo === t)
+                const attivi = lista.filter(b => b.attivo === 'Y')
+                const car = attivi.reduce((n, b) => n + pesoBlocco(b), 0)
+                const cap = t === 'stile' ? fisso.max_caratteri_stile : fisso.max_caratteri_contesto
+                return (
+                  <div key={t} className="space-y-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h4 className="text-sm font-semibold text-slate-200">
+                        {t === 'contesto' ? 'Contesto fisso della lega' : 'Stile di scrittura'}
+                      </h4>
+                      <span className={`text-xs ${car > cap ? 'text-red-400' : 'text-slate-500'}`}>
+                        {car} / {cap} caratteri attivi · circa {stimaToken(car)} token a ogni articolo
+                      </span>
+                    </div>
+                    {t === 'stile' && attivi.length === 0 && (
+                      <div className="card p-4 text-xs text-slate-400 space-y-2">
+                        <p>
+                          Nessuno stile personalizzato attivo: si usa lo stile predefinito, ispirato alla vena comica
+                          e surreale di Stefano Benni. Per cambiarlo crea un blocco di tipo «stile»: sostituisce il predefinito.
+                        </p>
+                        <details>
+                          <summary className="cursor-pointer text-slate-500 hover:text-slate-300 select-none">Vedi lo stile predefinito</summary>
+                          <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-500">{fisso.stile_default}</pre>
+                        </details>
+                      </div>
+                    )}
+                    {lista.length === 0 && t === 'contesto' && (
+                      <div className="card p-6 text-sm text-slate-400">Nessun blocco di contesto inserito.</div>
+                    )}
+                    {lista.map(b => (
+                      <button
+                        key={b.id} type="button" onClick={() => apriFisso(b)}
+                        className={`card w-full text-left p-4 hover:border-white/20 transition-colors ${b.attivo === 'N' ? 'opacity-60' : ''}`}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-slate-200">{b.titolo}</p>
+                          {b.attivo === 'N' && <span className="stat-pill">Disattivato</span>}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{b.testo}</p>
+                        <p className="text-[11px] text-slate-600 mt-1">ordine {b.ordine} · {pesoBlocco(b)} caratteri</p>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {tab === 'fisso' && formF && fisso && (
+            <div className="space-y-4">
+              <button type="button" onClick={() => { setFormF(null); setConferma(false) }} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300">
+                <ArrowLeft className="w-4 h-4" /> Torna al contesto fisso
+              </button>
+              <div className="card p-5 space-y-4">
+                <h3 className="font-semibold text-slate-200">{formF.id ? 'Modifica blocco' : 'Nuovo blocco'}</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <label htmlFor="f-titolo" className="text-xs text-slate-600 mb-1 block">Titolo</label>
+                    <input id="f-titolo" type="text" maxLength={100} value={formF.titolo}
+                      onChange={e => setFormF(f => ({ ...f, titolo: e.target.value }))} placeholder="es. La storia della lega" className="fanta-input" />
+                  </div>
+                  <div>
+                    <label htmlFor="f-tipo" className="text-xs text-slate-600 mb-1 block">Tipo</label>
+                    <select id="f-tipo" value={formF.tipo_blocco} onChange={e => setFormF(f => ({ ...f, tipo_blocco: e.target.value }))} className="fanta-input cursor-pointer">
+                      <option value="contesto">Contesto della lega</option>
+                      <option value="stile">Stile di scrittura</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="f-testo" className="text-xs text-slate-600 mb-1 block">
+                    {formF.tipo_blocco === 'stile'
+                      ? 'Come deve scrivere l\'AI (tono, ritmo, trucchi, cose da evitare)'
+                      : 'Testo (fatti stabili sulla lega: l\'AI li usa solo quando c\'entrano)'}
+                  </label>
+                  <textarea id="f-testo" rows={10} maxLength={6000} value={formF.testo}
+                    onChange={e => setFormF(f => ({ ...f, testo: e.target.value }))} className="fanta-input leading-relaxed" />
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    {formF.testo.length} / 6000 caratteri (circa {stimaToken(formF.testo.length)} token a ogni articolo se attivo)
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                  <div>
+                    <label htmlFor="f-ordine" className="text-xs text-slate-600 mb-1 block">Ordine (i numeri bassi vengono prima)</label>
+                    <input id="f-ordine" type="number" min={0} max={9999} value={formF.ordine}
+                      onChange={e => setFormF(f => ({ ...f, ordine: Number(e.target.value) }))} className="fanta-input" />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-slate-300 pb-2 cursor-pointer">
+                    <input type="checkbox" checked={formF.attivo === 'Y'}
+                      onChange={e => setFormF(f => ({ ...f, attivo: e.target.checked ? 'Y' : 'N' }))} />
+                    Attivo (incluso nel prompt degli articoli)
+                  </label>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  Evita informazioni private o delicate: finiscono in un articolo letto da tutta la lega.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" disabled={busy || !formF.titolo.trim() || !formF.testo.trim()} onClick={salvaFisso} className={BTN_PRIMARY}>
+                  {busy ? <Spinner size="sm" /> : <Save className="w-4 h-4" />} Salva blocco
+                </button>
+                {formF.id > 0 && (!conferma ? (
+                  <button type="button" disabled={busy} onClick={() => setConferma(true)} className={BTN_DANGER}>
+                    <Trash2 className="w-4 h-4" /> Elimina
+                  </button>
+                ) : (
+                  <button type="button" disabled={busy} onClick={eliminaFisso} className={BTN_DANGER}>
                     <AlertTriangle className="w-4 h-4" /> Conferma eliminazione
                   </button>
                 ))}

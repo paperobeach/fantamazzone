@@ -67,5 +67,53 @@ return [
         // così proxy/firewall dell'hosting non chiudono una connessione rimasta
         // muta per decine di secondi. Mettere false solo per diagnosi.
         "streaming" => true,
+
+        // ── Contesto fisso e note di giornata ─────────────────────
+        // Tetto di caratteri dei blocchi di "contesto fisso" attivi (gestiti da
+        // Profili ed episodi → Contesto fisso). Ogni carattere finisce nel prompt
+        // di ogni articolo: più è lungo, più costa.
+        "max_caratteri_contesto_fisso" => 12000,
+
+        // ── Immagini negli articoli ───────────────────────────────
+        // Quante immagini della libreria proporre all'AI (le più pertinenti e le
+        // meno usate di recente) e quante ne può inserire nel testo di un articolo.
+        "max_immagini_catalogo" => 60,
+        "max_immagini_inline"   => 2,
+
+        // ── Edizione sfogliabile ──────────────────────────────────
+        // Lunghezza target (parole) di ogni pagina partita e del commento finale.
+        "parole_per_pagina" => 100,
+        "parole_commento"   => 200,
+        // Limite di token di output = base + pagine × token_per_pagina + commento
+        // + fantallenatori × token_per_pagella, con tetto max_token_edizione.
+        "token_base_edizione" => 450,
+        "token_per_pagina"    => 300,
+        "token_commento"      => 450,
+        "token_per_pagella"   => 45,
+        "max_token_edizione"  => 8000,
+        // Costo "tipico" mostrato in anteprima (0 = 75% del limite)
+        "token_output_tipico_edizione" => 0,
+        // Timeout (secondi) della generazione di un'edizione (default 200)
+        "timeout_edizione" => 200,
+        // Includere nell'edizione anche le partite di Champions (una pagina ciascuna)
+        "champions_in_edizione" => true,
+    ],
+
+    // Libreria immagini della Gazzetta (tutti i parametri sono opzionali)
+    "immagini" => [
+        // Lato lungo massimo (px) e peso massimo (byte) dell'immagine salvata
+        "max_lato" => 1400,
+        "max_byte" => 650000,
+        // Lato lungo (px) dell'immagine inviata all'AI per la descrizione
+        // automatica: più è piccola, meno token (e quindi meno costo)
+        "max_lato_ai" => 1000,
+        // Numero massimo di immagini in libreria
+        "max_totale" => 600,
+        // Stima del costo di una descrizione automatica (token di input e output)
+        "token_input_stimati"   => 1500,
+        "token_output_stimati"  => 220,
+        // Tetto di output (massimo garantito del costo) e timeout della chiamata
+        "max_token_descrizione" => 500,
+        "timeout"               => 60,
     ],
 ];

@@ -1,9 +1,10 @@
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useFetch } from '../hooks/useFetch'
-import { getArticolo } from '../api/client'
+import { getArticolo, urlImmagine } from '../api/client'
 import { LoadingState, ErrorState } from '../components/ui'
 import ArticoloTesto from '../components/ArticoloTesto'
+import EdizioneSfogliabile from '../components/EdizioneSfogliabile'
 import { dataEstesa } from './Gazzetta'
 
 // ============================================================
@@ -18,6 +19,22 @@ export default function GazzettaArticolo() {
   if (error)   return <ErrorState message={error} onRetry={refetch} />
   if (!data)   return null
 
+  // Edizione sfogliabile: una copertina, una pagina per partita e il commento
+  if (data.formato === 'edizione' && data.pagine?.length > 0) {
+    return (
+      <div className="animate-fade-up max-w-4xl">
+        <Link to="/gazzetta" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-5">
+          <ArrowLeft className="w-4 h-4" /> Tutti gli articoli
+        </Link>
+        <EdizioneSfogliabile edizione={data} />
+        <p className="mt-6 text-[11px] text-slate-600">
+          Edizione scritta con l'aiuto dell'intelligenza artificiale a partire dai dati della giornata:
+          citazioni e battute sono di fantasia.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="animate-fade-up max-w-3xl">
       <Link to="/gazzetta" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-300 mb-5">
@@ -25,6 +42,12 @@ export default function GazzettaArticolo() {
       </Link>
 
       <article className="card p-6 sm:p-8">
+        {data.id_immagine_copertina && (
+          <img
+            src={urlImmagine(data.id_immagine_copertina)} alt=""
+            className="w-full max-h-96 object-cover rounded-lg border border-white/10 mb-6"
+          />
+        )}
         <p className="text-[11px] text-mono tracking-widest uppercase text-slate-600">
           Stagione {data.stagione} · Giornata {data.giornata}
           {data.data_pubblicazione && ` · ${dataEstesa(data.data_pubblicazione)}`}

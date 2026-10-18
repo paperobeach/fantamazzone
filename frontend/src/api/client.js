@@ -190,22 +190,13 @@ export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CA
   get('formazioni.php', { stagione, giornata, id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
 // Indica se per squadra+giornata è ammessa una formazione Champions diversa da quella di campionato:
-// { champions_in_giornata, separata_attiva, separata_ammessa, rigori_previsti }
+// { champions_in_giornata, separata_attiva, separata_ammessa }
 export const getFormazioneContesto = (stagione, giornata, id_squadra) =>
   get('formazioni.php', { stagione, giornata, id_squadra, modo: 'contesto' })
 
 // competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
-// rigoristi (facoltativo): ordine dei calci di rigore [idGiocatore, ...] (titolari 1-11, poi panchinari),
-// solo per i turni di Champions che prevedono supplementari e rigori; [] = nessuna lista
-export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false, rigoristi = undefined) =>
-  post('formazioni.php', {
-    stagione, giornata, id_squadra, giocatori, competizione, entrambe,
-    ...(rigoristi !== undefined ? { rigoristi } : {}),
-  })
-
-// Ordine dei rigoristi salvato per squadra+giornata: [{ id_giocatore, ordine }]
-export const getRigoristi = (stagione, giornata, id_squadra) =>
-  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'rigoristi' })
+export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false) =>
+  post('formazioni.php', { stagione, giornata, id_squadra, giocatori, competizione, entrambe })
 
 // ── Penalità ─────────────────────────────────────────────────
 
@@ -294,10 +285,19 @@ export const aiConnessione = (stagione, { utenza, password, azione = 'test' }) =
   post('admin/ai_test.php', { stagione, utenza, password, azione })
 
 // ── Gazzetta: articoli AI pubblicati (articoli.php, pubblico) ──
-// GET ?stagione=2026 → [{ id, giornata, titolo, sommario, data_pubblicazione }]
-// GET ?id=12         → { id, stagione, giornata, titolo, sommario, testo, data_pubblicazione }
+// GET ?stagione=2026 → [{ id, giornata, titolo, sommario, data_pubblicazione,
+//                         formato, id_immagine_copertina }]
+// GET ?id=12         → { id, stagione, giornata, titolo, sommario, testo, data_pubblicazione,
+//                         formato ('articolo' | 'edizione'), id_immagine_copertina,
+//                         pagine[{ ordine, tipo, competizione, titolo, testo,
+//                                  id_immagine, didascalia, dati }] }  (pagine: solo edizioni)
 export const getArticoli = (stagione) => get('articoli.php', { stagione })
 export const getArticolo = (id)       => get('articoli.php', { id })
+
+// URL di un'immagine della Gazzetta (immagine_gazzetta.php, pubblico: serve solo le
+// immagini usate da un articolo). v = 'thumb' per la miniatura.
+export const urlImmagine = (id, v = 'full') =>
+  `${BASE_URL}/immagine_gazzetta.php?id=${Number(id)}${v === 'thumb' ? '&v=thumb' : ''}`
 
 // ── AI: gestione articoli generati (admin/ai_articoli.php) ─────
 // POST → Body { stagione, utenza, password, azione, ... } (utenza con abilita_ai = 'Y')
@@ -313,8 +313,38 @@ export const aiArticoli = (stagione, body) =>
 //                 squadra_cuore, tormentoni, rivalita, note} | 'elimina' {utenza_profilo}
 //        episodi: 'elenco' → { episodi[] } | 'salva' {id?, data_episodio, titolo, descrizione, tag,
 //                 utenze (CSV), attivo} | 'elimina' {id}
+//        fisso:   'elenco' → { blocchi[], max_caratteri_contesto, max_caratteri_stile, stile_default }
+//                 | 'salva' {id?, tipo_blocco: 'contesto'|'stile', titolo, testo, ordine, attivo}
+//                 | 'elimina' {id}
 export const aiContesto = (stagione, body) =>
   post('admin/ai_contesto.php', { stagione, ...body })
+
+// ── AI: libreria immagini della Gazzetta (admin/ai_immagini.php) ──
+// POST → Body { stagione, utenza, password, azione, ... } (utenza con abilita_ai = 'Y')
+//        'info' → { gd_disponibile, chiave_configurata, max_upload, max_totale, n_immagini,
+//                   n_attive, n_senza_descrizione, modelli[{modello, etichetta,
+//                   costo_stimato_usd, costo_massimo_usd}], spesa_mese_usd,
+//                   tetto_mensile_usd, cambio_eur, utenze[{utenza, allenatore}] }
+//        'elenco' {pagina, per_pagina, filtro, cerca} → { immagini[], totale, pagina, per_pagina }
+//        'dettaglio' {id} | 'salva' {id, descrizione, tag, tono, utenze, attivo}
+//        | 'descrivi' {id, modello} (AI, a pagamento) | 'elimina' {id}
+export const aiImmagini = (stagione, body) =>
+  post('admin/ai_immagini.php', { stagione, ...body })
+
+// Caricamento di UNA immagine (multipart). Per più file chiamare in sequenza.
+// campi: modalita 'manuale' (opzione B) | 'ai' (opzione C, + modello),
+//        descrizione, tag, tono, utenze, attivo
+// → { immagine, duplicata, ai{ richiesta, ok, errore, costo_usd } }
+export const aiImmaginiCarica = (stagione, { utenza, password, file, ...campi }) => {
+  const fd = new FormData()
+  fd.append('stagione', stagione)
+  fd.append('utenza', utenza)
+  fd.append('password', password)
+  fd.append('azione', 'carica')
+  Object.entries(campi).forEach(([k, v]) => { if (v !== undefined && v !== null) fd.append(k, v) })
+  fd.append('file', file, file.name)
+  return postFile('admin/ai_immagini.php', fd)
+}
 
 // ── AI: articolo di commento alla giornata (admin/ai_articolo.php) ──
 // POST → Body { stagione, utenza, password, azione, giornata, [modello, prompt_hash] }
@@ -325,13 +355,15 @@ export const aiContesto = (stagione, body) =>
 //            modelli[{ modello, etichetta, token_input, approssimato,
 //                      costo_tipico_usd, costo_massimo_usd, entro_tetto }],
 //            prompt_utente }
+//        Opzionali: formato ('articolo' | 'edizione') e contesto_giornata (note libere)
 //        azione 'genera' (A PAGAMENTO) → richiede modello e il prompt_hash
 //        dell'anteprima; salva la BOZZA in NEW_ARTICOLI
-//          { articolo{ id, titolo, sommario, testo, stato, modello, troncato },
+//          { articolo{ id, titolo, sommario, testo, stato, modello, troncato, formato,
+//                      id_immagine_copertina, pagine[] }, pagine_mancanti[],
 //            formato_ok, token_input, token_output, costo_usd,
 //            costo_stimato_usd, costo_massimo_usd, ms }
-export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash }) =>
-  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash })
+export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata }) =>
+  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata })
 
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +

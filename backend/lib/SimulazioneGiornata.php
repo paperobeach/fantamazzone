@@ -210,8 +210,11 @@ function sim_stat_giocatore(array $ctx, int $idGiocatore, array &$warning, strin
     // 3a. editing manuale: prevale sul 6 provvisorio
     $e = $ctx['edit'][$idGiocatore] ?? null;
     if ($e !== null) {
+        // Voto manuale a 0 = "senza voto" (come nella UI): il titolare va sostituito
+        // da panchina / d'ufficio con le normali regole di sostituzione.
+        $svManuale = $e['voto'] === null || (float) $e['voto'] <= 0;
         return array_merge($base, [
-            'voto' => (float) $e['voto'], 'sv' => false, 'trovato' => true, 'manuale' => true,
+            'voto' => $svManuale ? null : (float) $e['voto'], 'sv' => $svManuale, 'trovato' => true, 'manuale' => true,
             'gf' => (int) $e['gf'], 'gs' => (int) $e['gs'], 'rp' => (int) $e['rp'], 'rf' => (int) $e['rf'],
             'rs' => (int) $e['rs'], 'au' => (int) $e['au'], 'amm' => (int) $e['amm'], 'esp' => (int) $e['esp'],
             'ass' => (int) $e['ass'],

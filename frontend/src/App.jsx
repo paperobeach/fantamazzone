@@ -32,6 +32,7 @@ const AiTest = lazy(() => import('./pages/AiTest'))
 const AiArticolo = lazy(() => import('./pages/AiArticolo'))
 const AiArticoli = lazy(() => import('./pages/AiArticoli'))
 const AiContesto = lazy(() => import('./pages/AiContesto'))
+const AiImmagini = lazy(() => import('./pages/AiImmagini'))
 const Gazzetta = lazy(() => import('./pages/Gazzetta'))
 const GazzettaArticolo = lazy(() => import('./pages/GazzettaArticolo'))
 
@@ -133,6 +134,9 @@ function AppShell() {
                   } />
                   <Route path="/ai/contesto" element={
                     <AiRoute><AiContesto /></AiRoute>
+                  } />
+                  <Route path="/ai/immagini" element={
+                    <AiRoute><AiImmagini /></AiRoute>
                   } />
                   <Route path="/ai/test" element={
                     <AiRoute><AiTest /></AiRoute>

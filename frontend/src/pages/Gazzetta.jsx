@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { Newspaper, ChevronRight } from 'lucide-react'
+import { Newspaper, ChevronRight, BookOpen } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getArticoli } from '../api/client'
+import { getArticoli, urlImmagine } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 
 // ============================================================
@@ -41,12 +41,24 @@ export default function Gazzetta() {
               to={`/gazzetta/${a.id}`}
               className="card p-5 flex items-start gap-4 hover:border-white/20 transition-colors group"
             >
-              <div className="w-10 h-10 rounded-lg bg-grass-500/10 flex items-center justify-center flex-shrink-0">
-                <Newspaper className="w-5 h-5 text-grass-500" />
-              </div>
+              {a.id_immagine_copertina ? (
+                <img
+                  src={urlImmagine(a.id_immagine_copertina, 'thumb')} alt="" loading="lazy"
+                  className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-white/10"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-grass-500/10 flex items-center justify-center flex-shrink-0">
+                  <Newspaper className="w-5 h-5 text-grass-500" />
+                </div>
+              )}
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-mono tracking-widest uppercase text-slate-600">
-                  Giornata {a.giornata}{a.data_pubblicazione && ` · ${dataEstesa(a.data_pubblicazione)}`}
+                <p className="text-[11px] text-mono tracking-widest uppercase text-slate-600 flex flex-wrap items-center gap-x-2">
+                  <span>Giornata {a.giornata}{a.data_pubblicazione && ` · ${dataEstesa(a.data_pubblicazione)}`}</span>
+                  {a.formato === 'edizione' && (
+                    <span className="stat-pill text-gold-400 normal-case tracking-normal">
+                      <BookOpen className="w-3 h-3" /> Edizione sfogliabile
+                    </span>
+                  )}
                 </p>
                 <h2 className="font-semibold text-slate-100 mt-0.5 leading-snug">{a.titolo}</h2>
                 {a.sommario && <p className="text-sm text-slate-400 mt-1">{a.sommario}</p>}

@@ -322,9 +322,35 @@ CREATE TABLE `NEW_ARTICOLI` (
   `episodi_usati` varchar(200) NOT NULL DEFAULT '' COMMENT 'id NEW_EPISODI_LEGA separati da virgola',
   `data_generazione` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `data_pubblicazione` datetime DEFAULT NULL,
+  `formato` varchar(10) NOT NULL DEFAULT 'articolo' COMMENT 'articolo | edizione',
+  `contesto_giornata` text COMMENT 'Note di giornata inserite da chi genera l''articolo',
+  `id_immagine_copertina` int DEFAULT NULL COMMENT 'NEW_IMMAGINI_GAZZETTA.id',
+  `immagini_usate` varchar(300) NOT NULL DEFAULT '' COMMENT 'id NEW_IMMAGINI_GAZZETTA separati da virgola',
   PRIMARY KEY (`id`),
   KEY `idx_stagione_giornata` (`stagione`,`giornata`),
   KEY `idx_data_generazione` (`data_generazione`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_ARTICOLI_PAGINE`
+--
+
+CREATE TABLE `NEW_ARTICOLI_PAGINE` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `id_articolo` int NOT NULL,
+  `ordine` int NOT NULL,
+  `tipo` varchar(12) NOT NULL DEFAULT 'partita' COMMENT 'partita | commento',
+  `competizione` varchar(12) NOT NULL DEFAULT '' COMMENT 'campionato | champions',
+  `titolo` varchar(250) NOT NULL DEFAULT '',
+  `testo` mediumtext,
+  `id_immagine` int DEFAULT NULL COMMENT 'NEW_IMMAGINI_GAZZETTA.id',
+  `didascalia` varchar(300) NOT NULL DEFAULT '',
+  `dati` mediumtext COMMENT 'JSON: fatti della pagina',
+  PRIMARY KEY (`id`),
+  KEY `idx_articolo_ordine` (`id_articolo`,`ordine`),
+  CONSTRAINT `fk_pagine_articolo` FOREIGN KEY (`id_articolo`) REFERENCES `NEW_ARTICOLI` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -383,6 +409,24 @@ CREATE TABLE `NEW_CALENDARIO_SERIE_A` (
   `squadra_ospite` varchar(50) NOT NULL,
   `prima_partita` char(1) NOT NULL DEFAULT 'N' COMMENT 'S = prima partita della giornata',
   `stato_orario` varchar(30) NOT NULL DEFAULT '' COMMENT 'Es. Ufficiale, Orario da definire'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_CONTESTO_FISSO`
+--
+
+CREATE TABLE `NEW_CONTESTO_FISSO` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `tipo` varchar(10) NOT NULL DEFAULT 'contesto' COMMENT 'contesto | stile',
+  `titolo` varchar(100) NOT NULL,
+  `testo` text NOT NULL,
+  `ordine` int NOT NULL DEFAULT '0',
+  `attivo` char(1) NOT NULL DEFAULT 'Y',
+  `data_aggiornamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_tipo_ordine` (`tipo`,`ordine`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -590,6 +634,40 @@ CREATE TABLE `NEW_GIOCATORI_SVINCOLATI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_IMMAGINI_GAZZETTA`
+--
+
+CREATE TABLE `NEW_IMMAGINI_GAZZETTA` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `nome_file` varchar(200) NOT NULL DEFAULT '',
+  `mime` varchar(30) NOT NULL DEFAULT 'image/jpeg',
+  `larghezza` int NOT NULL DEFAULT '0',
+  `altezza` int NOT NULL DEFAULT '0',
+  `hash_file` char(40) NOT NULL DEFAULT '' COMMENT 'sha1 del file salvato: evita i doppioni',
+  `dati` mediumblob NOT NULL,
+  `miniatura` mediumblob,
+  `descrizione` text,
+  `tag` varchar(300) NOT NULL DEFAULT '',
+  `tono` varchar(60) NOT NULL DEFAULT '',
+  `utenze` varchar(500) NOT NULL DEFAULT '' COMMENT 'NEW_UTENZE.utenza di chi compare, separate da virgola',
+  `origine_descrizione` varchar(10) NOT NULL DEFAULT 'manuale' COMMENT 'manuale | ai',
+  `modello` varchar(60) NOT NULL DEFAULT '',
+  `token_input` int DEFAULT NULL,
+  `token_output` int DEFAULT NULL,
+  `costo_usd` decimal(10,6) DEFAULT NULL,
+  `data_descrizione` datetime DEFAULT NULL COMMENT 'ultima descrizione AI',
+  `attivo` char(1) NOT NULL DEFAULT 'Y',
+  `ultimo_utilizzo` datetime DEFAULT NULL,
+  `caricata_da` varchar(50) NOT NULL DEFAULT '',
+  `data_caricamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_hash` (`hash_file`),
+  KEY `idx_attivo_utilizzo` (`attivo`,`ultimo_utilizzo`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_KULOVIC`
 --
 
@@ -677,7 +755,7 @@ CREATE TABLE `NEW_PROFILI_FANTALLENATORE` (
 
 CREATE TABLE `NEW_REGOLE_ALGORITMI` (
   `stagione` int NOT NULL,
-  `tipo` enum('DIFESA','CENTROCAMPO','ATTACCO','SUPPLEMENTARI') NOT NULL,
+  `tipo` enum('DIFESA','CENTROCAMPO','ATTACCO') NOT NULL,
   `algoritmo` varchar(40) NOT NULL COMMENT 'Codice del modello di calcolo implementato in CalcolatoreVoti.php',
   `parametri` json NOT NULL COMMENT 'Variabili parametrizzabili del modello (fasce, aggiustamenti, ecc.)',
   `descrizione` varchar(150) DEFAULT NULL
@@ -696,20 +774,6 @@ CREATE TABLE `NEW_REGOLE_BONUS` (
   `valore` decimal(4,2) NOT NULL COMMENT 'Punti applicati per occorrenza (positivo = bonus, negativo = malus)',
   `ordine` int NOT NULL DEFAULT '0' COMMENT 'Ordine di visualizzazione nella pagina admin',
   `attivo` tinyint(1) NOT NULL DEFAULT '1' COMMENT 'Se 0 la voce non viene applicata (ma resta a storico)'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
--- Struttura della tabella `NEW_RIGORISTI_CHAMP`
---
-
-CREATE TABLE `NEW_RIGORISTI_CHAMP` (
-  `STAGIONE` int NOT NULL DEFAULT '0',
-  `GIORNATA` int NOT NULL DEFAULT '0',
-  `ID_SQUADRA` int NOT NULL DEFAULT '0',
-  `ID_GIOCATORE` int NOT NULL DEFAULT '0',
-  `ORDINE` int NOT NULL DEFAULT '0' COMMENT 'Ordine di tiro: 1..11 titolari, poi i panchinari'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -762,16 +826,7 @@ CREATE TABLE `NEW_RISULTATI_CHAMP` (
   `mod_att` decimal(5,2) NOT NULL DEFAULT '0.00',
   `num_cc` int NOT NULL DEFAULT '0',
   `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
-  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
-  `supp_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita ha avuto i supplementari',
-  `supp_ftotale` decimal(6,2) NOT NULL DEFAULT '0.00' COMMENT 'Punti dei 3 panchinari dei supplementari (squadra)',
-  `supp_golf` int NOT NULL DEFAULT '0' COMMENT 'Gol segnati ai supplementari',
-  `supp_gols` int NOT NULL DEFAULT '0' COMMENT 'Gol subiti ai supplementari',
-  `rig_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita e'' stata decisa ai calci di rigore',
-  `rig_golf` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati',
-  `rig_gols` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati dall''avversaria',
-  `passa` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la squadra vince la sfida (solo turni con supplementari/rigori)',
-  `dett_extra` text COMMENT 'JSON con il dettaglio di supplementari e rigori'
+  `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00'
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
@@ -1628,12 +1683,6 @@ ALTER TABLE `NEW_REGOLE_ALGORITMI`
 --
 ALTER TABLE `NEW_REGOLE_BONUS`
   ADD PRIMARY KEY (`stagione`,`codice`);
-
---
--- Indici per le tabelle `NEW_RIGORISTI_CHAMP`
---
-ALTER TABLE `NEW_RIGORISTI_CHAMP`
-  ADD PRIMARY KEY (`STAGIONE`,`GIORNATA`,`ID_SQUADRA`,`ID_GIOCATORE`);
 
 --
 -- Indici per le tabelle `NEW_RISULTATI`

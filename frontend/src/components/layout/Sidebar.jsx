@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -95,6 +95,7 @@ const AI_SECTIONS = [
     items: [
       { to: '/ai/articoli', icon: FileText, label: 'Gestione articoli' },
       { to: '/ai/contesto', icon: BookOpen, label: 'Profili ed episodi' },
+      { to: '/ai/immagini', icon: Images, label: 'Immagini' },
       { to: '/ai/test', icon: PlugZap, label: 'Test connessione AI' },
     ],
   },

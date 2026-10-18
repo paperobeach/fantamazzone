@@ -4,9 +4,10 @@ import { useFetch } from '../hooks/useFetch'
 import { getGiornataCorrente, aiArticolo } from '../api/client'
 import { Link } from 'react-router-dom'
 import { PageHeader, Spinner } from '../components/ui'
+import ArticoloTesto from '../components/ArticoloTesto'
 import { Importo, Avviso, fmtUsd } from '../components/AiUi'
 import {
-  Newspaper, Calculator, Sparkles, Lock, CheckCircle2, XCircle, AlertTriangle, ChevronDown,
+  Newspaper, Calculator, Sparkles, Lock, CheckCircle2, XCircle, AlertTriangle, ChevronDown, BookOpen, FileText,
 } from 'lucide-react'
 
 // ============================================================
@@ -22,6 +23,13 @@ import {
 //      frattempo il backend rifiuta e va rifatta l'anteprima.
 // L'articolo viene salvato come BOZZA (modifica e pubblicazione: fase 3).
 //
+// Due formati: "articolo" (testo unico) ed "edizione sfogliabile" (copertina,
+// una pagina per partita e commento generale). In entrambi i casi si possono
+// aggiungere NOTE DI GIORNATA (fatti che l'AI non ha nei dati: la formazione
+// dimenticata, il sorpasso in classifica...), inserite nel prompt. Contesto
+// fisso, stile e immagini si gestiscono dalle pagine "Profili ed episodi" e
+// "Immagini".
+//
 // Accesso: solo utenze con NEW_UTENZE.abilita_ai = 'Y'. Ogni chiamata
 // richiede utenza e password, verificate lato server.
 // ============================================================
@@ -36,6 +44,8 @@ export default function AiArticolo() {
   const ultimaChiusa = Number(corrente?.ultima_chiusa ?? 0)
 
   const [giornata, setGiornata] = useState('')
+  const [formato,  setFormato]  = useState('articolo')   // 'articolo' | 'edizione'
+  const [noteGiornata, setNoteGiornata] = useState('')
   const [utenza,   setUtenza]   = useState(utente?.utenza ?? '')
   const [password, setPassword] = useState('')
   const [fase,     setFase]     = useState(null)   // 'anteprima' | 'genera' (in corso)
@@ -56,7 +66,8 @@ export default function AiArticolo() {
 
   const chiama = (azione, extra = {}) =>
     aiArticolo(stagioneRif, {
-      utenza: utenza.trim(), password, azione, giornata: Number(giornata), ...extra,
+      utenza: utenza.trim(), password, azione, giornata: Number(giornata),
+      formato, contesto_giornata: noteGiornata, ...extra,
     })
 
   const preparaAnteprima = async () => {
@@ -96,7 +107,7 @@ export default function AiArticolo() {
       <PageHeader
         label="AI"
         title="Genera articolo"
-        subtitle="Commento goliardico alla giornata, scritto dall'AI con i dati reali, i profili dei fantallenatori e gli episodi storici della lega."
+        subtitle="Commento goliardico alla giornata (articolo o edizione sfogliabile), scritto dall'AI con i dati reali, il contesto della lega, i profili, gli episodi storici e le immagini della libreria."
       />
 
       {/* ── Passo 1: scelta giornata e identità ───────────────── */}
@@ -140,6 +151,43 @@ export default function AiArticolo() {
               className="fanta-input"
             />
           </div>
+        </div>
+
+        <fieldset className="mb-4">
+          <legend className="text-xs text-slate-600 mb-2">Formato</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { v: 'articolo', icona: FileText, t: 'Articolo', d: 'Un testo unico di commento alla giornata, con pagelle.' },
+              { v: 'edizione', icona: BookOpen, t: 'Edizione sfogliabile', d: 'Copertina, una pagina per ogni partita e commento finale, in stile quotidiano. Costa di più (più testo).' },
+            ].map(o => (
+              <label key={o.v} className={`rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                formato === o.v ? 'border-grass-500/50 bg-grass-500/5' : 'border-white/10 hover:border-white/20'}`}>
+                <div className="flex items-start gap-3">
+                  <input type="radio" name="formato" className="mt-1" checked={formato === o.v}
+                    onChange={() => { setFormato(o.v); reset() }} />
+                  <div>
+                    <p className="text-sm font-medium text-slate-200 flex items-center gap-1.5"><o.icona className="w-3.5 h-3.5" /> {o.t}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{o.d}</p>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="mb-5">
+          <label htmlFor="art-note" className="text-xs text-slate-600 mb-1 block">
+            Note di giornata (facoltative): cose successe che l'AI non può sapere dai dati
+          </label>
+          <textarea
+            id="art-note" rows={4} maxLength={4000} value={noteGiornata}
+            onChange={e => { setNoteGiornata(e.target.value); reset() }}
+            placeholder="es. Marco ha dimenticato di schierare il portiere. Luca ha festeggiato il sorpasso con un giro di caffè."
+            className="fanta-input"
+          />
+          <p className="text-[11px] text-slate-600 mt-1">
+            {noteGiornata.length} / 4000 caratteri. Vengono considerate affidabili dall'AI; evita dettagli privati o delicati.
+          </p>
         </div>
 
         <button
@@ -186,7 +234,20 @@ export default function AiArticolo() {
                 : anteprima.riepilogo.episodi.map(e => e.titolo).join(' · ')}
             </li>
             <li>
-              Lunghezza: circa {anteprima.parole_target} parole (limite {anteprima.max_token} token di output).
+              Contesto fisso: {anteprima.riepilogo.contesto_fisso_blocchi} blocchi ({anteprima.riepilogo.contesto_fisso_caratteri} caratteri)
+              {anteprima.riepilogo.stile_personalizzato ? ', stile personalizzato' : ', stile predefinito'}
+              {anteprima.riepilogo.contesto_giornata_caratteri > 0 && <> · note di giornata: {anteprima.riepilogo.contesto_giornata_caratteri} caratteri</>}.
+            </li>
+            <li>
+              Immagini proposte all'AI: {anteprima.riepilogo.immagini_catalogo}
+              {anteprima.riepilogo.immagini_senza_descrizione > 0 &&
+                <span className="text-gold-400"> · {anteprima.riepilogo.immagini_senza_descrizione} attive ma senza descrizione (non vengono usate)</span>}
+              {anteprima.riepilogo.immagini_attive === 0 && <span className="text-slate-500"> · libreria vuota: l'articolo sarà senza immagini</span>}.
+            </li>
+            <li>
+              {anteprima.formato === 'edizione'
+                ? <>Edizione di {anteprima.riepilogo.pagine} pagine (partite + commento), circa {anteprima.parole_target} parole a pagina (limite {anteprima.max_token} token di output).</>
+                : <>Lunghezza: circa {anteprima.parole_target} parole (limite {anteprima.max_token} token di output).</>}
             </li>
           </ul>
 
@@ -249,7 +310,12 @@ export default function AiArticolo() {
               <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
               Vedi i dati inviati all'AI
             </summary>
-            <pre className="mt-2 max-h-72 overflow-auto rounded-lg bg-black/30 p-3 text-[11px] leading-relaxed text-slate-400 whitespace-pre-wrap break-words">
+            <p className="mt-2 text-[11px] uppercase tracking-widest text-slate-600">Istruzioni (stile e contesto fisso)</p>
+            <pre className="mt-1 max-h-72 overflow-auto rounded-lg bg-black/30 p-3 text-[11px] leading-relaxed text-slate-400 whitespace-pre-wrap break-words">
+              {anteprima.prompt_system}
+            </pre>
+            <p className="mt-3 text-[11px] uppercase tracking-widest text-slate-600">Dati della giornata</p>
+            <pre className="mt-1 max-h-72 overflow-auto rounded-lg bg-black/30 p-3 text-[11px] leading-relaxed text-slate-400 whitespace-pre-wrap break-words">
               {anteprima.prompt_utente}
             </pre>
           </details>
@@ -283,9 +349,21 @@ export default function AiArticolo() {
           {risultato.articolo.sommario && (
             <p className="text-sm italic text-slate-400 mt-2">{risultato.articolo.sommario}</p>
           )}
-          <div className="mt-4 text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-            {risultato.articolo.testo}
-          </div>
+          {risultato.articolo.formato === 'edizione' ? (
+            <ol className="mt-4 space-y-1 text-sm text-slate-300 list-decimal list-inside">
+              {risultato.articolo.pagine.map(p => (
+                <li key={p.ordine}>
+                  {p.titolo}
+                  {p.senza_testo && <span className="text-gold-400"> — pagina senza testo</span>}
+                  {p.id_immagine && <span className="text-slate-500"> · con immagine</span>}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div className="mt-4">
+              <ArticoloTesto testo={risultato.articolo.testo} />
+            </div>
+          )}
 
           <div className="mt-5 space-y-3">
             {risultato.interrotto && (
@@ -301,7 +379,13 @@ export default function AiArticolo() {
                 (probabilmente le pagelle) potrebbe mancare.
               </Avviso>
             )}
-            {!risultato.formato_ok && (
+            {risultato.pagine_mancanti?.length > 0 && (
+              <Avviso>
+                Alcune pagine sono arrivate senza testo ({risultato.pagine_mancanti.join(', ')}): completale a mano
+                da Gestione articoli (il tabellino con i dati c'è comunque).
+              </Avviso>
+            )}
+            {!risultato.formato_ok && !(risultato.pagine_mancanti?.length > 0) && (
               <Avviso>Il modello non ha rispettato il formato atteso: titolo e sommario potrebbero non essere separati bene.</Avviso>
             )}
             <Avviso tono="green" icona={CheckCircle2}>

@@ -10,27 +10,35 @@
 // ACCESSO: utenza con NEW_UTENZE.abilita_ai = 'Y' e password verificata
 // lato server (la generazione ha un costo).
 //
+// Body comune opzionale:
+//      formato            'articolo' (default, testo unico) | 'edizione'
+//                         (giornale sfogliabile: una pagina per partita + commento)
+//      contesto_giornata  note libere della redazione sulla giornata (max 4000
+//                         caratteri), inserite nel prompt
+//
 // azione = "anteprima"   (GRATUITA: nessuna generazione)
-//      Costruisce il prompt reale (dati della giornata + profili +
-//      episodi), misura i token di input con l'endpoint ufficiale di
+//      Costruisce il prompt reale (contesto fisso + stile, dati della
+//      giornata, profili, episodi, note di giornata, catalogo immagini), misura i token di input con l'endpoint ufficiale di
 //      conteggio (gratuito) per ciascun modello del listino e restituisce
 //      il costo previsto: "tipico" (lunghezza target dell'articolo) e
 //      "massimo" (garantito dal limite di token di output).
-//      Risposta: { giornata, riepilogo, prompt_hash, max_token,
+//      Risposta: { giornata, formato, riepilogo, prompt_hash, max_token,
 //                  parole_target, spesa_mese_usd, tetto_mensile_usd,
-//                  cambio_eur, modelli[], prompt_utente }
+//                  cambio_eur, modelli[], prompt_utente, prompt_system }
 //
 // azione = "genera"      (A PAGAMENTO)
 //      Body aggiuntivo: modello, prompt_hash (quello dell'anteprima).
 //      Rigenera il prompt e procede SOLO se l'impronta coincide (se i
 //      dati sono cambiati dopo l'anteprima risponde 409). Salva
 //      l'articolo come bozza in NEW_ARTICOLI con token e costo reali.
-//      Risposta: { articolo{...}, costo_usd, costo_stimato_usd, interrotto, ... }
+//      Risposta: { articolo{..., formato, pagine[]}, pagine_mancanti[], costo_usd,
+//                  costo_stimato_usd, interrotto, ... }
 //      La risposta è richiesta in streaming (vedi ai_messaggio_stream). Se la
 //      connessione cade a metà, il testo già ricevuto viene comunque salvato
 //      come bozza troncata (interrotto = true, costo approssimato).
 //
-// Richiede le tabelle di Script DB/NEW_AI_ARTICOLI.sql e la
+// Richiede le tabelle di Script DB/NEW_AI_ARTICOLI.sql e di
+// Script DB/NEW_AI_GAZZETTA_EDIZIONE.sql e la
 // configurazione di backend/config_ai.php (sezione "articolo" opzionale).
 // ============================================================
 
@@ -53,12 +61,20 @@ $azione    = strtolower(trim((string) ($input["azione"] ?? "")));
 $giornata  = (int) ($input["giornata"] ?? 0);
 $modelloRichiesto = trim((string) ($input["modello"] ?? ""));
 $hashRicevuto     = trim((string) ($input["prompt_hash"] ?? ""));
+$formato          = strtolower(trim((string) ($input["formato"] ?? "articolo")));
+$contestoGiornata = trim(str_replace(["\r\n", "\r"], "\n", (string) ($input["contesto_giornata"] ?? "")));
 
 if ($stagione < 2000 || $stagione > 2100) {
     api_error("Parametro 'stagione' obbligatorio e deve essere un anno a 4 cifre plausibile (2000-2100)", 400);
 }
 if (!in_array($azione, ["anteprima", "genera"], true)) {
     api_error("Azione non valida: usare 'anteprima' o 'genera'", 400);
+}
+if (!in_array($formato, ["articolo", "edizione"], true)) {
+    api_error("Formato non valido: usare 'articolo' o 'edizione'", 400);
+}
+if (mb_strlen($contestoGiornata) > 4000) {
+    api_error("Le note di giornata superano la lunghezza massima di 4000 caratteri", 400);
 }
 if ($giornata < 1 || $giornata > 100) {
     api_error("Parametro 'giornata' obbligatorio (1-100)", 400);
@@ -72,13 +88,16 @@ if (ai_config() === null || !ai_chiave_configurata()) {
 if (!art_tabelle_presenti($conn)) {
     api_error("Tabelle degli articoli AI mancanti: eseguire Script DB/NEW_AI_ARTICOLI.sql", 500);
 }
+if (!art_fase4_presente($conn)) {
+    api_error("Tabelle della Gazzetta mancanti: eseguire Script DB/NEW_AI_GAZZETTA_EDIZIONE.sql", 500);
+}
 if (!sg_risultati_pubblici($stagione, $giornata)) {
     api_error("La giornata $giornata non è ancora chiusa: l'articolo si genera solo a giornata conclusa", 409);
 }
 
-@set_time_limit(180);
+@set_time_limit($formato === "edizione" ? 260 : 180);
 
-$prompt = art_costruisci($conn, $stagione, $giornata);
+$prompt = art_costruisci($conn, $stagione, $giornata, ["formato" => $formato, "contesto_giornata" => $contestoGiornata]);
 if (isset($prompt["errore"])) {
     api_error($prompt["errore"], 404);
 }
@@ -90,7 +109,7 @@ if (!$modelliCfg) {
 }
 
 $tettoUsd   = (float) art_cfg("tetto_mensile_usd", 0);        // 0 = nessun tetto
-$tokTipico  = (int) art_cfg("token_output_tipico", 1100);
+$tokTipico  = (int) $prompt["token_tipico"];
 $maxToken   = (int) $prompt["max_token"];
 $spesaMese  = art_spesa_mese_usd($conn);
 
@@ -140,6 +159,7 @@ if ($azione === "anteprima") {
     api_success([
         "stagione"          => $stagione,
         "giornata"          => $giornata,
+        "formato"           => $formato,
         "riepilogo"         => $prompt["riepilogo"],
         "prompt_hash"       => $hash,
         "max_token"         => $maxToken,
@@ -149,6 +169,7 @@ if ($azione === "anteprima") {
         "cambio_eur"        => $cambio !== null ? (float) $cambio : null,
         "modelli"           => $righe,
         "prompt_utente"     => $prompt["prompt_utente"],
+        "prompt_system"     => $prompt["system"],
     ]);
 }
 
@@ -169,7 +190,9 @@ if (!$stima["entro_tetto"]) {
                       $tettoUsd, $spesaMese, (float) $stima["costo_massimo_usd"]), 402);
 }
 
-$timeoutGen = (int) art_cfg("timeout_generazione", 120);
+$timeoutGen = $formato === "edizione"
+    ? (int) art_cfg("timeout_edizione", 200)
+    : (int) art_cfg("timeout_generazione", 120);
 // Streaming (default): evita che proxy/firewall dell'hosting chiudano una
 // connessione rimasta muta per decine di secondi. Disattivabile con
 // "streaming" => false nella sezione "articolo" di config_ai.php.
@@ -209,36 +232,84 @@ $tokIn   = (int) ($dati["usage"]["input_tokens"] ?? 0);
 $tokOut  = (int) ($dati["usage"]["output_tokens"] ?? 0);
 $costo   = ai_costo_usd($modelloRichiesto, $tokIn, $tokOut);
 $troncato = $interrotto || (($dati["stop_reason"] ?? "") === "max_tokens");
-$parsed  = art_parse_testo($grezzo);
+if ($formato === "edizione") {
+    $parsed = art_parse_edizione($grezzo, $prompt["pagine_attese"], $prompt["catalogo_ids"]);
+    $pagine = $parsed["pagine"];
+    $testoDb = $parsed["testo"];
+} else {
+    $parsed = art_parse_testo($grezzo, $prompt["catalogo_ids"], (int) art_cfg("max_immagini_inline", 2));
+    $pagine = [];
+    $testoDb = $parsed["testo"];
+}
+$idCop = $parsed["id_immagine"];
+$immaginiUsate = art_immagini_usate_csv($idCop, $testoDb, $pagine);
 
 $episodiIds = implode(",", array_map(fn($e) => (int) $e["id"], $prompt["riepilogo"]["episodi"]));
 $troncatoFlag = $troncato ? "Y" : "N";
 $tokStima = (int) $stima["token_input"];
 $costoStima = $stima["costo_tipico_usd"];
 $costoVal = $costo;
+$titoloDb = $parsed["titolo"];
+$sommarioDb = $parsed["sommario"];
+$contestoDb = $contestoGiornata;
 
+mysqli_begin_transaction($conn);
 $st = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI
         (stagione, giornata, titolo, sommario, testo, stato, modello, troncato,
          token_input_stimati, costo_stimato_usd, token_input, token_output, costo_usd,
-         creato_da, episodi_usati)
-        VALUES (?, ?, ?, ?, ?, 'bozza', ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+         creato_da, episodi_usati, formato, contesto_giornata, id_immagine_copertina, immagini_usate)
+        VALUES (?, ?, ?, ?, ?, 'bozza', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 if (!$st) {
+    mysqli_rollback($conn);
     api_error("Articolo generato ma non salvato (errore DB: " . mysqli_error($conn) . ")", 500);
 }
-mysqli_stmt_bind_param($st, "iisssssidiidss",
-    $stagione, $giornata, $parsed["titolo"], $parsed["sommario"], $parsed["testo"],
+mysqli_stmt_bind_param($st, "iisssssidiidssssis",
+    $stagione, $giornata, $titoloDb, $sommarioDb, $testoDb,
     $modelloRichiesto, $troncatoFlag, $tokStima, $costoStima, $tokIn, $tokOut, $costoVal,
-    $utenza, $episodiIds);
+    $utenza, $episodiIds, $formato, $contestoDb, $idCop, $immaginiUsate);
 if (!mysqli_stmt_execute($st)) {
-    api_error("Articolo generato ma non salvato (errore DB: " . mysqli_stmt_error($st) . ")", 500);
+    $errDb = mysqli_stmt_error($st);
+    mysqli_rollback($conn);
+    api_error("Articolo generato ma non salvato (errore DB: $errDb)", 500);
 }
 $idArticolo = (int) mysqli_insert_id($conn);
 mysqli_stmt_close($st);
 
-// Rotazione degli aneddoti: segno gli episodi usati
+$pagineOut = [];
+foreach ($pagine as $i => $pg) {
+    $ordine = $i + 1;
+    $tipoPg = $pg["tipo"];
+    $compPg = $pg["competizione"];
+    $titPg  = $pg["titolo"];
+    $txtPg  = $pg["testo"];
+    $imgPg  = $pg["id_immagine"];
+    $didPg  = $pg["didascalia"];
+    $datiPg = json_encode($pg["dati"], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    $sp = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI_PAGINE
+            (id_articolo, ordine, tipo, competizione, titolo, testo, id_immagine, didascalia, dati)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!$sp) {
+        $errDb = mysqli_error($conn);
+        mysqli_rollback($conn);
+        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
+    }
+    mysqli_stmt_bind_param($sp, "iissssiss", $idArticolo, $ordine, $tipoPg, $compPg, $titPg, $txtPg, $imgPg, $didPg, $datiPg);
+    if (!mysqli_stmt_execute($sp)) {
+        $errDb = mysqli_stmt_error($sp);
+        mysqli_rollback($conn);
+        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
+    }
+    mysqli_stmt_close($sp);
+    $pagineOut[] = ["ordine" => $ordine, "tipo" => $tipoPg, "competizione" => $compPg, "titolo" => $titPg,
+                    "id_immagine" => $imgPg, "didascalia" => $didPg, "senza_testo" => trim($txtPg) === ""];
+}
+mysqli_commit($conn);
+
+// Rotazione degli aneddoti e delle immagini: segno quelli usati
 if ($episodiIds !== "") {
     mysqli_query($conn, "UPDATE NEW_EPISODI_LEGA SET ultimo_utilizzo = NOW() WHERE id IN ($episodiIds)");
 }
+art_segna_immagini_usate($conn, $parsed["immagini"]);
 
 api_success([
     "articolo" => [
@@ -251,7 +322,11 @@ api_success([
         "stato"     => "bozza",
         "modello"   => $modelloRichiesto,
         "troncato"  => $troncato,
+        "formato"   => $formato,
+        "id_immagine_copertina" => $idCop,
+        "pagine"    => $pagineOut,
     ],
+    "pagine_mancanti"    => $formato === "edizione" ? $parsed["mancanti"] : [],
     "interrotto"         => $interrotto,
     "avviso_interruzione" => $interrotto ? ($gen["errore"] ?? null) : null,
     "costo_approssimato" => $costoApprossimato,

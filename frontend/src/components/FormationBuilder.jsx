@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown, Armchair, ArrowRight, ArrowLeft } from 'lucide-react'
-import { PitchField, PlayerChip } from './PitchField'
+import { PitchField, PlayerChip, IncontroSerieA } from './PitchField'
 import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 
 const ROLE_PILL_CLASS = {
@@ -73,7 +73,10 @@ export function RosterRow({
       {!readOnly && <GripVertical className="w-3.5 h-3.5 text-slate-700 flex-shrink-0" />}
       <span className="text-[9px] font-mono w-5 text-slate-600 flex-shrink-0">{displayNumber}</span>
       <span className={`stat-pill ${ROLE_PILL_CLASS[player.ruolo] ?? ''}`}>{ROLE_LABEL[String(player.ruolo)]}</span>
-      <span className="text-sm text-slate-300 truncate flex-1">{player.descrizione}</span>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <span className="text-sm text-slate-300 truncate">{player.descrizione}</span>
+        <IncontroSerieA player={player} />
+      </div>
 
       {!readOnly && (
         <div className="flex items-center flex-shrink-0">
@@ -128,7 +131,8 @@ export function RosterRow({
  * nella nuova, così le tre liste non possono mai sovrapporsi.
  *
  * props:
- *  - rosa: [{ id, descrizione, ruolo }]  rosa completa della squadra
+ *  - rosa: [{ id, descrizione, ruolo, serie_a?, avversaria?, casa? }]  rosa completa della squadra
+ *    (i campi di Serie A, se presenti, mostrano avversaria e casa/trasferta di ogni giocatore)
  *  - modulo, onModuloChange
  *  - titolariIds, panchinaIds, tribunaIds: array di id (stato controllato dal parent)
  *  - onChange(titolariIds, panchinaIds, tribunaIds): chiamato ad ogni modifica
@@ -469,7 +473,10 @@ export function FormationBuilder({
                         className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors whitespace-nowrap"
                       >
                         <span className={`stat-pill flex-shrink-0 ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
-                        <span className="flex-1 min-w-0 truncate">{p.descrizione}</span>
+                        <span className="flex-1 min-w-0 flex flex-col">
+                          <span className="truncate">{p.descrizione}</span>
+                          <IncontroSerieA player={p} />
+                        </span>
                         {fromTribuna && (
                           <Armchair className="w-3 h-3 text-slate-500 flex-shrink-0" aria-label="In tribuna" />
                         )}

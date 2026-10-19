@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getRigoristi, saveFormazione } from '../api/client'
+import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, TabBar } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
 import { OrdineRigoristi, ordinaSecondo as ordinaRig } from '../components/OrdineRigoristi'
@@ -135,7 +135,7 @@ export default function Formazione() {
     idSquadra !== null && ultimaStagione !== null ? () => getSquadra(ultimaStagione, idSquadra) : null,
     [ultimaStagione, idSquadra]
   )
-  const rosa = squadra?.rosa ?? []
+  const rosaBase = squadra?.rosa
 
   // ── Giornata di riferimento: prima giornata successiva all'ultima chiusa ──
   const { data: giornataInfo, loading: loadingGiornata, error: errorGiornata } = useFetch(
@@ -149,6 +149,27 @@ export default function Formazione() {
     giornataInfo.ultima_calendario > 0 &&
     giornata !== null &&
     giornata <= giornataInfo.ultima_chiusa
+
+  // ── Avversaria di Serie A e casa/trasferta di ogni giocatore ────────
+  // Dato solo informativo: un errore o un calendario Serie A non
+  // caricato non blocca la pagina (i giocatori restano senza indicazione).
+  const { data: avversarie } = useFetch(
+    idSquadra !== null && ultimaStagione !== null && giornata !== null
+      ? () => getAvversarieSerieA(ultimaStagione, giornata, idSquadra)
+      : null,
+    [ultimaStagione, idSquadra, giornata]
+  )
+  const rosa = useMemo(() => {
+    const base = rosaBase ?? []
+    const perId = new Map((avversarie?.giocatori ?? []).map(a => [Number(a.id_giocatore), a]))
+    if (perId.size === 0) return base
+    return base.map(p => {
+      const a = perId.get(Number(p.id))
+      return a
+        ? { ...p, serie_a: a.serie_a, avversaria: a.avversaria, casa: a.casa, data: a.data, ora: a.ora }
+        : p
+    })
+  }, [rosaBase, avversarie])
 
   // ── Formazione già salvata per squadra + giornata (se esiste) ──────
   const {

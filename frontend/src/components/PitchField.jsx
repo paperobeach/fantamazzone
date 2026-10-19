@@ -28,7 +28,47 @@ export function PitchField({ children, className = '', centerDot = false, ...res
   )
 }
 
-// Gettone giocatore (in campo): cerchio col ruolo + nome.
+// Incontro di Serie A del giocatore nella giornata: avversaria + casa/trasferta.
+// Legge dal giocatore i campi arricchiti { serie_a, avversaria, casa, data, ora }
+// (vedi Formazione.jsx): se non sono presenti (es. Top/Flop 11, dashboard) non
+// mostra nulla. variant: 'chip' (compatto, sotto il nome in campo) | 'riga' (elenchi e menu).
+export function IncontroSerieA({ player, variant = 'riga' }) {
+  if (!player || !('avversaria' in player)) return null
+
+  const { serie_a, avversaria, casa, data, ora } = player
+  const marker = casa ? 'C' : 'T'
+  const markerCls = casa
+    ? 'bg-grass-500/25 text-grass-200'
+    : 'bg-gold-500/25 text-gold-200'
+
+  // Nessuna avversaria: squadra ignota oppure turno di riposo / non in calendario
+  if (avversaria === null || avversaria === undefined) {
+    const testo = serie_a ? 'Nessun incontro' : 'Squadra n.d.'
+    return variant === 'chip'
+      ? <span className="text-[9px] leading-none text-white/50 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">{testo}</span>
+      : <span className="text-[10px] leading-tight text-slate-600 truncate">{testo}</span>
+  }
+
+  const quando = data ? ` · ${data.split('-').reverse().join('/')}${ora ? ' ' + ora.slice(0, 5) : ''}` : ''
+  const title = `${serie_a ?? ''} ${casa ? 'in casa contro' : 'in trasferta contro'} ${avversaria}${quando}`.trim()
+
+  if (variant === 'chip') {
+    return (
+      <span title={title} className="flex items-center justify-center gap-0.5 w-full text-[9px] leading-none text-white/90 [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
+        <span className={`flex-shrink-0 rounded px-1 py-px font-bold ${markerCls}`}>{marker}</span>
+        <span className="truncate">{avversaria}</span>
+      </span>
+    )
+  }
+  return (
+    <span title={title} className="flex items-center gap-1 min-w-0 text-[10px] leading-tight text-slate-500">
+      <span className={`flex-shrink-0 rounded px-1 py-px font-bold ${markerCls}`}>{casa ? 'Casa' : 'Trasf.'}</span>
+      <span className="truncate">vs {avversaria}</span>
+    </span>
+  )
+}
+
+// Gettone giocatore (in campo): cerchio col ruolo + nome (+ avversaria di Serie A, se nota).
 export function PlayerChip({ player, selected, highlight, dragProps }) {
   return (
     <div {...dragProps} className="flex flex-col items-center gap-1 select-none cursor-pointer w-16 sm:w-20">
@@ -41,6 +81,7 @@ export function PlayerChip({ player, selected, highlight, dragProps }) {
       <span className="text-[10px] leading-tight text-center text-white font-medium truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
         {player.descrizione ?? player.giocatore}
       </span>
+      <IncontroSerieA player={player} variant="chip" />
     </div>
   )
 }

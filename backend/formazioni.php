@@ -9,6 +9,11 @@
 //        inserire una formazione Champions diversa da quella di campionato
 // GET  ?stagione=2024&giornata=5&id_squadra=3&modo=rigoristi     → [{id_giocatore, ordine}] ordine dei
 //        rigoristi salvato per la giornata (vuoto = nessuna lista: si parte dal portiere, per maglia)
+// GET  ?stagione=2024&giornata=5&id_squadra=3&modo=avversarie    → { giornata_serie_a, giocatori:
+//        [{id_giocatore, serie_a, avversaria, casa, data, ora}] } per ogni giocatore della rosa:
+//        squadra di Serie A, avversaria della giornata e incontro in casa (true) o in
+//        trasferta (false); avversaria/casa = null se la squadra non gioca nella giornata
+//        o se calendario/squadra del giocatore non sono disponibili (vedi lib/AvversarieSerieA.php)
 // POST { stagione, giornata, id_squadra, giocatori: [{id, maglia}],
 //        competizione: "CAMP" (default) | "CHAMP", entrambe: bool (default false),
 //        rigoristi?: [idGiocatore, ...] }
@@ -44,6 +49,7 @@
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/mailer.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
+require_once __DIR__ . "/lib/AvversarieSerieA.php";
 
 $stagione = param_int("stagione");
 
@@ -159,6 +165,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             // stabilire l'ordine dei rigoristi (titolari 1-11, poi panchinari)
             "rigori_previsti"       => $gioca && champions_rigori_previsti($stagione, $giornata, $id_squadra),
         ]);
+    } elseif ((param_str("modo", false) ?? "") === "avversarie") {
+        // Avversaria di Serie A e casa/trasferta di ogni giocatore della rosa
+        api_success(av_avversarie_rosa($stagione, $giornata, $id_squadra));
     } elseif ((param_str("modo", false) ?? "") === "rigoristi") {
         api_success(query_all("SELECT ID_GIOCATORE AS id_giocatore, ORDINE AS ordine
                                FROM NEW_RIGORISTI_CHAMP

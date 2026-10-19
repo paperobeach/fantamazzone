@@ -49,11 +49,11 @@ export function PallinoForma({ segno, title, size = 'w-7 h-7 text-xs' }) {
 
 export function Section({ title, icon: Icon, right, children, className = '' }) {
   return (
-    <div className={`card overflow-hidden ${className}`}>
-      <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
+    <div className={`card overflow-hidden min-w-0 ${className}`}>
+      <div className="px-4 py-3 border-b border-white/5 flex flex-wrap items-center gap-x-2 gap-y-1">
         {Icon && <Icon className="w-4 h-4 text-grass-400 flex-shrink-0" />}
-        <h2 className="font-semibold text-slate-200 text-sm">{title}</h2>
-        {right && <div className="ml-auto text-xs text-slate-500 font-mono">{right}</div>}
+        <h2 className="font-semibold text-slate-200 text-sm min-w-0">{title}</h2>
+        {right && <div className="ml-auto min-w-0 max-w-full text-xs text-slate-500 font-mono text-right">{right}</div>}
       </div>
       {children}
     </div>

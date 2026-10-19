@@ -96,7 +96,7 @@ export default function DashboardSquadra() {
   const titoloArea = AREE.find(a => a.value === area)?.label
 
   return (
-    <div className="animate-fade-up">
+    <div className="animate-fade-up min-w-0 max-w-full [&_.grid>*]:min-w-0">
       <HeaderSquadra d={d} />
 
       <div className="mt-4 flex flex-col lg:flex-row lg:items-center gap-3 mb-6">

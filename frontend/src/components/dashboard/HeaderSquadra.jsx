@@ -156,12 +156,12 @@ export default function HeaderSquadra({ d }) {
 
         {compressa ? (
           /* ── Versione sintetica ── */
-          <div className="relative flex items-center gap-3 px-3 py-2">
+          <div className="relative flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
             <TeamLogo logo={d.squadra.logo} nome={d.squadra.nome} size="sm" />
             <CoachPhoto logo={d.squadra.logo_allenatore} nome={d.squadra.allenatore} className="w-8 h-8" />
             <p className="hidden sm:block text-display text-lg font-bold text-white truncate">{d.squadra.nome}</p>
 
-            <div className="flex items-center gap-2 ml-auto min-w-0">
+            <div className="flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
               {!f.stagione_conclusa && residuo && (
                 <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-mono ${URGENZA[residuo.urgenza]}`}
                       title={scadenzaTesto ? `Limite formazione: ${scadenzaTesto}` : undefined}>

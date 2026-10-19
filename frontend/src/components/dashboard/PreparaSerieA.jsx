@@ -62,7 +62,7 @@ export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
           incontri.map(p => (
             <div key={p.n_partita} className="px-4 py-3 border-b border-white/[0.03] last:border-0">
               <p className="text-[10px] font-mono text-slate-600 mb-1.5">{fmtPartita(p.data, p.ora)}</p>
-              <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-start">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-200 truncate">{p.casa}</p>
                   <Chips giocatori={p.giocatori_casa} allinea="text-left" />

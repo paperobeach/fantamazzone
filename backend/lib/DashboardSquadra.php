@@ -155,12 +155,14 @@ function ds_matrice(array $squadre, int $idSquadra, array $partite): array
     return $out;
 }
 
-/** Formazione inserita (NEW_FORMAZIONI) di una squadra in una giornata. */
-function ds_formazione(int $stagione, int $giornata, int $id): array
+/** Formazione inserita di una squadra in una giornata (campionato o, con $tab, Champions). */
+function ds_formazione(int $stagione, int $giornata, int $id, string $tab = "NEW_FORMAZIONI"): array
 {
+    // $tab è sempre una costante interna (NEW_FORMAZIONI / NEW_FORMAZIONI_CHAMP),
+    // mai un valore della richiesta.
     $rows = query_all("SELECT f.MAGLIA AS maglia, f.ID_GIOCATORE AS id_giocatore,
                               g.descrizione AS giocatore, g.ruolo
-                       FROM NEW_FORMAZIONI f
+                       FROM $tab f
                        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                        WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id
                        ORDER BY f.MAGLIA");

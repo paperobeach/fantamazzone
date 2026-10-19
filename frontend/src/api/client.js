@@ -481,3 +481,13 @@ export const adminImportaCalendarioSerieA = (stagione, file) => {
   formData.append('file', file)
   return postFile('admin/calendario_serie_a.php', formData)
 }
+
+// Area "Statistiche" della dashboard: analisi di un reparto.
+// ruolo: 1 = portieri, 2 = difensori, 3 = centrocampisti, 4 = attaccanti.
+export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'CAMP') =>
+  get('dashboard_ruoli.php', { stagione, id_squadra, ruolo, competizione })
+
+// Area "Prepara la prossima partita": avversario, Top 11, Serie A.
+export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP') =>
+  get('dashboard_prepara.php', { stagione, id_squadra, competizione })
+

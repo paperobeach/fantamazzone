@@ -109,7 +109,7 @@ export default function DashboardSquadra() {
       {area === 'statistiche' && (
         <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} />
       )}
-      {area === 'prepara'   && <AreaPrepara d={d} competizione={competizione} />}
+      {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} />}
       {area === 'ultima'    && <AreaUltimaPartita d={d} competizione={competizione} />}
       {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} />}
       {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} />}

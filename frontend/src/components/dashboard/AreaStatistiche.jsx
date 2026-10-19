@@ -9,6 +9,7 @@ import {
   Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, fmt,
 } from './shared'
 import TeamLogo from '../TeamLogo'
+import AreaRuoli from './AreaRuoli'
 
 // ── Serie ────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione }
       )}
 
       {sotto === 'ruoli' && (
-        <EmptyState label="Analisi per ruolo (portieri, difensori, centrocampisti, attaccanti): in arrivo nella prossima fase." />
+        <AreaRuoli stagione={stagione} idSquadra={idSquadra} competizione={competizione} />
       )}
 
       {sotto === 'topflop' && (

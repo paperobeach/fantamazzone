@@ -199,6 +199,12 @@ export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CA
 export const getFormazioneContesto = (stagione, giornata, id_squadra) =>
   get('formazioni.php', { stagione, giornata, id_squadra, modo: 'contesto' })
 
+// Avversaria di Serie A e casa/trasferta di ogni giocatore della rosa per la giornata:
+// { giornata_serie_a, giocatori: [{ id_giocatore, serie_a, avversaria, casa, data, ora }] }
+// (avversaria/casa = null se la squadra del giocatore non gioca nella giornata)
+export const getAvversarieSerieA = (stagione, giornata, id_squadra) =>
+  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'avversarie' })
+
 // competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
 // rigoristi (facoltativo): ordine dei calci di rigore [idGiocatore, ...] (titolari 1-11, poi panchinari),
 // solo per i turni di Champions che prevedono supplementari e rigori; [] = nessuna lista

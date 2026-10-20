@@ -66,6 +66,58 @@
     @apply px-4 py-3;
   }
 
+  /* ── Table: colonne fisse con scroll orizzontale ──
+     .sticky-1 → blocca la 1ª colonna; .sticky-2 → blocca le prime due.
+     Da usare su <table className="fanta-table sticky-2"> dentro un contenitore overflow-x-auto.
+     Con .sticky-2 la 1ª colonna ha larghezza fissa (3.25rem): serve per l'offset della 2ª. */
+  .fanta-table.sticky-1 > thead > tr > :first-child,
+  .fanta-table.sticky-1 > tbody > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :first-child,
+  .fanta-table.sticky-2 > tbody > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :nth-child(2),
+  .fanta-table.sticky-2 > tbody > tr > :nth-child(2) {
+    position: sticky;
+    background-color: #091219; /* pitch-900, opaco per coprire le colonne che scorrono */
+    z-index: 1;
+  }
+  .fanta-table.sticky-1 > thead > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :nth-child(2) {
+    z-index: 2;
+  }
+  .fanta-table.sticky-1 > thead > tr > :first-child,
+  .fanta-table.sticky-1 > tbody > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :first-child,
+  .fanta-table.sticky-2 > tbody > tr > :first-child {
+    left: 0;
+  }
+  .fanta-table.sticky-2 > thead > tr > :first-child,
+  .fanta-table.sticky-2 > tbody > tr > :first-child {
+    width: 3.25rem;
+    min-width: 3.25rem;
+    max-width: 3.25rem;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    text-align: center;
+  }
+  .fanta-table.sticky-2 > thead > tr > :nth-child(2),
+  .fanta-table.sticky-2 > tbody > tr > :nth-child(2) {
+    left: 3.25rem;
+  }
+  /* Ombra sull'ultima colonna fissa, per indicare che il resto scorre sotto */
+  .fanta-table.sticky-1 > thead > tr > :first-child,
+  .fanta-table.sticky-1 > tbody > tr > :first-child,
+  .fanta-table.sticky-2 > thead > tr > :nth-child(2),
+  .fanta-table.sticky-2 > tbody > tr > :nth-child(2) {
+    box-shadow: 1px 0 0 rgba(255,255,255,0.07), 6px 0 8px -6px rgba(0,0,0,0.6);
+  }
+  /* Hover riga: l'overlay semitrasparente viene replicato sulle celle fisse */
+  .fanta-table.sticky-1 > tbody > tr:hover > :first-child,
+  .fanta-table.sticky-2 > tbody > tr:hover > :first-child,
+  .fanta-table.sticky-2 > tbody > tr:hover > :nth-child(2) {
+    background-image: linear-gradient(rgba(255,255,255,0.02), rgba(255,255,255,0.02));
+  }
+
   /* ── Badge method ── */
   .badge-win  { @apply stat-pill bg-green-500/10 text-green-400; }
   .badge-draw { @apply stat-pill bg-yellow-500/10 text-yellow-400; }

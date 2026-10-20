@@ -82,7 +82,7 @@ export default function Statistiche() {
       {/* Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-        <table className="fanta-table min-w-[720px]">
+        <table className="fanta-table sticky-2 min-w-[720px]">
           <thead>
             <tr>
               <th className="w-8">#</th>

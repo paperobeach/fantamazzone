@@ -36,7 +36,7 @@ export default function Marcatori() {
       {loading ? <LoadingState /> : error ? <ErrorState message={error} onRetry={refetch} /> : !data?.length ? <EmptyState /> : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-          <table className="fanta-table min-w-[560px]">
+          <table className="fanta-table sticky-2 min-w-[560px]">
             <thead>
               <tr>
                 <th className="w-10">#</th>

@@ -48,7 +48,7 @@ function ClassificaGirone({ girone, squadre, qualificano }) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="fanta-table min-w-[1080px]">
+        <table className="fanta-table sticky-2 min-w-[1080px]">
           <thead>
             <tr>
               <th className="w-10">#</th>

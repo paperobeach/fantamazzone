@@ -61,7 +61,7 @@ export default function SquadraDetail() {
               <span className="text-xs text-slate-600 font-mono">{grouped[r].length} giocatori</span>
             </div>
             <div className="overflow-x-auto">
-            <table className="fanta-table min-w-[900px]">
+            <table className="fanta-table sticky-1 min-w-[900px]">
               <thead>
                 <tr>
                   <th className="whitespace-nowrap">Giocatore</th>

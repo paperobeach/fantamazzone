@@ -97,7 +97,7 @@ export default function DashboardSquadra() {
 
   return (
     <div className="animate-fade-up min-w-0 max-w-full [&_.grid>*]:min-w-0">
-      <HeaderSquadra d={d} />
+      <HeaderSquadra d={d} stagione={d.stagione} idSquadra={idSquadra} />
 
       <div className="mt-4 flex flex-col lg:flex-row lg:items-center gap-3 mb-6">
         <FiltroCompetizione value={competizione} onChange={setCompetizione} />

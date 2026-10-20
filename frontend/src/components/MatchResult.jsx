@@ -16,9 +16,9 @@ function segnoDa(risultato) {
 export function ScoreBox({ risultato }) {
   if (!risultato) return (
     <div className="flex items-center gap-2">
-      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
+      <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
       <span className="text-slate-700 text-xs">:</span>
-      <span className="w-9 h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
+      <span className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-pitch-800 border border-white/10 flex items-center justify-center text-slate-600 text-base">—</span>
     </div>
   )
   // Con i supplementari il risultato mostrato comprende i gol dei supplementari
@@ -28,13 +28,13 @@ export function ScoreBox({ risultato }) {
   const segno = risultato.supp ? (golf > gols ? 'V' : golf === gols ? 'N' : 'P') : segnoDa(risultato)
   return (
     <div className="flex items-center gap-2">
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
+      <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-sm sm:text-base font-bold ${
         ['V', 'W'].includes(segno) ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
       }`}>{golf}</span>
       <span className="text-slate-600 text-xs font-mono">:</span>
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-base font-bold ${
+      <span className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-sm sm:text-base font-bold ${
         ['P', 'L'].includes(segno) ? 'bg-green-500/15 text-green-400' :
         segno === 'N' ? 'bg-yellow-500/15 text-yellow-400' :
                         'bg-pitch-800 text-slate-400'
@@ -73,21 +73,20 @@ export function PunteggioBadge({ valore, isMax, isMin }) {
   )
 }
 
-// Nome + logo della squadra (nessun link: l'intera riga è cliccabile per espandere)
+// Nome + logo della squadra (nessun link: l'intera riga è cliccabile per espandere).
+// Su schermi stretti logo e nome vanno in colonna (logo sopra, nome sotto, fino a
+// due righe) così non si sovrappongono al punteggio; da "sm" in su stanno su una riga.
 function Squadra({ squadra, lato }) {
+  const casa = lato === 'casa'
   return (
-    <div className={`flex items-center gap-2 flex-1 min-w-0 ${lato === 'casa' ? 'justify-end' : ''}`}>
-      {lato === 'casa' ? (
-        <>
-          <span className="text-sm text-slate-300 font-medium text-right truncate">{squadra?.nome}</span>
-          <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
-        </>
-      ) : (
-        <>
-          <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
-          <span className="text-sm text-slate-300 font-medium truncate">{squadra?.nome}</span>
-        </>
-      )}
+    <div className={`flex flex-col items-center gap-1 flex-1 min-w-0 sm:flex-row sm:gap-2 ${casa ? 'sm:justify-end' : ''}`}>
+      <div className={`order-1 max-w-full min-w-0 flex justify-center ${casa ? 'sm:order-2' : ''}`}>
+        <TeamLogo logo={squadra?.logo} nome={squadra?.nome} size="sm" />
+      </div>
+      <span className={`order-2 min-w-0 max-w-full text-xs sm:text-sm text-slate-300 font-medium text-center break-words leading-tight line-clamp-2 sm:line-clamp-1 ${
+        casa ? 'sm:order-1 sm:text-right' : 'sm:text-left'}`}>
+        {squadra?.nome}
+      </span>
     </div>
   )
 }
@@ -109,49 +108,57 @@ export function MatchResultRow({
   const attiva = expandable && !disabled
   const haPunti = risultato && risultato.ftotale_casa !== undefined && risultato.ftotale_ospite !== undefined
 
+  const badges = haPunti && (
+    <>
+      <PunteggioBadge
+        valore={risultato.ftotale_casa}
+        isMax={maxScore !== null && Number(risultato.ftotale_casa) === maxScore}
+        isMin={minScore !== null && Number(risultato.ftotale_casa) === minScore}
+      />
+      <span className="text-slate-700 text-xs">vs</span>
+      <PunteggioBadge
+        valore={risultato.ftotale_ospite}
+        isMax={maxScore !== null && Number(risultato.ftotale_ospite) === maxScore}
+        isMin={minScore !== null && Number(risultato.ftotale_ospite) === minScore}
+      />
+    </>
+  )
+
   return (
     <div
       role={attiva ? 'button' : undefined}
       tabIndex={attiva ? 0 : undefined}
       onClick={attiva ? onToggle : undefined}
       onKeyDown={attiva ? (e) => (e.key === 'Enter' || e.key === ' ') && onToggle?.() : undefined}
-      className={`flex items-center gap-2 sm:gap-4 py-3 px-4 transition-colors ${
+      className={`py-3 px-3 sm:px-4 transition-colors ${
         attiva ? 'cursor-pointer hover:bg-white/[0.02]' : ''
       } ${disabled ? 'opacity-60 cursor-default' : ''}`}
     >
-      <Squadra squadra={casa} lato="casa" />
+      <div className="flex items-center gap-2 sm:gap-4">
+        <Squadra squadra={casa} lato="casa" />
 
-      <div className="flex-shrink-0 flex items-center gap-2">
-        {centroExtra}
-        <div className="flex flex-col items-center">
-          <ScoreBox risultato={risultato} />
-          <EsitoExtra risultato={risultato} />
+        <div className="flex-shrink-0 flex items-center gap-1 sm:gap-2">
+          {centroExtra}
+          <div className="flex flex-col items-center">
+            <ScoreBox risultato={risultato} />
+            <EsitoExtra risultato={risultato} />
+          </div>
         </div>
+
+        <Squadra squadra={ospite} lato="ospite" />
+
+        {/* Fantapunti: sulla stessa riga da "sm" in su */}
+        {haPunti && <div className="hidden sm:flex items-center gap-2 flex-shrink-0">{badges}</div>}
+
+        {expandable && (
+          <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${
+            disabled ? 'text-slate-800' : 'text-slate-600'
+          } ${open ? 'rotate-180' : ''}`} />
+        )}
       </div>
 
-      <Squadra squadra={ospite} lato="ospite" />
-
-      {haPunti && (
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <PunteggioBadge
-            valore={risultato.ftotale_casa}
-            isMax={maxScore !== null && Number(risultato.ftotale_casa) === maxScore}
-            isMin={minScore !== null && Number(risultato.ftotale_casa) === minScore}
-          />
-          <span className="text-slate-700 text-xs hidden sm:inline">vs</span>
-          <PunteggioBadge
-            valore={risultato.ftotale_ospite}
-            isMax={maxScore !== null && Number(risultato.ftotale_ospite) === maxScore}
-            isMin={minScore !== null && Number(risultato.ftotale_ospite) === minScore}
-          />
-        </div>
-      )}
-
-      {expandable && (
-        <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform ${
-          disabled ? 'text-slate-800' : 'text-slate-600'
-        } ${open ? 'rotate-180' : ''}`} />
-      )}
+      {/* Fantapunti: su una riga a parte sugli schermi stretti */}
+      {haPunti && <div className="sm:hidden mt-2 flex items-center justify-center gap-2">{badges}</div>}
     </div>
   )
 }

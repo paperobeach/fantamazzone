@@ -228,7 +228,7 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
         centroExtra={(isReale || isSim) && (
           <span
             title={isReale ? 'Risultato calcolato (non definitivo)' : 'Risultato simulato con i voti disponibili'}
-            className={`flex items-center justify-end gap-1 w-10 text-[9px] font-mono uppercase tracking-wider ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
+            className={`flex items-center justify-end gap-1 w-4 sm:w-10 text-[9px] font-mono uppercase tracking-wider ${isReale ? 'text-grass-400' : 'text-sky-400'}`}>
             {isReale
               ? <><Calculator className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Calc.</span></>
               : <><Play className="w-3 h-3" aria-hidden="true" /><span className="hidden sm:inline">Sim.</span></>}

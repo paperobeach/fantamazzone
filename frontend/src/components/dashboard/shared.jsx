@@ -45,6 +45,16 @@ export function PallinoForma({ segno, title, size = 'w-7 h-7 text-xs' }) {
   )
 }
 
+// Logo squadra che su schermi stretti non supera ~3,5 rem, così nelle righe
+// con nome e punteggio non schiaccia il testo.
+export function LogoCompatto({ logo, nome, size = 'sm' }) {
+  return (
+    <div className="max-w-[3.5rem] sm:max-w-[5.5rem] min-w-0 flex-shrink-0">
+      <TeamLogo logo={logo} nome={nome} size={size} />
+    </div>
+  )
+}
+
 // ── Contenitori ──────────────────────────────────────────────
 
 export function Section({ title, icon: Icon, right, children, className = '' }) {
@@ -118,7 +128,7 @@ export function CoachPhoto({ logo, nome, className = 'w-16 h-16' }) {
 export function RigaRisultato({ p, mostraTurno = false }) {
   const s = SEGNO[p.segno]
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
+    <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 border-b border-white/[0.03] last:border-0">
       <EsitoIcon segno={p.segno} />
       <span className="text-xs font-mono text-slate-600 w-8 flex-shrink-0">G{p.giornata}</span>
       {p.casa !== null && p.casa !== undefined && (
@@ -126,7 +136,7 @@ export function RigaRisultato({ p, mostraTurno = false }) {
           ? <Home  className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" aria-label="In casa" />
           : <Plane className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" aria-label="In trasferta" />
       )}
-      <TeamLogo logo={p.logo_avv} nome={p.avversario} size="sm" />
+      <LogoCompatto logo={p.logo_avv} nome={p.avversario} />
       <span className="flex-1 min-w-0 text-sm text-slate-300 truncate">
         {p.avversario}
         {mostraTurno && p.turno && <span className="text-xs text-slate-600"> · {p.turno}</span>}
@@ -155,7 +165,7 @@ export function MatriceScontri({ matrice, vuota }) {
         return (
           <div key={m.id} className={`rounded-xl border ${bordo} bg-pitch-900 p-3 flex flex-col gap-2`}>
             <div className="flex items-center gap-2 min-w-0">
-              <TeamLogo logo={m.logo} nome={m.nome} size="sm" />
+              <LogoCompatto logo={m.logo} nome={m.nome} />
               <span className="text-xs text-slate-300 font-medium truncate">{m.nome}</span>
             </div>
             {m.incontri.length === 0 ? (

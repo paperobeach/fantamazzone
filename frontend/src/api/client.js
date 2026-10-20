@@ -199,12 +199,6 @@ export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CA
 export const getFormazioneContesto = (stagione, giornata, id_squadra) =>
   get('formazioni.php', { stagione, giornata, id_squadra, modo: 'contesto' })
 
-// Avversaria di Serie A e casa/trasferta di ogni giocatore della rosa per la giornata:
-// { giornata_serie_a, giocatori: [{ id_giocatore, serie_a, avversaria, casa, data, ora }] }
-// (avversaria/casa = null se la squadra del giocatore non gioca nella giornata)
-export const getAvversarieSerieA = (stagione, giornata, id_squadra) =>
-  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'avversarie' })
-
 // competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
 // rigoristi (facoltativo): ordine dei calci di rigore [idGiocatore, ...] (titolari 1-11, poi panchinari),
 // solo per i turni di Champions che prevedono supplementari e rigori; [] = nessuna lista
@@ -496,4 +490,10 @@ export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'C
 // Area "Prepara la prossima partita": avversario, Top 11, Serie A.
 export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP') =>
   get('dashboard_prepara.php', { stagione, id_squadra, competizione })
+
+// Richiamo LIVE dell'intestazione della dashboard: finestra della giornata,
+// risultato (reale o simulato) delle partite della squadra, giocatori delle
+// prossime partite di Serie A di oggi e primi panchinari.
+export const getDashboardLive = (stagione, id_squadra) =>
+  get('dashboard_live.php', { stagione, id_squadra })
 

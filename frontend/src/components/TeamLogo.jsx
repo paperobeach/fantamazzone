@@ -8,9 +8,9 @@ import { useState, useEffect } from 'react'
 // I loghi sono su sfondo chiaro (tema scuro dell'app): vengono mostrati
 // in una piastrella bianca arrotondata, larga quanto serve al logo.
 const BOX = {
-  sm: 'h-7 max-w-[5.5rem]',
-  md: 'h-7 sm:h-8 max-w-[5.5rem] sm:max-w-[6.5rem]',
-  lg: 'h-12 max-w-[7.5rem]',
+  sm: 'h-7 max-w-[min(5.5rem,100%)]',
+  md: 'h-7 sm:h-8 max-w-[min(5.5rem,100%)] sm:max-w-[min(6.5rem,100%)]',
+  lg: 'h-12 max-w-[min(7.5rem,100%)]',
 }
 const FALLBACK = {
   sm: 'w-7 h-7 text-[10px] text-slate-500',

@@ -6,9 +6,8 @@ import { useFetch } from '../../hooks/useFetch'
 import { getDashboardStatistiche } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../ui'
 import {
-  Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, fmt,
+  Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
 } from './shared'
-import TeamLogo from '../TeamLogo'
 import AreaRuoli from './AreaRuoli'
 
 // ── Serie ────────────────────────────────────────────────────
@@ -147,7 +146,7 @@ function RisultatiClassifica({ s, champ, kpi }) {
               <div key={`${p.giornata}-${p.turno ?? ''}`} className="flex items-center gap-2 py-1.5 border-b border-white/[0.03] text-sm">
                 <PallinoForma segno={p.segno} size="w-5 h-5 text-[10px]" />
                 <span className="text-xs font-mono text-slate-600 w-7">G{p.giornata}</span>
-                <TeamLogo logo={p.logo_avv} nome={p.avversario} size="sm" />
+                <LogoCompatto logo={p.logo_avv} nome={p.avversario} />
                 <span className="flex-1 truncate text-slate-300">{p.avversario}</span>
                 <span className="font-mono font-bold text-slate-200">{p.golf}-{p.gols}</span>
               </div>

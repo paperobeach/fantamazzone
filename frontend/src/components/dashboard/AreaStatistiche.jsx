@@ -9,6 +9,7 @@ import {
   Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
 } from './shared'
 import AreaRuoli from './AreaRuoli'
+import { NomeConBandiera } from '../Bandiera'
 
 // ── Serie ────────────────────────────────────────────────────
 
@@ -235,7 +236,7 @@ function ElencoGiocatori({ giocatori, tipo }) {
       {giocatori.map(g => (
         <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
           <RoleBadge ruolo={g.ruolo} />
-          <span className="flex-1 text-sm text-slate-300 font-medium truncate">{g.giocatore}</span>
+          <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} className="flex-1 text-sm text-slate-300 font-medium" />
           <span className="text-xs text-slate-600 font-mono">{g.giocate} pres.</span>
           <span className={`font-mono text-sm font-bold w-12 text-right ${tipo === 'top' ? 'text-green-400' : 'text-red-400'}`}>
             {fmt(g.media, 2)}

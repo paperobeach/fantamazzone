@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getStatistiche, getSquadre } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge, TabBar, Select } from '../components/ui'
+import { NomeConBandiera } from '../components/Bandiera'
 
 const ORDINI = [
   { value: 'media',       label: 'Media voto' },
@@ -101,7 +102,7 @@ export default function Statistiche() {
               <tr key={`${g.id_giocatore}-${g.id_squadra}`}>
                 <td className="px-4 py-2.5 text-center text-slate-700 font-mono text-xs">{i + 1}</td>
                 <td className="px-4 py-2.5">
-                  <span className="font-medium text-slate-200 text-sm">{g.giocatore}</span>
+                  <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} className="font-medium text-slate-200 text-sm" />
                 </td>
                 <td className="px-4 py-2.5">
                   <span className="text-xs text-slate-500">{g.squadra}</span>

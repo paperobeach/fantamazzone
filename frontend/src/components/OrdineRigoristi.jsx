@@ -1,5 +1,6 @@
 import { ArrowUp, ArrowDown, RotateCcw, Target } from 'lucide-react'
 import { ROLE_LABEL } from '../lib/pitchLayout'
+import { NomeConBandiera } from './Bandiera'
 
 // Ordina `ids` secondo `ordine` (lista salvata/scelta); chi non compare
 // nell'ordine segue nella posizione originale.
@@ -42,7 +43,7 @@ export function OrdineRigoristi({ rosa, titolari, panchina, ordine, onChange, re
     <li className="flex items-center gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
       <span className="w-6 text-right font-mono text-xs text-slate-500">{n}</span>
       <span className="w-5 text-center text-[10px] font-mono text-slate-500">{ROLE_LABEL[String(byId[id]?.ruolo)] ?? ''}</span>
-      <span className="flex-1 text-sm text-slate-300 truncate">{byId[id]?.descrizione ?? byId[id]?.nome ?? `#${id}`}</span>
+      <NomeConBandiera id={id} nome={byId[id]?.descrizione ?? byId[id]?.nome ?? `#${id}`} className="flex-1 text-sm text-slate-300" />
       {!readOnly && (
         <span className="flex items-center gap-1">
           <button type="button" disabled={idx === 0} onClick={() => sposta(lista, altra, titolariSono, idx, -1)}

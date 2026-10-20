@@ -8,6 +8,7 @@ import { getDashboardLive, getLiveDettaglio } from '../../api/client'
 import { RoleBadge } from '../ui'
 import { MatchDetailPanel } from '../MatchDetail'
 import TeamLogo from '../TeamLogo'
+import { Bandiera } from '../Bandiera'
 import { SEGNO, fmt, fmtDataOra } from './shared'
 
 // ── Dati: si aggiornano ogni minuto durante la giornata ──────
@@ -205,7 +206,7 @@ function GiocatoriLive({ live }) {
                   {m.giocatori.map(g => (
                     <span key={g.id_giocatore} title={g.squadra_serie_a ?? ''}
                           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-grass-500/10 border border-grass-500/20 text-[11px] text-grass-300">
-                      <RoleBadge ruolo={g.ruolo} /> {g.nome}
+                      <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
                       {g.competizioni.includes('CHAMP') && <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />}
                     </span>
                   ))}
@@ -220,7 +221,7 @@ function GiocatoriLive({ live }) {
               <div className="mt-1.5 flex flex-wrap gap-1">
                 {live.senza_voto.map(g => (
                   <span key={g.id_giocatore} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
-                    <RoleBadge ruolo={g.ruolo} /> {g.nome}
+                    <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
                   </span>
                 ))}
               </div>
@@ -243,6 +244,7 @@ function GiocatoriLive({ live }) {
                     <div key={c.id_giocatore} className="flex items-center gap-2 text-xs py-0.5">
                       <span className="text-slate-700 font-mono w-3">{i + 1}</span>
                       <RoleBadge ruolo={c.ruolo} />
+                      <Bandiera id={c.id_giocatore} />
                       <span className="text-slate-300 truncate">{c.nome}</span>
                       <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
                     </div>

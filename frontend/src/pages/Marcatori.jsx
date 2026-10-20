@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getMarcatori } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../components/ui'
+import { NomeConBandiera } from '../components/Bandiera'
 
 const TABS = [
   { value: 'marcatori', label: '⚽ Gol' },
@@ -52,7 +53,7 @@ export default function Marcatori() {
                   <td className="px-4 py-3 text-center">
                     <span className={`text-display font-bold ${i < 3 ? 'text-gold-400 text-lg' : 'text-slate-600 text-sm'}`}>{i + 1}</span>
                   </td>
-                  <td className="px-4 py-3 font-medium text-slate-200 text-sm">{g.giocatore}</td>
+                  <td className="px-4 py-3 font-medium text-slate-200 text-sm"><NomeConBandiera id={g.id_giocatore} nome={g.giocatore} /></td>
                   <td className="px-4 py-3 text-xs text-slate-500">{g.squadra}</td>
                   <td className="px-4 py-3 text-center"><RoleBadge ruolo={g.ruolo} /></td>
                   <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">{g.giocate}</td>

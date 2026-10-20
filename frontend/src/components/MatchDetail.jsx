@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowRightLeft, Briefcase, ChevronDown, Clock, Pencil, Radio, MinusCircle, UserMinus } from 'lucide-react'
 import { RoleBadge } from './ui'
+import { Bandiera } from './Bandiera'
 
 // ── Voto colorato (verde/bianco/giallo/rosso in base al valore) ──
 export function VotoBox({ voto, totale, giocata }) {
@@ -16,6 +17,16 @@ export function VotoBox({ voto, totale, giocata }) {
   )
 }
 
+// Nome del giocatore preceduto dalla bandiera (assente per le riserve d'ufficio fittizie)
+function NomeBandiera({ g }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <Bandiera id={g.id_giocatore} />
+      <span>{g.giocatore}</span>
+    </span>
+  )
+}
+
 // ── Nome giocatore, con evidenza della riserva d'ufficio ──
 // Due forme (vedi backend/dettaglio_partita.php):
 //  - ID fittizio (ufficio_fittizio): nessun calciatore reale → solo la dicitura "Riserva d'ufficio";
@@ -28,7 +39,7 @@ export function NomeGiocatore({ g }) {
     return (
       <span className="inline-flex items-center gap-1.5" title="Voto reale (Serie A)">
         <Radio className="w-3.5 h-3.5 text-grass-400 shrink-0" aria-hidden="true" />
-        <span>{g.giocatore}</span>
+        <NomeBandiera g={g} />
       </span>
     )
   }
@@ -36,7 +47,7 @@ export function NomeGiocatore({ g }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-slate-500" title="Senza voto: sostituito o a zero">
         <MinusCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-        <span>{g.giocatore}</span>
+        <NomeBandiera g={g} />
       </span>
     )
   }
@@ -46,7 +57,7 @@ export function NomeGiocatore({ g }) {
     return (
       <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto 6 provvisorio: la partita di Serie A non è ancora stata giocata">
         <Clock className="w-3.5 h-3.5 text-sky-400 shrink-0" aria-hidden="true" />
-        <span>{g.giocatore}</span>
+        <NomeBandiera g={g} />
         <span className="text-[10px] font-mono uppercase tracking-wide text-sky-400">6 provvisorio</span>
       </span>
     )
@@ -55,19 +66,19 @@ export function NomeGiocatore({ g }) {
     return (
       <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto inserito manualmente">
         <Pencil className="w-3.5 h-3.5 text-violet-400 shrink-0" aria-hidden="true" />
-        <span>{g.giocatore}</span>
+        <NomeBandiera g={g} />
         <span className="text-[10px] font-mono uppercase tracking-wide text-violet-400">manuale</span>
       </span>
     )
   }
-  if (!g.riserva_ufficio) return <span>{g.giocatore}</span>
+  if (!g.riserva_ufficio) return <NomeBandiera g={g} />
   return (
     <span className="inline-flex items-center gap-1.5 flex-wrap" title="Voto assegnato d'ufficio">
       <Briefcase className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
       {g.ufficio_fittizio
         ? <span className="text-amber-300">Riserva d'ufficio</span>
         : <>
-            <span>{g.giocatore}</span>
+            <NomeBandiera g={g} />
             <span className="text-[10px] font-mono uppercase tracking-wide text-amber-400">Riserva d'ufficio</span>
           </>}
     </span>
@@ -192,7 +203,7 @@ export function GiocatoriTable({ giocatori, soloFormazione = false }) {
         {righe.map((g, i) => (
           <tr key={`${titolo}-${i}`} className="border-b border-white/[0.03] hover:bg-white/[0.02]">
             <td className="px-3 py-2 w-8"><RoleBadge ruolo={g.ruolo} /></td>
-            <td className="px-3 py-2 text-slate-300 font-medium">{g.giocatore}</td>
+            <td className="px-3 py-2 text-slate-300 font-medium"><NomeBandiera g={g} /></td>
           </tr>
         ))}
       </>
@@ -267,6 +278,7 @@ export function PanchinaTable({ panchina }) {
             <td className="px-3 py-2 w-8"><RoleBadge ruolo={p.ruolo} /></td>
             <td className="px-3 py-2 font-medium">
               <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                <Bandiera id={p.id_giocatore} />
                 <span className={p.stato === 'non_entrato' ? 'text-slate-500' : 'text-slate-300'}>{p.giocatore}</span>
                 {p.stato === 'subentrato' && <BadgeSubentrato g={{ subentrato: true, sostituisce: p.sostituisce }} />}
                 {p.stato === 'sostituito' && <BadgeSostituito />}
@@ -330,6 +342,7 @@ function ExtraPanel({ casa, ospite, extra }) {
         {(s?.giocatori ?? []).map((g, i) => (
           <li key={i} className="flex items-center gap-2 text-xs text-slate-400">
             <span className="w-4 font-mono text-slate-600">{ruoli[g.ruolo]}</span>
+            <Bandiera id={g.id} />
             <span className="flex-1 truncate">{g.nome ?? '—'}</span>
             <span className="font-mono text-slate-500">{g.nota || (g.voto != null ? `voto ${g.voto}` : '')}</span>
             <span className="font-mono text-slate-300 w-12 text-right">{Number(g.punti ?? 0).toFixed(2)}</span>

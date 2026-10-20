@@ -141,6 +141,9 @@ export const eliminaSimulazionePartita = (stagione, id_squadra, competizione = '
 // ── Squadre ──────────────────────────────────────────────────
 
 export const getSquadre = (stagione)      => get('squadre.php', { stagione })
+
+// Bandiere dei giocatori in rosa: { [id_giocatore]: 'File.jpg' } (file in /public/flags/)
+export const getBandiere = (stagione) => get('bandiere.php', { stagione })
 export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id })
 
 // ── Dashboard squadra ────────────────────────────────────────

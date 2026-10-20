@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { X, GripVertical, RotateCcw, ChevronUp, ChevronDown, Armchair, ArrowRight, ArrowLeft } from 'lucide-react'
 import { PitchField, PlayerChip, IncontroSerieA } from './PitchField'
+import { NomeConBandiera } from './Bandiera'
 import { ROLE_LABEL, MODULI_VALIDI, getSlotsForModulo, conteggioAtteso, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 
 const ROLE_PILL_CLASS = {
@@ -74,7 +75,7 @@ export function RosterRow({
       <span className="text-[9px] font-mono w-5 text-slate-600 flex-shrink-0">{displayNumber}</span>
       <span className={`stat-pill ${ROLE_PILL_CLASS[player.ruolo] ?? ''}`}>{ROLE_LABEL[String(player.ruolo)]}</span>
       <div className="flex-1 min-w-0 flex flex-col">
-        <span className="text-sm text-slate-300 truncate">{player.descrizione}</span>
+        <NomeConBandiera id={player.id} nome={player.descrizione} className="text-sm text-slate-300" />
         <IncontroSerieA player={player} />
       </div>
 
@@ -474,7 +475,7 @@ export function FormationBuilder({
                       >
                         <span className={`stat-pill flex-shrink-0 ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
                         <span className="flex-1 min-w-0 flex flex-col">
-                          <span className="truncate">{p.descrizione}</span>
+                          <NomeConBandiera id={p.id} nome={p.descrizione} />
                           <IncontroSerieA player={p} />
                         </span>
                         {fromTribuna && (

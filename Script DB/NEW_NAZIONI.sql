@@ -1,0 +1,82 @@
+-- ============================================================
+-- Adeguamento tabella NEW_NAZIONI (nazione -> file bandiera)
+--
+-- Contiene SOLO le 68 nazioni presenti in NEW_GIOCATORI_BASE_ASTA.nazione
+-- (valori invariati). `bandiera` è il nome del file in
+-- frontend/public/flags/ (nomi del pacchetto world_flags.zip).
+-- Le righe preesistenti vengono sostituite. Lo script è rieseguibile.
+-- England e Scotland usano British.jpg (non esistono bandiere separate).
+-- ============================================================
+SET NAMES utf8mb4;
+
+DELETE FROM `NEW_NAZIONI`;
+
+INSERT INTO `NEW_NAZIONI` (`nazione`, `bandiera`) VALUES
+  ('Albania', 'Albanian.jpg'),
+  ('Algeria', 'Algerian.jpg'),
+  ('Angola', 'Angolan.jpg'),
+  ('Argentina', 'Argentine.jpg'),
+  ('Armenia', 'Armenian.jpg'),
+  ('Australia', 'Australian.jpg'),
+  ('Austria', 'Austrian.jpg'),
+  ('Belgium', 'Belgian.jpg'),
+  ('Bosnia and Herzegovina', 'Bosnian and Herzegovinian.jpg'),
+  ('Brazil', 'Brazilian.jpg'),
+  ('Bulgaria', 'Bulgarian.jpg'),
+  ('Burkina Faso', 'Burkinabe.jpg'),
+  ('Cameroon', 'Cameroonian.jpg'),
+  ('Canada', 'Canadian.jpg'),
+  ('Colombia', 'Colombian.jpg'),
+  ('Costa Rica', 'Costa Rican.jpg'),
+  ('Cote d''Ivoire', 'Ivorian.jpg'),
+  ('Croatia', 'Croatian.jpg'),
+  ('Czech Republic', 'Czech.jpg'),
+  ('Denmark', 'Danish.jpg'),
+  ('Ecuador', 'Ecuadorian.jpg'),
+  ('Egypt', 'Egyptian.jpg'),
+  ('England', 'British.jpg'),
+  ('Finland', 'Finnish.jpg'),
+  ('France', 'French.jpg'),
+  ('Gabon', 'Gabonese.jpg'),
+  ('Gambia', 'Gambian.jpg'),
+  ('Georgia', 'Georgian.jpg'),
+  ('Germany', 'German.jpg'),
+  ('Ghana', 'Ghanaian.jpg'),
+  ('Greece', 'Greek.jpg'),
+  ('Guinea', 'Guinean.jpg'),
+  ('Guinea-Bissau', 'Bissau-Guinean.jpg'),
+  ('Iceland', 'Icelandic.jpg'),
+  ('Indonesia', 'Indonesian.jpg'),
+  ('Ireland', 'Irish.jpg'),
+  ('Israel', 'Israeli.jpg'),
+  ('Italia', 'Italian.jpg'),
+  ('Italy', 'Italian.jpg'),
+  ('Ivory Coast', 'Ivorian.jpg'),
+  ('Jamaica', 'Jamaican.jpg'),
+  ('Japan', 'Japanese.jpg'),
+  ('Kosovo', 'Kosovar.jpg'),
+  ('Lithuania', 'Lithuanian.jpg'),
+  ('Mali', 'Malian.jpg'),
+  ('Montenegro', 'Montenegrin.jpg'),
+  ('Morocco', 'Moroccan.jpg'),
+  ('Netherlands', 'Dutch.jpg'),
+  ('Nigeria', 'Nigerian.jpg'),
+  ('North Macedonia', 'North Macedonian.jpg'),
+  ('Norway', 'Norwegian.jpg'),
+  ('Poland', 'Polish.jpg'),
+  ('Portugal', 'Portuguese.jpg'),
+  ('Romania', 'Romanian.jpg'),
+  ('Scotland', 'British.jpg'),
+  ('Senegal', 'Senegalese.jpg'),
+  ('Serbia', 'Serbian.jpg'),
+  ('Sierra Leone', 'Sierra Leonean.jpg'),
+  ('Slovakia', 'Slovak.jpg'),
+  ('Slovenia', 'Slovenian.jpg'),
+  ('Spain', 'Spanish.jpg'),
+  ('Suriname', 'Surinamese.jpg'),
+  ('Sweden', 'Swedish.jpg'),
+  ('Switzerland', 'Swiss.jpg'),
+  ('Türkiye', 'Turkish.jpg'),
+  ('Ukraine', 'Ukrainian.jpg'),
+  ('United States', 'American.jpg'),
+  ('Uruguay', 'Uruguayan.jpg');

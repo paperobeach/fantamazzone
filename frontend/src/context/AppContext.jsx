@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { getStagioni, getSistema } from '../api/client'
+import { getStagioni, getSistema, getBandiere } from '../api/client'
 
 const AppContext = createContext(null)
 
@@ -7,6 +7,8 @@ export function AppProvider({ children }) {
   const [stagioni,        setStagioni]        = useState([])
   const [stagione,        setStagione]        = useState(null)
   const [sistemaParams,   setSistemaParams]   = useState({})
+  // Bandiere dei giocatori: { id_giocatore: 'File.jpg' } (vedi components/Bandiera.jsx)
+  const [bandiere,        setBandiere]        = useState({})
   const [utente,          setUtente]          = useState(() => {
     try { return JSON.parse(localStorage.getItem('lfm_utente')) ?? null }
     catch { return null }
@@ -37,6 +39,16 @@ export function AppProvider({ children }) {
       .then(setSistemaParams)
       .catch(console.error)
   }, [stagione])
+
+  // Bandiere dei giocatori: stagione scelta + ultima stagione (la sezione
+  // "Gestione squadra" usa sempre l'ultima, a prescindere dalla scelta).
+  // Se un giocatore è in entrambe vale la stagione scelta.
+  useEffect(() => {
+    if (!stagione) return
+    const daCaricare = [...new Set([stagioni[0], stagione].filter(Boolean))]
+    Promise.all(daCaricare.map(s => getBandiere(s).catch(() => ({}))))
+      .then(mappe => setBandiere(Object.assign({}, ...mappe)))
+  }, [stagione, stagioni])
 
   const changeStagione = useCallback((s) => {
     setStagione(s)
@@ -76,7 +88,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       stagioni, stagione, changeStagione, ultimaStagione,
-      sistemaParams,
+      sistemaParams, bandiere,
       utente, doLogin, doLogout, isAdmin, canAi,
       loading,
     }}>

@@ -7,6 +7,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { getDashboardRuoli } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, TabBar } from '../ui'
 import { Section, Vuoto, Indicatore, BarraPerc, fmt } from './shared'
+import { Bandiera } from '../Bandiera'
 
 const REPARTI = [
   { value: '1', label: 'Portieri' },
@@ -106,7 +107,7 @@ function MatriceGiocatori({ giornate, giocatori, portiere }) {
           {giocatori.map(p => (
             <tr key={p.id_giocatore ?? 'ufficio'}>
               <td className="sticky left-0 z-10 bg-pitch-900 px-3 py-1.5 border-b border-white/[0.03] text-slate-300 whitespace-nowrap">
-                {p.nome} <span className="text-slate-600 font-mono">· {p.presenze} pres.</span>
+                <span className="inline-flex items-center gap-1.5 align-middle"><Bandiera id={p.id_giocatore} />{p.nome}</span> <span className="text-slate-600 font-mono">· {p.presenze} pres.</span>
               </td>
               {giornate.map(g => {
                 const v = p.per_giornata[g.giornata]

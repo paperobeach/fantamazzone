@@ -7,6 +7,7 @@ import {
 } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
+import { Bandiera } from '../components/Bandiera'
 import { MatchResultRow } from '../components/MatchResult'
 import {
   Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator,
@@ -77,7 +78,10 @@ function RigaEdit({ g, stagione, onChanged }) {
     <tr className={`border-b border-white/[0.03] ${g.modificabile ? '' : 'opacity-60'}`}>
       <td className="px-2 py-2"><RoleBadge ruolo={g.ruolo} /></td>
       <td className="px-2 py-2 text-slate-300 text-xs min-w-[150px]">
-        <div className="font-medium">{g.giocatore} {!g.titolare && <span className="text-slate-600">(panchina)</span>}</div>
+        <div className="font-medium flex items-center gap-1.5">
+          <Bandiera id={g.id_giocatore} />
+          <span>{g.giocatore} {!g.titolare && <span className="text-slate-600">(panchina)</span>}</span>
+        </div>
         <div className="flex items-center gap-2 mt-0.5">
           {badge}
           {g.squadra_serie_a && <span className="text-[10px] text-slate-600">{g.squadra_serie_a}</span>}

@@ -4,6 +4,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getTopFlop } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../components/ui'
 import { PitchFormation } from '../components/PitchFormation'
+import { NomeConBandiera } from '../components/Bandiera'
 
 const RUOLO_ORDER = { '1': 0, '2': 1, '3': 2, '4': 3 }
 
@@ -17,7 +18,7 @@ function ElevenGrid({ players, isTop }) {
       {sorted.map((p, i) => (
         <div key={i} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0 hover:bg-white/[0.02] transition-colors">
           <RoleBadge ruolo={p.ruolo} />
-          <span className="flex-1 text-sm text-slate-300 font-medium">{p.giocatore}</span>
+          <NomeConBandiera id={p.id_giocatore} nome={p.giocatore} className="flex-1 text-sm text-slate-300 font-medium" />
           <span className="text-xs text-slate-600">{p.squadra}</span>
           <span className={`font-mono text-sm font-bold w-12 text-right ${
             isTop ? 'text-green-400' : 'text-red-400'

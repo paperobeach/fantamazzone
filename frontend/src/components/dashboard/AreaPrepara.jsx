@@ -4,6 +4,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { getDashboardPrepara } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../ui'
 import TeamLogo from '../TeamLogo'
+import { NomeConBandiera } from '../Bandiera'
 import { PitchLineup } from '../PitchLineup'
 import PreparaTop11 from './PreparaTop11'
 import PreparaSerieA from './PreparaSerieA'
@@ -19,7 +20,7 @@ function Lineup({ giocatori, conVoti = false }) {
   const riga = g => (
     <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2 border-b border-white/[0.03] last:border-0">
       <RoleBadge ruolo={g.ruolo} />
-      <span className={`flex-1 text-sm truncate ${g.titolare ? 'text-slate-300' : 'text-slate-500'}`}>{g.giocatore}</span>
+      <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} className={`flex-1 text-sm ${g.titolare ? 'text-slate-300' : 'text-slate-500'}`} />
       {conVoti && (
         <span className="text-right flex-shrink-0">
           {g.giocata === false || g.voto === null || g.voto === undefined

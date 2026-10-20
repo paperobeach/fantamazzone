@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { Calendar, Users, Home, Plane, ListChecks } from 'lucide-react'
 import { RoleBadge } from '../ui'
+import { Bandiera } from '../Bandiera'
 import { Section, Vuoto, Indicatore, BarraPerc, parseDataOra } from './shared'
 
 const RUOLI = { 1: 'Portieri', 2: 'Difensori', 3: 'Centrocampisti', 4: 'Attaccanti' }
@@ -18,7 +19,7 @@ function Chips({ giocatori, allinea }) {
     <div className={`flex flex-wrap gap-1 ${allinea === 'text-right' ? 'justify-end' : ''}`}>
       {giocatori.map(g => (
         <span key={g.id_giocatore} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-grass-500/10 border border-grass-500/20 text-[11px] text-grass-300">
-          <RoleBadge ruolo={g.ruolo} /> {g.nome}
+          <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
         </span>
       ))}
     </div>
@@ -94,7 +95,14 @@ export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
                   {a.casa
                     ? <><Home className="w-3 h-3" /> loro in casa</>
                     : <><Plane className="w-3 h-3" /> loro in trasferta</>}
-                  <span>· {a.giocatori.map(g => g.nome).join(', ')}</span>
+                  <span className="inline-flex items-center gap-x-2 gap-y-0.5 flex-wrap">
+                    <span>·</span>
+                    {a.giocatori.map((g, i) => (
+                      <span key={g.id_giocatore ?? i} className="inline-flex items-center gap-1">
+                        <Bandiera id={g.id_giocatore} size="xs" />{g.nome}{i < a.giocatori.length - 1 ? ',' : ''}
+                      </span>
+                    ))}
+                  </span>
                 </p>
               </div>
             ))}
@@ -111,7 +119,10 @@ export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
               <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2 border-b border-white/[0.03] last:border-0">
                 <RoleBadge ruolo={g.ruolo} />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-300 truncate">{g.nome}</p>
+                  <p className="text-sm text-slate-300 flex items-center gap-1.5 min-w-0">
+                    <Bandiera id={g.id_giocatore} />
+                    <span className="truncate">{g.nome}</span>
+                  </p>
                   <p className="text-[11px] text-slate-600 truncate">{g.serie_a ?? 'Squadra non determinata'}</p>
                 </div>
                 {g.avversaria ? (

@@ -4,6 +4,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getSquadra } from '../api/client'
 import { LoadingState, ErrorState, RoleBadge, PageHeader } from '../components/ui'
 import { ArrowLeft, Trophy } from 'lucide-react'
+import { Bandiera } from '../components/Bandiera'
 
 const RUOLO_ORDER = { '1': 0, '2': 1, '3': 2, '4': 3 }
 const RUOLO_LABEL = { '1': 'Portieri', '2': 'Difensori', '3': 'Centrocampisti', '4': 'Attaccanti' }
@@ -81,7 +82,10 @@ export default function SquadraDetail() {
                 {grouped[r].map(g => (
                   <tr key={g.id}>
                     <td className="px-4 py-2.5">
-                      <span className="text-sm text-slate-300 font-medium">{g.descrizione}</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <Bandiera id={g.id} />
+                        <span className="text-sm text-slate-300 font-medium">{g.descrizione}</span>
+                      </span>
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <span className="font-mono text-xs text-grass-400 font-semibold">{g.crediti}</span>

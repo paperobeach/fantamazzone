@@ -74,7 +74,7 @@ export function OrdineRigoristi({ rosa, titolari, panchina, ordine, onChange, re
       <p className="text-xs text-slate-500 mb-3">
         Questo turno prevede, in caso di parità, supplementari e calci di rigore. Il rigore è realizzato se il
         voto del giocatore è almeno 6. Se non consegni una lista si parte dal portiere, per numero di maglia;
-        finita la lista si va ad oltranza ripartendo dall'inizio.
+        si tirano i primi 5 rigoristi di ciascuna squadra; in caso di ulteriore parità si prosegue ad oltranza con i successivi, uno per squadra, nell'ordine.
         {!ordine && ' (Ordine attuale: di default.)'}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">

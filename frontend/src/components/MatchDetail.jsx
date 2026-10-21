@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { ArrowRightLeft, Briefcase, ChevronDown, Clock, Pencil, Radio, MinusCircle, UserMinus } from 'lucide-react'
 import { RoleBadge } from './ui'
 import { Bandiera } from './Bandiera'
@@ -338,14 +338,23 @@ function ExtraPanel({ casa, ospite, extra }) {
       <p className="text-xs font-semibold text-slate-400 mb-1">
         {nomeSq} · {Number(s?.punti ?? 0).toFixed(2)} punti = {s?.gol ?? 0} gol
       </p>
-      <ul className="space-y-0.5">
+      <ul className="space-y-1.5">
         {(s?.giocatori ?? []).map((g, i) => (
-          <li key={i} className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="w-4 font-mono text-slate-600">{ruoli[g.ruolo]}</span>
-            <Bandiera id={g.id} />
-            <span className="flex-1 truncate">{g.nome ?? '—'}</span>
-            <span className="font-mono text-slate-500">{g.nota || (g.voto != null ? `voto ${g.voto}` : '')}</span>
-            <span className="font-mono text-slate-300 w-12 text-right">{Number(g.punti ?? 0).toFixed(2)}</span>
+          <li key={i} className="flex items-start gap-2 text-xs text-slate-400">
+            <span className="w-4 shrink-0 font-mono text-slate-600">{ruoli[g.ruolo]}</span>
+            {/* Il nome va a capo e non viene mai troncato: nota/voto sotto, punti a destra */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap text-slate-300">
+                {g.id != null && <Bandiera id={g.id} />}
+                <span className="break-words">{g.nome ?? '—'}</span>
+              </div>
+              {(g.nota || g.voto != null) && (
+                <p className="font-mono text-[10px] text-slate-500 break-words">
+                  {g.nota || `voto ${g.voto}`}
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 font-mono text-slate-300 w-12 text-right">{Number(g.punti ?? 0).toFixed(2)}</span>
           </li>
         ))}
       </ul>
@@ -372,22 +381,29 @@ function ExtraPanel({ casa, ospite, extra }) {
       {extra.rigori && (
         <section>
           <h4 className="text-[11px] uppercase tracking-wider text-amber-400 mb-2">
-            Calci di rigore · {extra.rig_golf.casa} - {extra.rig_golf.ospite}
+            Calci di rigore (primi 5 rigoristi) · {extra.rig_golf.casa} - {extra.rig_golf.ospite}
             {det.rig?.oltranza ? ' (ad oltranza)' : ''}
           </h4>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <tbody>
-                {(det.rig?.tiri ?? []).map(t => (
-                  <tr key={t.n} className="border-t border-white/[0.03]">
+                {(det.rig?.tiri ?? []).map((t, idx, tutti) => (
+                  <Fragment key={t.n}>
+                    {t.fase === 'oltranza' && tutti[idx - 1]?.fase !== 'oltranza' && (
+                      <tr>
+                        <td colSpan={3} className="pt-2 pb-1 text-[10px] font-mono uppercase tracking-widest text-amber-400">Ad oltranza</td>
+                      </tr>
+                    )}
+                  <tr className="border-t border-white/[0.03]">
                     <td className="py-1 pr-2 font-mono text-slate-600 w-8">{t.n}</td>
-                    <td className={`py-1 pr-2 ${t.casa.segna ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`py-1 pr-2 align-top break-words ${t.casa.segna ? 'text-green-400' : 'text-red-400'}`}>
                       {t.casa.nome} <span className="font-mono text-slate-500">{t.casa.voto ?? 's.v.'}</span> {t.casa.segna ? '✓' : '✗'}
                     </td>
-                    <td className={`py-1 ${t.ospite.segna ? 'text-green-400' : 'text-red-400'}`}>
+                    <td className={`py-1 align-top break-words ${t.ospite.segna ? 'text-green-400' : 'text-red-400'}`}>
                       {t.ospite.nome} <span className="font-mono text-slate-500">{t.ospite.voto ?? 's.v.'}</span> {t.ospite.segna ? '✓' : '✗'}
                     </td>
                   </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

@@ -22,6 +22,12 @@
 // (NEW_SIMULAZIONE_EDIT) è unico: riguarda il giocatore e vale per
 // entrambe le competizioni.
 //
+// SUPPLEMENTARI E RIGORI (Champions): se il turno li prevede e la sfida è
+// in parità, la simulazione calcola anche supplementari e calci di rigore
+// (lib/ChampionsSupplementari.php) con i voti della simulazione (reale,
+// manuale o 6 provvisorio) e li salva nelle colonne supp_* / rig_* / passa /
+// dett_extra di NEW_SIMULAZIONE_RISULTATI_CHAMP.
+//
 // Le regole di sostituzione/riserva d'ufficio/fattore casa/fasce gol
 // sono quelle di backend/admin/calcolo_giornata.php (le funzioni sono
 // riscritte qui con prefisso sim_ per non modificare il calcolo reale).
@@ -50,6 +56,7 @@
 require_once __DIR__ . "/CalcolatoreVoti.php";
 require_once __DIR__ . "/RegoleCalcolo.php";
 require_once __DIR__ . "/FormazioniChampions.php";
+require_once __DIR__ . "/ChampionsSupplementari.php";
 
 const SIM_VOTO_PROVVISORIO = 6.0;
 
@@ -259,6 +266,7 @@ function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $id
     $sostMovimento = 0;
     $sostPortiere  = 0;
     $riserveUfficio = 0;
+    $sostitutiEntrati = []; // panchinari entrati al posto di un titolare (servono ai supplementari)
 
     foreach ($titolari as $t) {
         $ruoloInt = (int) $t['ruolo'];
@@ -294,6 +302,7 @@ function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $id
                         $statCandidato = sim_stat_giocatore($ctx, $idCandidato, $warning, $candidato['descrizione']);
                         if (!$statCandidato['sv']) {
                             $sostituto = $statCandidato;
+                            $sostitutiEntrati[] = $idCandidato;
                             $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}"
                                        . ($statCandidato['provvisorio'] ? " (voto provvisorio)" : "");
                             if ($ruoloInt === 1) $sostPortiere++; else $sostMovimento++;
@@ -329,6 +338,7 @@ function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $id
     }
 
     $formazione['modulo_difensori'] = count($formazione['difensori']);
+    $formazione['sostituti_entrati'] = $sostitutiEntrati;
     return $formazione;
 }
 
@@ -397,7 +407,8 @@ function sim_salva_riga_risultato(
     float $ftotale, float $ftotaleA, int $golf, int $gols,
     int $modificatore, int $modificatoreA, float $modAtt,
     int $numCc, float $totCc, float $modCc, int $fattoreCampo, ?string $utente = null,
-    string $tabRis = 'NEW_SIMULAZIONE_RISULTATI'
+    string $tabRis = 'NEW_SIMULAZIONE_RISULTATI',
+    ?array $extra = null
 ): void {
     if ($golf > $gols)       { $punti = 3; $segno = 'V'; }
     elseif ($golf === $gols) { $punti = 1; $segno = 'N'; }
@@ -407,13 +418,24 @@ function sim_salva_riga_risultato(
     $utenteSql = ($utente === null || trim($utente) === '')
         ? 'NULL'
         : "'" . mysqli_real_escape_string($conn, mb_substr(trim($utente), 0, 50)) . "'";
+    // Supplementari e rigori (solo simulazione Champions): colonne extra
+    $colEx = '';
+    $valEx = '';
+    if ($extra !== null) {
+        $dett  = $extra['dett_extra'] === null ? 'NULL' : "'" . mysqli_real_escape_string($conn, (string) $extra['dett_extra']) . "'";
+        $colEx = ', supp_giocati, supp_ftotale, supp_golf, supp_gols, rig_giocati, rig_golf, rig_gols, passa, dett_extra';
+        $valEx = ', ' . (int) $extra['supp_giocati'] . ', ' . $f((float) $extra['supp_ftotale']) . ', '
+               . (int) $extra['supp_golf'] . ', ' . (int) $extra['supp_gols'] . ', '
+               . (int) $extra['rig_giocati'] . ', ' . (int) $extra['rig_golf'] . ', ' . (int) $extra['rig_gols'] . ', '
+               . (int) $extra['passa'] . ', ' . $dett;
+    }
     $ok = mysqli_query($conn, "INSERT INTO $tabRis
         (giornata, stagione, id_squadra, id_squadra_a, ftotale, ftotale_a, golf, gols,
          modificatore, modificatore_a, punti, fattore_campo, segno,
-         mod_att, num_cc, tot_cc, mod_cc, calcolato_il, simulato_da)
+         mod_att, num_cc, tot_cc, mod_cc, calcolato_il, simulato_da$colEx)
         VALUES ($giornata, $stagione, $idSquadra, $idSquadraA, {$f($ftotale)}, {$f($ftotaleA)}, $golf, $gols,
                 $modificatore, $modificatoreA, $punti, $fattoreCampo, '$segno',
-                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)}, NOW(3), $utenteSql)");
+                {$f($modAtt)}, $numCc, {$f($totCc)}, {$f($modCc)}, NOW(3), $utenteSql$valEx)");
     if (!$ok) throw new Exception("Scrittura $tabRis: " . mysqli_error($conn));
 }
 
@@ -503,6 +525,14 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
     }
 
     $ctx = sim_contesto($stagione, $giornata);
+    $flagSupplementari = $champ ? champions_flag_supplementari($stagione) : [];
+    // Info di turno delle partite di Champions (girone, giornata Champions, cella di configurazione)
+    $infoChamp = [];
+    if ($champ) {
+        foreach (champions_partite_giornata($stagione, $giornata)['partite'] as $pc) {
+            $infoChamp[$pc['casa'] . '-' . $pc['ospite']] = $pc;
+        }
+    }
 
     $warning = [];
     $partiteSaltate = [];
@@ -562,6 +592,31 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
             $golfCasa   = $esitoGol['golf_casa'];
             $golfOspite = $esitoGol['golf_ospite'];
 
+            // Supplementari e rigori (solo Champions), se il turno li prevede
+            // e la sfida è in parità: voti della simulazione (reale/manuale/6 provvisorio)
+            $extra = null;
+            $pc = $infoChamp[$idCasa . '-' . $idOspite] ?? null;
+            if ($champ && $pc !== null && $pc['cella'] !== null && !empty($flagSupplementari[$pc['cella']])) {
+                $caricaStat = function (int $idG) use ($ctx, &$warning) {
+                    $w = [];
+                    return sim_stat_giocatore($ctx, $idG, $w);
+                };
+                try {
+                    $extra = champions_valuta_extra(
+                        $stagione, $giornata, $pc['girone'], (int) $pc['giornata_champ'],
+                        $idCasa, $idOspite, $golfCasa, $golfOspite,
+                        $ris['casa']['totale_squadra'], $ris['ospite']['totale_squadra'],
+                        $formCasa, $formOspite, $tabCasa, $tabOspite,
+                        $config, $caricaStat, $warning
+                    );
+                } catch (Throwable $e) {
+                    $warning[] = "Champions - squadre $idCasa-$idOspite: supplementari/rigori non calcolati ({$e->getMessage()})";
+                    $extra = null;
+                }
+            }
+            $exCasa   = $champ ? champions_colonne_extra($extra, $idCasa, $idOspite, $idCasa)   : null;
+            $exOspite = $champ ? champions_colonne_extra($extra, $idCasa, $idOspite, $idOspite) : null;
+
             sim_salva_riga_risultato(
                 $conn, $stagione, $giornata, $idCasa, $idOspite,
                 $ris['casa']['totale_squadra'], $ris['ospite']['totale_squadra'],
@@ -569,7 +624,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['ospite']['modificatori']['difesa']), (int) round(-$ris['casa']['modificatori']['difesa']),
                 $ris['casa']['modificatori']['attacco'],
                 $ris['casa']['numero_centrocampisti'], $ris['casa']['somma_centrocampisti'], $ris['casa']['modificatori']['centrocampo'],
-                $fattoreCampoCasa, $utente, $tab['ris']
+                $fattoreCampoCasa, $utente, $tab['ris'], $exCasa
             );
             sim_salva_riga_risultato(
                 $conn, $stagione, $giornata, $idOspite, $idCasa,
@@ -578,7 +633,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
                 (int) round(-$ris['casa']['modificatori']['difesa']), (int) round(-$ris['ospite']['modificatori']['difesa']),
                 $ris['ospite']['modificatori']['attacco'],
                 $ris['ospite']['numero_centrocampisti'], $ris['ospite']['somma_centrocampisti'], $ris['ospite']['modificatori']['centrocampo'],
-                0, $utente, $tab['ris']
+                0, $utente, $tab['ris'], $exOspite
             );
 
             $elaborate++;

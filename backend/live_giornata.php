@@ -77,6 +77,9 @@ function live_risultato(?array $r): ?array
         // Solo per la simulazione: quando e da chi è stata eseguita
         "calcolato_il"   => $r["calcolato_il"] ?? null,
         "simulato_da"    => $r["simulato_da"] ?? null,
+        // Solo Champions: supplementari e rigori (null se non giocati)
+        "supp"           => (int) ($r["supp_giocati"] ?? 0) === 1 ? ["casa" => (int) $r["supp_golf"], "ospite" => (int) $r["supp_gols"]] : null,
+        "rig"            => (int) ($r["rig_giocati"] ?? 0) === 1 ? ["casa" => (int) $r["rig_golf"], "ospite" => (int) $r["rig_gols"]] : null,
     ];
 }
 
@@ -119,9 +122,11 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
         $nomi[(int) $r["id"]] = ["id" => (int) $r["id"], "nome" => $r["nome"], "logo" => $r["logo"]];
     }
 
-    $realiC = live_indicizza(query_all("SELECT squadra AS id_squadra, ftotale, ftotale_a, golf, gols, punti, segno
+    $realiC = live_indicizza(query_all("SELECT squadra AS id_squadra, ftotale, ftotale_a, golf, gols, punti, segno,
+                                               supp_giocati, supp_golf, supp_gols, rig_giocati, rig_golf, rig_gols
                                         FROM NEW_RISULTATI_CHAMP WHERE stagione = $stagione AND giornata = $giornata"));
-    $simC   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il, simulato_da
+    $simC   = live_indicizza(query_all("SELECT id_squadra, ftotale, ftotale_a, golf, gols, punti, segno, calcolato_il, simulato_da,
+                                               supp_giocati, supp_golf, supp_gols, rig_giocati, rig_golf, rig_gols
                                         FROM NEW_SIMULAZIONE_RISULTATI_CHAMP WHERE stagione = $stagione AND giornata = $giornata"));
     $flagC = [];
     foreach (query_all("SELECT id_squadra, SUM(provvisorio) AS p, SUM(manuale) AS m

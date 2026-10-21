@@ -33,11 +33,13 @@
 // CALCOLO RIGORI
 //   Ogni squadra ha una lista di rigoristi: l'ordine inserito dall'allenatore
 //   (NEW_RIGORISTI_CHAMP: titolari da 1 a 11, poi i panchinari) oppure, se non
-//   consegnato, l'ordine dei numeri di maglia (si parte dal portiere). Si tira
-//   a turno un rigore per squadra, in ordine; il rigore è realizzato se il
-//   VOTO del giocatore nella partita è >= 6 (un giocatore senza voto non
-//   realizza). Terminata la lista, se persiste la parità si va ad oltranza
-//   ripartendo dall'inizio della lista, finché in un giro una squadra segna e
+//   consegnato, l'ordine dei numeri di maglia (si parte dal portiere). La serie
+//   iniziale considera SOLO i primi 5 rigoristi di ciascuna squadra, un rigore
+//   per squadra a turno, in ordine. Il rigore è realizzato se il VOTO del
+//   giocatore nella partita è >= 6 (un giocatore senza voto non realizza).
+//   In caso di ulteriore parità si prosegue ad oltranza, un rigorista per
+//   squadra per volta, nell'ordine della lista (6°, 7°, ...; terminata la
+//   lista si riparte dal primo), finché in un giro una squadra segna e
 //   l'altra no.
 // ============================================================
 
@@ -46,6 +48,9 @@ require_once __DIR__ . "/CalcolatoreVoti.php";
 
 /** Voto minimo (incluso) perché il rigore si consideri realizzato. */
 const CHAMP_RIGORE_VOTO_MIN = 6.0;
+
+/** Numero di rigoristi per squadra nella serie iniziale (poi si va ad oltranza). */
+const CHAMP_RIGORI_SERIE = 5;
 
 /** Giri di oltranza oltre i quali, in parità assoluta, si decide con il punteggio. */
 const CHAMP_RIGORI_MAX_OLTRANZA = 200;
@@ -177,8 +182,10 @@ function champions_esito_rigoristi(array $lista, callable $caricaStat): array
 
 /**
  * Simula la serie dei rigori. Una squadra tira per prima (casa), poi l'altra,
- * a turno lungo le liste; terminate le liste (la più corta fissa il numero di
- * giri) il confronto passa all'oltranza se c'è parità.
+ * a turno. Serie iniziale: SOLO i primi CHAMP_RIGORI_SERIE (5) rigoristi di
+ * ciascuna squadra. In caso di parità si prosegue ad oltranza, un rigorista
+ * per squadra per volta, nell'ordine della lista (dal 6° in poi; terminata la
+ * lista si riparte dal primo).
  *
  * @param array $casa, $ospite  liste con 'segna' (vedi champions_esito_rigoristi)
  * @return array ['casa' => int, 'ospite' => int, 'tiri' => [...], 'oltranza' => bool,
@@ -192,26 +199,26 @@ function champions_simula_rigori(array $casa, array $ospite, int $maxOltranza = 
 
     $nC = count($casa);
     $nO = count($ospite);
-    $n  = min($nC, $nO);
+    $n  = min(CHAMP_RIGORI_SERIE, $nC, $nO);
     $gc = 0;
     $go = 0;
     $tiri = [];
     $sintesi = fn(array $r) => ["id" => $r["id"], "nome" => $r["nome"], "voto" => $r["voto"], "segna" => (bool) $r["segna"]];
 
-    // Fase della lista: un rigore per squadra, nell'ordine
+    // Serie iniziale: primi 5 rigoristi, un rigore per squadra, nell'ordine
     for ($i = 0; $i < $n; $i++) {
         $gc += $casa[$i]["segna"] ? 1 : 0;
         $go += $ospite[$i]["segna"] ? 1 : 0;
         $tiri[] = ["n" => $i + 1, "fase" => "lista", "casa" => $sintesi($casa[$i]), "ospite" => $sintesi($ospite[$i])];
     }
 
-    // Oltranza: si riparte dall'inizio di ciascuna lista
+    // Oltranza: si prosegue con il rigorista successivo di ciascuna lista
     $oltranza = false;
     if ($gc === $go) {
         $oltranza = true;
         for ($r = 0; $r < $maxOltranza; $r++) {
-            $a = $casa[$r % $nC];
-            $b = $ospite[$r % $nO];
+            $a = $casa[($n + $r) % $nC];
+            $b = $ospite[($n + $r) % $nO];
             $gc += $a["segna"] ? 1 : 0;
             $go += $b["segna"] ? 1 : 0;
             $tiri[] = ["n" => $n + $r + 1, "fase" => "oltranza", "casa" => $sintesi($a), "ospite" => $sintesi($b)];

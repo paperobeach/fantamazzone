@@ -313,7 +313,7 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
             </p>
           )}
           {fonte
-            ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} loading={loading} error={error} />
+            ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} extra={det?.extra} loading={loading} error={error} />
             : <>
                 <MatchDetailPanel casa={formMatch?.casa} ospite={formMatch?.ospite} loading={loadingForm} error={errorForm} />
                 <p className="px-4 py-2 text-center text-[11px] text-slate-600 border-t border-white/5">

@@ -59,7 +59,8 @@ if ($champ) {
     // NEW_RISULTATI_CHAMP ha la squadra in "squadra": la si espone come id_squadra
     $tRis  = $fonte === "reale"
         ? "(SELECT stagione, giornata, squadra AS id_squadra, id_squadra_a, ftotale, ftotale_a, golf, gols,
-                   modificatore, modificatore_a, punti, segno, mod_att, num_cc, tot_cc, mod_cc
+                   modificatore, modificatore_a, punti, segno, mod_att, num_cc, tot_cc, mod_cc,
+                   supp_giocati, supp_ftotale, supp_golf, supp_gols, rig_giocati, rig_golf, rig_gols, passa, dett_extra
             FROM NEW_RISULTATI_CHAMP)"
         : "NEW_SIMULAZIONE_RISULTATI_CHAMP";
     $tVoti = $fonte === "reale" ? "NEW_VOTI_CHAMP" : "NEW_SIMULAZIONE_VOTI_CHAMP";
@@ -70,6 +71,11 @@ if ($champ) {
     $tForm = "NEW_FORMAZIONI";
 }
 $extraRis = $fonte === "reale" ? "NULL AS calcolato_il, NULL AS simulato_da" : "r.calcolato_il, r.simulato_da";
+// Supplementari e rigori (solo Champions)
+$extraChamp = $champ
+    ? "r.supp_giocati, r.supp_ftotale AS supp_ftotale_casa, r2.supp_ftotale AS supp_ftotale_ospite, r.supp_golf, r.supp_gols,
+       r.rig_giocati, r.rig_golf, r.rig_gols, r.passa AS passa_casa, r2.passa AS passa_ospite, r.dett_extra,"
+    : "";
 $extra = $fonte === "reale" ? "0 AS provvisorio, 0 AS manuale" : "v.provvisorio, v.manuale";
 
 $r = query_one("SELECT
@@ -78,6 +84,7 @@ $r = query_one("SELECT
         s2.nome AS nome_ospite, s2.logo AS logo_ospite,
         r.ftotale, r.ftotale_a, r.golf, r.gols, r.modificatore, r.modificatore_a, r.punti, r.segno,
         $extraRis,
+        $extraChamp
         r.mod_att AS mod_att_casa, r.mod_cc AS mod_cc_casa, r.num_cc AS num_cc_casa, r.tot_cc AS tot_cc_casa,
         r2.mod_att AS mod_att_ospite, r2.mod_cc AS mod_cc_ospite,
         r2.num_cc AS num_cc_ospite, r2.tot_cc AS tot_cc_ospite,
@@ -168,4 +175,28 @@ api_success([
     "calcolato_il" => $r["calcolato_il"], "simulato_da" => $r["simulato_da"],
     "golf" => (int) $r["golf"], "gols" => (int) $r["gols"],
     "punti_casa" => (int) $r["punti"], "segno" => $r["segno"],
-]);
+] + ($champ ? ["extra" => ld_extra_champions($r)] : []));
+
+// Supplementari e calci di rigore di una partita di Champions (null se non ce ne
+// sono stati). Stessa struttura di dp_extra_champions() in dettaglio_partita.php;
+// vale sia per i dati calcolati sia per la simulazione.
+function ld_extra_champions(array $r): ?array
+{
+    $supp = (int) ($r["supp_giocati"] ?? 0) === 1;
+    $rig  = (int) ($r["rig_giocati"] ?? 0) === 1;
+    $passaCasa   = (int) ($r["passa_casa"] ?? 0) === 1;
+    $passaOspite = (int) ($r["passa_ospite"] ?? 0) === 1;
+    if (!$supp && !$rig && !$passaCasa && !$passaOspite) return null;
+
+    $dett = !empty($r["dett_extra"]) ? json_decode($r["dett_extra"], true) : null;
+    return [
+        "supplementari" => $supp,
+        "rigori"        => $rig,
+        "supp_golf"     => ["casa" => (int) $r["supp_golf"], "ospite" => (int) $r["supp_gols"]],
+        "supp_punti"    => ["casa" => (float) $r["supp_ftotale_casa"], "ospite" => (float) ($r["supp_ftotale_ospite"] ?? 0)],
+        "rig_golf"      => ["casa" => (int) $r["rig_golf"], "ospite" => (int) $r["rig_gols"]],
+        "passa"         => $passaCasa ? "casa" : ($passaOspite ? "ospite" : null),
+        "andata"        => $dett["andata"] ?? null,
+        "dettaglio"     => $dett,
+    ];
+}

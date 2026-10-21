@@ -928,7 +928,16 @@ CREATE TABLE `NEW_SIMULAZIONE_RISULTATI_CHAMP` (
   `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
   `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
   `calcolato_il` datetime(3) NOT NULL,
-  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione'
+  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione',
+  `supp_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita ha avuto i supplementari',
+  `supp_ftotale` decimal(6,2) NOT NULL DEFAULT '0.00' COMMENT 'Punti dei 3 panchinari dei supplementari (squadra)',
+  `supp_golf` int NOT NULL DEFAULT '0' COMMENT 'Gol segnati ai supplementari',
+  `supp_gols` int NOT NULL DEFAULT '0' COMMENT 'Gol subiti ai supplementari',
+  `rig_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita e'' stata decisa ai calci di rigore',
+  `rig_golf` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati',
+  `rig_gols` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati dall''avversaria',
+  `passa` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la squadra vince la sfida (solo turni con supplementari/rigori)',
+  `dett_extra` text COMMENT 'JSON con il dettaglio di supplementari e rigori'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

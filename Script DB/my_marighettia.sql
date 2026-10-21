@@ -270,13 +270,15 @@ CREATE TABLE `NEW_ACCESSI` (
 -- piazzamento di rilievo. La squadra e' identificata da NEW_UTENZE.utenza
 -- (stabile tra le stagioni, a differenza dell'id squadra).
 --   competizione: 'CAMP' (campionato) | 'CHAMP' (Champions)
---   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP)
+--   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP),
+--                 99 = ultimo posto (solo CAMP, maglia nera)
+-- Usata anche dalla pagina "Albo d'oro" (api/albo_oro.php).
 --
 
 CREATE TABLE `NEW_ALBO_ORO` (
   `stagione` int NOT NULL,
   `competizione` varchar(5) NOT NULL COMMENT 'CAMP | CHAMP',
-  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa',
+  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa, 99 = ultimo (solo CAMP)',
   `utenza` varchar(50) NOT NULL COMMENT 'NEW_UTENZE.utenza',
   PRIMARY KEY (`stagione`,`competizione`,`posizione`),
   KEY `idx_albo_utenza` (`utenza`)

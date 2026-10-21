@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -16,6 +16,7 @@ const NAV_SECTIONS = [
       { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
       { to: '/statistiche',  icon: BarChart2, label: 'Statistiche'   },
       { to: '/gazzetta',     icon: Newspaper, label: 'La Gazzetta'   },
+      { to: '/albo-oro',     icon: Award,     label: "Albo d'oro"   },
     ],
   },
   {

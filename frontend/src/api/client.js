@@ -85,6 +85,9 @@ export const updateSistema  = (stagione, label, valore) =>
 
 export const getGenerale = (stagione) => get('generale.php', { stagione })
 
+// Albo d'oro storico (campionato e Champions), tutte le stagioni
+export const getAlboOro = () => get('albo_oro.php')
+
 // ── Calendario ───────────────────────────────────────────────
 
 export const getCalendario = (stagione) => get('calendario.php', { stagione })

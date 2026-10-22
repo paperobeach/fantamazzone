@@ -95,7 +95,7 @@ if (!sg_risultati_pubblici($stagione, $giornata)) {
     api_error("La giornata $giornata non è ancora chiusa: l'articolo si genera solo a giornata conclusa", 409);
 }
 
-@set_time_limit($formato === "edizione" ? 260 : 180);
+@set_time_limit($formato === "edizione" ? 300 : 180);
 
 $prompt = art_costruisci($conn, $stagione, $giornata, ["formato" => $formato, "contesto_giornata" => $contestoGiornata]);
 if (isset($prompt["errore"])) {
@@ -108,6 +108,8 @@ if (!$modelliCfg) {
     api_error("Nessun modello configurato in config_ai.php", 500);
 }
 
+$fasi       = art_piano_chiamate($prompt);                     // edizione: più chiamate brevi
+$nChiamate  = count($fasi);
 $tettoUsd   = (float) art_cfg("tetto_mensile_usd", 0);        // 0 = nessun tetto
 $tokTipico  = (int) $prompt["token_tipico"];
 $maxToken   = (int) $prompt["max_token"];
@@ -128,14 +130,19 @@ function art_token_input(string $modello, array $prompt): array
 
 /** Riga di costo per un modello. */
 function art_riga_modello(string $id, array $p, array $prompt, int $tokTipico, int $maxToken,
-                          float $spesaMese, float $tettoUsd): array
+                          float $spesaMese, float $tettoUsd, int $nChiamate = 1): array
 {
     $t = art_token_input($id, $prompt);
-    $tipico = ai_costo_usd($id, $t["token"], $tokTipico);
-    $massimo = ai_costo_usd($id, $t["token"], $maxToken);
+    // Generazione a fasi: il prompt viaggia a ogni chiamata, più le pagine già scritte
+    // (in media metà dell'output complessivo) rimandate alle fasi successive
+    $inTipico  = $t["token"] * $nChiamate + (int) round($tokTipico * ($nChiamate - 1) / 2);
+    $inMassimo = $t["token"] * $nChiamate + (int) round($maxToken * ($nChiamate - 1) / 2);
+    $tipico = ai_costo_usd($id, $inTipico, $tokTipico);
+    $massimo = ai_costo_usd($id, $inMassimo, $maxToken);
     return [
         "modello"              => $id,
         "etichetta"            => $p["etichetta"] ?? $id,
+        "chiamate"             => $nChiamate,
         "token_input"          => $t["token"],
         "approssimato"         => $t["approssimato"],
         "errore_conteggio"     => $t["errore"],
@@ -153,13 +160,14 @@ function art_riga_modello(string $id, array $p, array $prompt, int $tokTipico, i
 if ($azione === "anteprima") {
     $righe = [];
     foreach ($modelliCfg as $id => $p) {
-        $righe[] = art_riga_modello((string) $id, $p, $prompt, $tokTipico, $maxToken, $spesaMese, $tettoUsd);
+        $righe[] = art_riga_modello((string) $id, $p, $prompt, $tokTipico, $maxToken, $spesaMese, $tettoUsd, $nChiamate);
     }
     $cambio = art_cfg("cambio_eur_per_usd", null);
     api_success([
         "stagione"          => $stagione,
         "giornata"          => $giornata,
         "formato"           => $formato,
+        "chiamate"          => $nChiamate,
         "riepilogo"         => $prompt["riepilogo"],
         "prompt_hash"       => $hash,
         "max_token"         => $maxToken,
@@ -184,7 +192,7 @@ if ($hashRicevuto === "" || !hash_equals($hash, $hashRicevuto)) {
 }
 
 $stima = art_riga_modello($modelloRichiesto, $modelliCfg[$modelloRichiesto], $prompt,
-                          $tokTipico, $maxToken, $spesaMese, $tettoUsd);
+                          $tokTipico, $maxToken, $spesaMese, $tettoUsd, $nChiamate);
 if (!$stima["entro_tetto"]) {
     api_error(sprintf("Tetto mensile di spesa (%.2f USD) raggiunto: spesi %.4f USD questo mese, la generazione potrebbe costare fino a %.4f USD",
                       $tettoUsd, $spesaMese, (float) $stima["costo_massimo_usd"]), 402);
@@ -197,9 +205,9 @@ $timeoutGen = $formato === "edizione"
 // connessione rimasta muta per decine di secondi. Disattivabile con
 // "streaming" => false nella sezione "articolo" di config_ai.php.
 $streaming = (bool) art_cfg("streaming", true);
-$gen = $streaming
-    ? ai_messaggio_stream($modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"], $timeoutGen)
-    : ai_messaggio($modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"], $timeoutGen);
+// Edizione: più chiamate brevi in sequenza (una sola chiamata lunga viene
+// interrotta dall'hosting dopo ~26 s: cURL 18 "partial file"). Vedi art_piano_chiamate().
+$gen = art_genera_a_fasi($modelloRichiesto, $prompt, $fasi, $timeoutGen, $streaming);
 
 $interrotto = false;      // connessione caduta a metà: salvato il testo parziale
 $costoApprossimato = false;
@@ -337,4 +345,5 @@ api_success([
     "costo_stimato_usd"  => $costoStima,
     "costo_massimo_usd"  => $stima["costo_massimo_usd"],
     "ms"                 => $gen["ms"],
+    "chiamate"           => $gen["chiamate"] ?? $nChiamate,
 ]);

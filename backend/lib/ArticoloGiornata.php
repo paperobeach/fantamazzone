@@ -753,6 +753,7 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         "system"            => $system,
         "messages"          => [["role" => "user", "content" => $testo]],
         "max_token"         => $maxToken,
+        "n_partecipanti"    => count($partecipanti),
         "token_tipico"      => $tokTipico,
         "parole_target"     => $formato === "edizione" ? $parolePagina : $parole,
         "formato"           => $formato,
@@ -791,6 +792,159 @@ function art_stima_token(array $prompt): int
 {
     $n = mb_strlen($prompt["system"]) + mb_strlen($prompt["messages"][0]["content"]);
     return (int) ceil($n / 3);
+}
+
+// ------------------------------------------------------------
+// GENERAZIONE A FASI (edizione)
+// ------------------------------------------------------------
+
+/**
+ * Piano delle chiamate per un'edizione. Una sola chiamata lunga (decine di
+ * secondi) viene interrotta dall'hosting (cURL 18 "partial file"): la si
+ * spezza in più chiamate brevi in sequenza, ciascuna con poche pagine.
+ *
+ * Ritorna un elenco di fasi:
+ *   [ "chiavi" => [...], "intestazione" => bool, "commento" => bool, "max_token" => int ]
+ * La somma dei max_token non supera il limite complessivo del prompt, così il
+ * "costo massimo" mostrato in anteprima resta garantito.
+ * Con un solo elemento (formato articolo o fasi disattivate) la generazione
+ * è la chiamata unica di sempre.
+ */
+function art_piano_chiamate(array $prompt): array
+{
+    $unica = [[ "chiavi" => [], "intestazione" => true, "commento" => true,
+                "max_token" => (int) $prompt["max_token"], "unica" => true ]];
+    if (($prompt["formato"] ?? "") !== "edizione" || !(bool) art_cfg("edizione_a_fasi", true)) return $unica;
+
+    $partite = [];
+    foreach ($prompt["pagine_attese"] as $p) {
+        if ($p["tipo"] === "partita") $partite[] = $p["chiave"];
+    }
+    if (!$partite) return $unica;
+
+    $perChiamata = max(1, (int) art_cfg("pagine_per_chiamata", 3));
+    $tokPagina   = (int) art_cfg("token_per_pagina", 300);
+    $tokBase     = (int) art_cfg("token_base_edizione", 450);
+    $tokCommento = (int) art_cfg("token_commento", 450) + (int) ($prompt["n_partecipanti"] ?? 0) * (int) art_cfg("token_per_pagella", 45);
+
+    $fasi = [];
+    foreach (array_chunk($partite, $perChiamata) as $i => $gruppo) {
+        $fasi[] = [
+            "chiavi" => $gruppo, "intestazione" => $i === 0, "commento" => false,
+            "max_token" => count($gruppo) * $tokPagina + ($i === 0 ? $tokBase : 0),
+        ];
+    }
+    $fasi[] = ["chiavi" => ["COMMENTO"], "intestazione" => false, "commento" => true, "max_token" => $tokCommento];
+
+    // Rientra nel limite complessivo (che include il tetto max_token_edizione)
+    $somma = array_sum(array_column($fasi, "max_token"));
+    $tetto = (int) $prompt["max_token"];
+    if ($somma > $tetto && $somma > 0) {
+        foreach ($fasi as &$f) $f["max_token"] = max(200, (int) floor($f["max_token"] * $tetto / $somma));
+        unset($f);
+    }
+    return $fasi;
+}
+
+/** Istruzione aggiunta al messaggio per una fase. */
+function art_istruzione_fase(array $fase, bool $conImmagini, string $giaScritto): string
+{
+    if (!empty($fase["commento"])) {
+        $quali = "SOLO la pagina «@@ COMMENTO» (commento generale e sezione PAGELLE), che inizia direttamente con la riga «@@ COMMENTO»";
+    } else {
+        $elenco = implode(", ", $fase["chiavi"]);
+        $quali = $fase["intestazione"]
+            ? "SOLO l'intestazione (TITOLO, SOMMARIO" . ($conImmagini ? ", IMMAGINE" : "") . " e la riga ---) seguita dalle pagine: $elenco"
+            : "SOLO le pagine: $elenco. Non scrivere TITOLO, SOMMARIO né la riga --- iniziali: parti direttamente con la prima riga «@@ " . $fase["chiavi"][0] . "»";
+    }
+    $t  = "\n\nISTRUZIONE PER QUESTA RICHIESTA\nL'edizione viene scritta in più richieste successive. In questa scrivi $quali. ";
+    $t .= "Non scrivere le altre pagine: saranno richieste a parte. Rispetta il formato di output e le regole già indicate.";
+    if ($giaScritto !== "") {
+        $t .= "\n\nPAGINE GIÀ SCRITTE (per coerenza di tono: non ripetere battute, paragoni, aneddoti"
+            . ($conImmagini ? " né immagini" : "") . " già usati, e non riscriverle):\n" . $giaScritto;
+    }
+    return $t;
+}
+
+/**
+ * Genera l'edizione a fasi. Stessa forma di risultato di ai_messaggio_stream():
+ *   ok, http, ms, errore, dati{content,stop_reason,usage}, [parziale], chiamate
+ * Se una fase fallisce dopo averne completate altre (o con testo parziale),
+ * ok=false e "parziale" contiene tutto il testo già ottenuto (anche questo è
+ * stato fatturato), così il chiamante può salvarlo come bozza troncata.
+ * Una fase che fallisce senza ricevere nulla viene ritentata (retry_chiamata, default 1).
+ */
+function art_genera_a_fasi(string $modello, array $prompt, array $fasi, ?int $timeoutSec, bool $streaming): array
+{
+    $conImmagini = count($prompt["catalogo_ids"] ?? []) > 0;
+    $base    = (string) $prompt["messages"][0]["content"];
+    $retry   = max(0, (int) art_cfg("retry_chiamata", 1));
+    $testo   = "";
+    $tokIn   = 0;
+    $tokOut  = 0;
+    $ms      = 0;
+    $stop    = "end_turn";
+    $fatte   = 0;
+
+    foreach ($fasi as $i => $fase) {
+        $msg = $base;
+        if (empty($fase["unica"])) $msg .= art_istruzione_fase($fase, $conImmagini, $testo);
+        $messaggi = [["role" => "user", "content" => $msg]];
+
+        $gen = null;
+        for ($tentativo = 0; $tentativo <= $retry; $tentativo++) {
+            $gen = $streaming
+                ? ai_messaggio_stream($modello, $messaggi, (int) $fase["max_token"], $prompt["system"], $timeoutSec)
+                : ai_messaggio($modello, $messaggi, (int) $fase["max_token"], $prompt["system"], $timeoutSec);
+            $ms += (int) ($gen["ms"] ?? 0);
+            if ($gen["ok"] || isset($gen["parziale"])) break;
+            // errore HTTP dell'API (chiave, quota, richiesta non valida): inutile ritentare
+            if (($gen["http"] ?? 0) >= 400) break;
+        }
+
+        if ($gen["ok"]) {
+            $t = "";
+            foreach (($gen["dati"]["content"] ?? []) as $b) {
+                if (($b["type"] ?? "") === "text") $t .= (string) ($b["text"] ?? "");
+            }
+            if ($i > 0 && !empty($fase["chiavi"])) {
+                // le fasi successive devono partire dalla riga "@@ ...": scarto eventuali preamboli
+                if (preg_match('/^[ \t]*@@/m', $t, $m, PREG_OFFSET_CAPTURE)) $t = substr($t, $m[0][1]);
+            }
+            $testo  .= ($testo !== "" ? "\n\n" : "") . trim($t);
+            $tokIn  += (int) ($gen["dati"]["usage"]["input_tokens"] ?? 0);
+            $tokOut += (int) ($gen["dati"]["usage"]["output_tokens"] ?? 0);
+            if (($gen["dati"]["stop_reason"] ?? "") === "max_tokens") $stop = "max_tokens";
+            $fatte++;
+            continue;
+        }
+
+        // Fase fallita: salvo il salvabile
+        $errore = (string) $gen["errore"] . " (fase " . ($i + 1) . " di " . count($fasi) . ")";
+        $stimato = null;
+        if (isset($gen["parziale"])) {
+            $pp = $gen["parziale"];
+            $t = (string) $pp["testo"];
+            if ($i > 0 && !empty($fase["chiavi"]) && preg_match('/^[ \t]*@@/m', $t, $m, PREG_OFFSET_CAPTURE)) $t = substr($t, $m[0][1]);
+            $testo  .= ($testo !== "" ? "\n\n" : "") . trim($t);
+            $tokIn  += (int) $pp["token_input"];
+            $tokOut += (int) ($pp["token_output_stimato"] ?? $pp["token_output"]);
+            $stimato = $pp["token_output_stimato"];
+        }
+        $res = ["ok" => false, "http" => (int) $gen["http"], "ms" => $ms, "dati" => null,
+                "errore" => $errore, "chiamate" => $fatte];
+        if (trim($testo) !== "") {
+            $res["parziale"] = ["testo" => $testo, "token_input" => $tokIn, "token_output" => $tokOut,
+                                "token_output_stimato" => $stimato !== null ? $tokOut : null];
+        }
+        return $res;
+    }
+
+    return ["ok" => true, "http" => 200, "ms" => $ms, "errore" => null, "chiamate" => $fatte, "dati" => [
+        "content"     => [["type" => "text", "text" => $testo]],
+        "stop_reason" => $stop,
+        "usage"       => ["input_tokens" => $tokIn, "output_tokens" => $tokOut],
+    ]];
 }
 
 // ------------------------------------------------------------

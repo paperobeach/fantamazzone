@@ -95,6 +95,14 @@ return [
         "token_output_tipico_edizione" => 0,
         // Timeout (secondi) della generazione di un'edizione (default 200)
         "timeout_edizione" => 200,
+        // Generazione a fasi (default true): l'edizione è scritta con più chiamate
+        // brevi (poche pagine ciascuna) invece di una sola lunga, che l'hosting
+        // interrompe dopo ~26 s (errore cURL 18 "Transferred a partial file").
+        // Se compare ancora, abbassa "pagine_per_chiamata" (es. 2) o usa Haiku.
+        "edizione_a_fasi"     => true,
+        "pagine_per_chiamata" => 3,
+        // Tentativi aggiuntivi per una fase caduta senza aver ricevuto nulla
+        "retry_chiamata"      => 1,
         // Includere nell'edizione anche le partite di Champions (una pagina ciascuna)
         "champions_in_edizione" => true,
     ],

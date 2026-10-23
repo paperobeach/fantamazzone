@@ -37,6 +37,15 @@
 //      connessione cade a metà, il testo già ricevuto viene comunque salvato
 //      come bozza troncata (interrotto = true, costo approssimato).
 //
+// GENERAZIONE DIFFERITA (consigliata se la generazione immediata viene interrotta
+// dall'hosting): body aggiuntivo asincrono = true su azione "genera". Invia l'ordine alle
+// Message Batches di Anthropic (-50% di costo, di solito pochi minuti) e risponde subito
+// { differita: true, job{id, stato, ...} }. Poi:
+//
+// azione = "stato"       Body: job_id. Controlla il job e, a elaborazione finita, salva la
+//      bozza. Risposta: { job{stato: in_corso | in_salvataggio | completato | errore, ...},
+//      [articolo{...} e gli altri campi di "genera" quando completato], [avviso] }
+//
 // Richiede le tabelle di Script DB/NEW_AI_ARTICOLI.sql e di
 // Script DB/NEW_AI_GAZZETTA_EDIZIONE.sql e la
 // configurazione di backend/config_ai.php (sezione "articolo" opzionale).
@@ -62,13 +71,15 @@ $giornata  = (int) ($input["giornata"] ?? 0);
 $modelloRichiesto = trim((string) ($input["modello"] ?? ""));
 $hashRicevuto     = trim((string) ($input["prompt_hash"] ?? ""));
 $formato          = strtolower(trim((string) ($input["formato"] ?? "articolo")));
+$asincrono        = !empty($input["asincrono"]);
+$jobId            = (int) ($input["job_id"] ?? 0);
 $contestoGiornata = trim(str_replace(["\r\n", "\r"], "\n", (string) ($input["contesto_giornata"] ?? "")));
 
 if ($stagione < 2000 || $stagione > 2100) {
     api_error("Parametro 'stagione' obbligatorio e deve essere un anno a 4 cifre plausibile (2000-2100)", 400);
 }
-if (!in_array($azione, ["anteprima", "genera"], true)) {
-    api_error("Azione non valida: usare 'anteprima' o 'genera'", 400);
+if (!in_array($azione, ["anteprima", "genera", "stato"], true)) {
+    api_error("Azione non valida: usare 'anteprima', 'genera' o 'stato'", 400);
 }
 if (!in_array($formato, ["articolo", "edizione"], true)) {
     api_error("Formato non valido: usare 'articolo' o 'edizione'", 400);
@@ -93,6 +104,20 @@ if (!art_fase4_presente($conn)) {
 }
 if (!sg_risultati_pubblici($stagione, $giornata)) {
     api_error("La giornata $giornata non è ancora chiusa: l'articolo si genera solo a giornata conclusa", 409);
+}
+
+// ============================================================
+// STATO di una generazione differita (richiesta breve, nessuna chiamata lunga)
+// ============================================================
+if ($azione === "stato") {
+    if (!art_jobs_presenti($conn)) {
+        api_error("Tabella dei job mancante: eseguire Script DB/migrazione_ai_jobs.sql", 500);
+    }
+    if ($jobId < 1) api_error("Parametro 'job_id' obbligatorio", 400);
+    $job = art_job_leggi($conn, $jobId, $stagione);
+    if (!$job) api_error("Richiesta differita non trovata", 404);
+    @set_time_limit(60);
+    api_success(art_job_avanza($conn, $job));
 }
 
 @set_time_limit($formato === "edizione" ? 300 : 180);
@@ -143,6 +168,9 @@ function art_riga_modello(string $id, array $p, array $prompt, int $tokTipico, i
         "modello"              => $id,
         "etichetta"            => $p["etichetta"] ?? $id,
         "chiamate"             => $nChiamate,
+        // generazione differita: una sola richiesta, costo scontato
+        "costo_tipico_differita_usd"  => ai_costo_usd($id, $t["token"], $tokTipico) !== null ? ai_costo_usd($id, $t["token"], $tokTipico) * ai_fattore_batch() : null,
+        "costo_massimo_differita_usd" => ai_costo_usd($id, $t["token"], $maxToken) !== null ? ai_costo_usd($id, $t["token"], $maxToken) * ai_fattore_batch() : null,
         "token_input"          => $t["token"],
         "approssimato"         => $t["approssimato"],
         "errore_conteggio"     => $t["errore"],
@@ -168,6 +196,9 @@ if ($azione === "anteprima") {
         "giornata"          => $giornata,
         "formato"           => $formato,
         "chiamate"          => $nChiamate,
+        "differita_disponibile" => art_differita_abilitata($conn),
+        "sconto_differita"  => ai_fattore_batch(),
+        "job_in_corso"      => art_jobs_presenti($conn) ? art_job_aperto($conn, $stagione, $giornata, $formato) : null,
         "riepilogo"         => $prompt["riepilogo"],
         "prompt_hash"       => $hash,
         "max_token"         => $maxToken,
@@ -196,6 +227,45 @@ $stima = art_riga_modello($modelloRichiesto, $modelliCfg[$modelloRichiesto], $pr
 if (!$stima["entro_tetto"]) {
     api_error(sprintf("Tetto mensile di spesa (%.2f USD) raggiunto: spesi %.4f USD questo mese, la generazione potrebbe costare fino a %.4f USD",
                       $tettoUsd, $spesaMese, (float) $stima["costo_massimo_usd"]), 402);
+}
+
+// ------------------------------------------------------------
+// Generazione DIFFERITA: ordine alle Message Batches e risposta immediata
+// ------------------------------------------------------------
+if ($asincrono) {
+    if (!art_differita_abilitata($conn)) {
+        api_error("Generazione differita non disponibile: eseguire Script DB/migrazione_ai_jobs.sql (o abilitarla in config_ai.php)", 500);
+    }
+    $aperto = art_job_aperto($conn, $stagione, $giornata, $formato);
+    if ($aperto) {
+        api_error("C'è già una generazione differita in corso per questa giornata e questo formato (job " . (int) $aperto["id"] . "): attendi che termini", 409);
+    }
+    $stCosto = $stima["costo_tipico_usd"];
+    $stMax   = $stima["costo_massimo_usd"];
+    $stTok   = (int) $stima["token_input"];
+    $st = mysqli_prepare($conn, "INSERT INTO NEW_AI_JOBS
+            (stagione, giornata, formato, modello, batch_id, stato, prompt_hash, contesto_giornata, creato_da,
+             token_input_stimati, costo_stimato_usd, costo_massimo_usd)
+            VALUES (?, ?, ?, ?, '', 'in_corso', ?, ?, ?, ?, ?, ?)");
+    if (!$st) api_error("Impossibile registrare la richiesta (errore DB: " . mysqli_error($conn) . ")", 500);
+    mysqli_stmt_bind_param($st, "iisssssidd", $stagione, $giornata, $formato, $modelloRichiesto, $hash,
+                           $contestoGiornata, $utenza, $stTok, $stCosto, $stMax);
+    if (!mysqli_stmt_execute($st)) {
+        $errDb = mysqli_stmt_error($st);
+        api_error("Impossibile registrare la richiesta (errore DB: $errDb)", 500);
+    }
+    $nuovoJob = (int) mysqli_insert_id($conn);
+    mysqli_stmt_close($st);
+
+    $b = ai_batch_crea("art-$stagione-$giornata-$nuovoJob", $modelloRichiesto, $prompt["messages"], $maxToken, $prompt["system"]);
+    if (!$b["ok"]) {
+        art_job_fallito($conn, $nuovoJob, (string) $b["errore"]);
+        api_error("Invio della richiesta differita non riuscito: " . $b["errore"], 502);
+    }
+    $bid = mysqli_real_escape_string($conn, $b["batch_id"]);
+    mysqli_query($conn, "UPDATE NEW_AI_JOBS SET batch_id = '$bid' WHERE id = $nuovoJob");
+    $job = art_job_leggi($conn, $nuovoJob, $stagione);
+    api_success(["differita" => true, "job" => art_job_pubblico($job)]);
 }
 
 $timeoutGen = $formato === "edizione"
@@ -228,122 +298,13 @@ if ($gen["ok"]) {
     api_error("Generazione non riuscita: " . $gen["errore"], 502);
 }
 
-$grezzo = "";
-foreach (($dati["content"] ?? []) as $blocco) {
-    if (($blocco["type"] ?? "") === "text") $grezzo .= (string) ($blocco["text"] ?? "");
-}
-if (trim($grezzo) === "") {
-    api_error("Il modello non ha restituito testo (stop_reason: " . ($dati["stop_reason"] ?? "n/d") . ")", 502);
-}
-
-$tokIn   = (int) ($dati["usage"]["input_tokens"] ?? 0);
-$tokOut  = (int) ($dati["usage"]["output_tokens"] ?? 0);
-$costo   = ai_costo_usd($modelloRichiesto, $tokIn, $tokOut);
-$troncato = $interrotto || (($dati["stop_reason"] ?? "") === "max_tokens");
-if ($formato === "edizione") {
-    $parsed = art_parse_edizione($grezzo, $prompt["pagine_attese"], $prompt["catalogo_ids"]);
-    $pagine = $parsed["pagine"];
-    $testoDb = $parsed["testo"];
-} else {
-    $parsed = art_parse_testo($grezzo, $prompt["catalogo_ids"], (int) art_cfg("max_immagini_inline", 2));
-    $pagine = [];
-    $testoDb = $parsed["testo"];
-}
-$idCop = $parsed["id_immagine"];
-$immaginiUsate = art_immagini_usate_csv($idCop, $testoDb, $pagine);
-
-$episodiIds = implode(",", array_map(fn($e) => (int) $e["id"], $prompt["riepilogo"]["episodi"]));
-$troncatoFlag = $troncato ? "Y" : "N";
-$tokStima = (int) $stima["token_input"];
-$costoStima = $stima["costo_tipico_usd"];
-$costoVal = $costo;
-$titoloDb = $parsed["titolo"];
-$sommarioDb = $parsed["sommario"];
-$contestoDb = $contestoGiornata;
-
-mysqli_begin_transaction($conn);
-$st = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI
-        (stagione, giornata, titolo, sommario, testo, stato, modello, troncato,
-         token_input_stimati, costo_stimato_usd, token_input, token_output, costo_usd,
-         creato_da, episodi_usati, formato, contesto_giornata, id_immagine_copertina, immagini_usate)
-        VALUES (?, ?, ?, ?, ?, 'bozza', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-if (!$st) {
-    mysqli_rollback($conn);
-    api_error("Articolo generato ma non salvato (errore DB: " . mysqli_error($conn) . ")", 500);
-}
-mysqli_stmt_bind_param($st, "iisssssidiidssssis",
-    $stagione, $giornata, $titoloDb, $sommarioDb, $testoDb,
-    $modelloRichiesto, $troncatoFlag, $tokStima, $costoStima, $tokIn, $tokOut, $costoVal,
-    $utenza, $episodiIds, $formato, $contestoDb, $idCop, $immaginiUsate);
-if (!mysqli_stmt_execute($st)) {
-    $errDb = mysqli_stmt_error($st);
-    mysqli_rollback($conn);
-    api_error("Articolo generato ma non salvato (errore DB: $errDb)", 500);
-}
-$idArticolo = (int) mysqli_insert_id($conn);
-mysqli_stmt_close($st);
-
-$pagineOut = [];
-foreach ($pagine as $i => $pg) {
-    $ordine = $i + 1;
-    $tipoPg = $pg["tipo"];
-    $compPg = $pg["competizione"];
-    $titPg  = $pg["titolo"];
-    $txtPg  = $pg["testo"];
-    $imgPg  = $pg["id_immagine"];
-    $didPg  = $pg["didascalia"];
-    $datiPg = json_encode($pg["dati"], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-    $sp = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI_PAGINE
-            (id_articolo, ordine, tipo, competizione, titolo, testo, id_immagine, didascalia, dati)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    if (!$sp) {
-        $errDb = mysqli_error($conn);
-        mysqli_rollback($conn);
-        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
-    }
-    mysqli_stmt_bind_param($sp, "iissssiss", $idArticolo, $ordine, $tipoPg, $compPg, $titPg, $txtPg, $imgPg, $didPg, $datiPg);
-    if (!mysqli_stmt_execute($sp)) {
-        $errDb = mysqli_stmt_error($sp);
-        mysqli_rollback($conn);
-        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
-    }
-    mysqli_stmt_close($sp);
-    $pagineOut[] = ["ordine" => $ordine, "tipo" => $tipoPg, "competizione" => $compPg, "titolo" => $titPg,
-                    "id_immagine" => $imgPg, "didascalia" => $didPg, "senza_testo" => trim($txtPg) === ""];
-}
-mysqli_commit($conn);
-
-// Rotazione degli aneddoti e delle immagini: segno quelli usati
-if ($episodiIds !== "") {
-    mysqli_query($conn, "UPDATE NEW_EPISODI_LEGA SET ultimo_utilizzo = NOW() WHERE id IN ($episodiIds)");
-}
-art_segna_immagini_usate($conn, $parsed["immagini"]);
-
-api_success([
-    "articolo" => [
-        "id"        => $idArticolo,
-        "stagione"  => $stagione,
-        "giornata"  => $giornata,
-        "titolo"    => $parsed["titolo"],
-        "sommario"  => $parsed["sommario"],
-        "testo"     => $parsed["testo"],
-        "stato"     => "bozza",
-        "modello"   => $modelloRichiesto,
-        "troncato"  => $troncato,
-        "formato"   => $formato,
-        "id_immagine_copertina" => $idCop,
-        "pagine"    => $pagineOut,
-    ],
-    "pagine_mancanti"    => $formato === "edizione" ? $parsed["mancanti"] : [],
-    "interrotto"         => $interrotto,
-    "avviso_interruzione" => $interrotto ? ($gen["errore"] ?? null) : null,
-    "costo_approssimato" => $costoApprossimato,
-    "formato_ok"         => $parsed["formato_ok"],
-    "token_input"        => $tokIn,
-    "token_output"       => $tokOut,
-    "costo_usd"          => $costo,
-    "costo_stimato_usd"  => $costoStima,
-    "costo_massimo_usd"  => $stima["costo_massimo_usd"],
-    "ms"                 => $gen["ms"],
-    "chiamate"           => $gen["chiamate"] ?? $nChiamate,
-]);
+$ctxSalva = [
+    "stagione" => $stagione, "giornata" => $giornata, "formato" => $formato,
+    "contesto" => $contestoGiornata, "utenza" => $utenza, "modello" => $modelloRichiesto,
+    "prompt" => $prompt, "stima" => $stima, "interrotto" => $interrotto,
+    "costo_approssimato" => $costoApprossimato, "avviso" => $gen["errore"] ?? null,
+    "ms" => $gen["ms"] ?? 0, "fattore" => 1.0,
+];
+$esito = art_salva_bozza($conn, $ctxSalva, $dati);
+$esito["chiamate"] = $gen["chiamate"] ?? $nChiamate;
+api_success($esito);

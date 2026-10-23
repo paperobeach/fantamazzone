@@ -107,6 +107,18 @@ return [
         "champions_in_edizione" => true,
     ],
 
+    // Generazione DIFFERITA (Message Batches di Anthropic): l'ordine parte con una
+    // richiesta breve e il risultato si scarica a elaborazione finita, quindi nessuna
+    // connessione lunga (immune al taglio dell'hosting). Costa meno; tempi: di solito
+    // qualche minuto, al massimo 24 ore. Richiede Script DB/migrazione_ai_jobs.sql.
+    "batch" => [
+        "abilitato" => true,
+        // Moltiplicatore di costo (0.5 = -50%, listino delle Message Batches)
+        "sconto"    => 0.5,
+        // Timeout (secondi) delle richieste brevi di invio, stato e download
+        "timeout"   => 30,
+    ],
+
     // Libreria immagini della Gazzetta (tutti i parametri sono opzionali)
     "immagini" => [
         // Lato lungo massimo (px) e peso massimo (byte) dell'immagine salvata

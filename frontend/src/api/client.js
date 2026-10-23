@@ -388,8 +388,16 @@ export const aiImmaginiCarica = (stagione, { utenza, password, file, ...campi })
 //                      id_immagine_copertina, pagine[] }, pagine_mancanti[],
 //            formato_ok, token_input, token_output, costo_usd,
 //            costo_stimato_usd, costo_massimo_usd, ms }
-export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata }) =>
-  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata })
+//        GENERAZIONE DIFFERITA (Message Batches: nessuna connessione lunga, -50% di costo,
+//        di solito pochi minuti): azione 'genera' con asincrono = true risponde subito
+//          { differita: true, job{ id, stato, modello, formato, giornata, creato_il } }
+//        e poi azione 'stato' con job_id (richiesta breve, da ripetere ogni ~15 s)
+//          { job{ stato: 'in_corso' | 'in_salvataggio' | 'completato' | 'errore', errore, ... },
+//            [avviso], [articolo{...} e gli altri campi di 'genera' a lavoro completato] }
+//        L'anteprima riporta anche differita_disponibile, sconto_differita, job_in_corso
+//        e, per ogni modello, costo_tipico_differita_usd / costo_massimo_differita_usd.
+export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata, asincrono, job_id }) =>
+  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata, asincrono, job_id })
 
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +

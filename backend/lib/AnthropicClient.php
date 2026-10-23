@@ -15,6 +15,8 @@
 //   ai_conta_token($modello, $messaggi, $system)  token di input (gratuito)
 //   ai_messaggio_stream(...)         come ai_messaggio ma in streaming (risposte lunghe)
 //   ai_messaggio($modello, $messaggi, $maxToken, $system)  generazione
+//   ai_batch_crea / ai_batch_stato / ai_batch_risultato  generazione DIFFERITA
+//                                    (Message Batches: solo richieste brevi, -50% di costo)
 //   ai_costo_usd($modello, $tokIn, $tokOut)       costo in USD
 //   ai_verifica_abilitato($conn, $stagione, $utenza, $password)
 //                                    utenza con NEW_UTENZE.abilita_ai = 'Y'
@@ -435,4 +437,123 @@ function ai_messaggio_stream(string $modello, array $messaggi, int $maxToken, ?s
         ];
     }
     return $esitoFallito;
+}
+
+
+// ============================================================
+// GENERAZIONE DIFFERITA (Message Batches)
+//
+// Nessuna connessione lunga: si invia l'ordine (richiesta breve), poi si
+// controlla ogni tanto lo stato (richieste brevi) e, a elaborazione finita,
+// si scarica il risultato. Il limite di durata delle connessioni in uscita
+// dell'hosting non interviene mai. Costo: sconto "batch.sconto" (default 0.5).
+// Tempi: di solito minuti, al massimo 24 ore.
+// ============================================================
+
+/** Moltiplicatore di costo delle richieste differite (default 0.5 = -50%). */
+function ai_fattore_batch(): float
+{
+    $f = (float) (ai_config()["batch"]["sconto"] ?? 0.5);
+    return ($f > 0 && $f <= 1) ? $f : 0.5;
+}
+
+/** Richiesta HTTP breve verso Anthropic. Ritorna ok(2xx), http, ms, corpo, errore. */
+function ai_http(string $metodo, string $url, ?array $payload = null, int $timeout = 30): array
+{
+    $cfg = ai_config();
+    if (!ai_chiave_configurata()) {
+        return ["ok" => false, "http" => 0, "ms" => 0, "corpo" => null,
+                "errore" => "Chiave API non configurata (config_ai.php mancante o non compilato)"];
+    }
+    if (!function_exists("curl_init")) {
+        return ["ok" => false, "http" => 0, "ms" => 0, "corpo" => null, "errore" => "cURL non disponibile"];
+    }
+    $headers = [
+        "content-type: application/json",
+        "x-api-key: " . $cfg["api_key"],
+        "anthropic-version: " . ($cfg["anthropic_version"] ?? "2023-06-01"),
+    ];
+    $t0 = microtime(true);
+    $ch = curl_init($url);
+    $opt = [
+        CURLOPT_CUSTOMREQUEST  => $metodo,
+        CURLOPT_HTTPHEADER     => $headers,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT        => $timeout,
+    ];
+    if ($payload !== null) $opt[CURLOPT_POSTFIELDS] = json_encode($payload, JSON_UNESCAPED_UNICODE);
+    curl_setopt_array($ch, $opt);
+    ai_applica_proxy($ch);
+    $corpo = curl_exec($ch);
+    $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err   = $corpo === false ? ai_errore_curl($ch, $t0) : null;
+    curl_close($ch);
+    $ms = (int) round((microtime(true) - $t0) * 1000);
+    if ($err !== null) return ["ok" => false, "http" => $http, "ms" => $ms, "corpo" => null, "errore" => $err];
+    if ($http < 200 || $http >= 300) {
+        $j = json_decode((string) $corpo, true);
+        return ["ok" => false, "http" => $http, "ms" => $ms, "corpo" => (string) $corpo,
+                "errore" => "Anthropic: " . ($j["error"]["message"] ?? "Risposta HTTP $http non valida")];
+    }
+    return ["ok" => true, "http" => $http, "ms" => $ms, "corpo" => (string) $corpo, "errore" => null];
+}
+
+/** Crea un batch con UNA richiesta. Ritorna ok, batch_id, errore. */
+function ai_batch_crea(string $customId, string $modello, array $messaggi, int $maxToken, ?string $system = null): array
+{
+    $params = ["model" => $modello, "max_tokens" => $maxToken, "messages" => $messaggi];
+    if ($system !== null && $system !== "") $params["system"] = $system;
+    $r = ai_http("POST", AI_BASE_URL . "/v1/messages/batches",
+                 ["requests" => [["custom_id" => $customId, "params" => $params]]],
+                 (int) (ai_config()["batch"]["timeout"] ?? 30));
+    if (!$r["ok"]) return ["ok" => false, "batch_id" => null, "errore" => $r["errore"]];
+    $j = json_decode((string) $r["corpo"], true);
+    $id = (string) ($j["id"] ?? "");
+    if ($id === "") return ["ok" => false, "batch_id" => null, "errore" => "Risposta senza id del batch"];
+    return ["ok" => true, "batch_id" => $id, "errore" => null];
+}
+
+/** Stato di un batch: ok, finito (bool), stato (processing_status), conteggi, errore. */
+function ai_batch_stato(string $batchId): array
+{
+    $r = ai_http("GET", AI_BASE_URL . "/v1/messages/batches/" . rawurlencode($batchId), null,
+                 (int) (ai_config()["batch"]["timeout"] ?? 30));
+    if (!$r["ok"]) return ["ok" => false, "finito" => false, "stato" => null, "conteggi" => null, "errore" => $r["errore"]];
+    $j = json_decode((string) $r["corpo"], true);
+    if (!is_array($j)) return ["ok" => false, "finito" => false, "stato" => null, "conteggi" => null, "errore" => "Risposta non in formato JSON"];
+    $stato = (string) ($j["processing_status"] ?? "");
+    return ["ok" => true, "finito" => $stato === "ended", "stato" => $stato,
+            "conteggi" => $j["request_counts"] ?? null, "errore" => null];
+}
+
+/**
+ * Risultato (la prima e unica richiesta) di un batch terminato.
+ * ok=false → errore di trasporto (si può riprovare). Con ok=true:
+ *   tipo "succeeded" → dati = messaggio (content, stop_reason, usage)
+ *   tipo "errored" | "canceled" | "expired" → errore = descrizione
+ */
+function ai_batch_risultato(string $batchId): array
+{
+    $r = ai_http("GET", AI_BASE_URL . "/v1/messages/batches/" . rawurlencode($batchId) . "/results", null,
+                 (int) (ai_config()["batch"]["timeout"] ?? 30));
+    if (!$r["ok"]) return ["ok" => false, "tipo" => null, "dati" => null, "errore" => $r["errore"]];
+    foreach (explode("\n", (string) $r["corpo"]) as $riga) {
+        $riga = trim($riga);
+        if ($riga === "") continue;
+        $j = json_decode($riga, true);
+        if (!is_array($j)) continue;
+        $tipo = (string) ($j["result"]["type"] ?? "");
+        if ($tipo === "succeeded") {
+            return ["ok" => true, "tipo" => $tipo, "dati" => $j["result"]["message"] ?? null, "errore" => null];
+        }
+        $msg = $j["result"]["error"]["error"]["message"] ?? ($j["result"]["error"]["message"] ?? null);
+        $descr = [
+            "errored"  => "Anthropic ha restituito un errore" . ($msg ? ": $msg" : ""),
+            "canceled" => "La richiesta è stata annullata",
+            "expired"  => "La richiesta è scaduta senza essere elaborata (oltre 24 ore)",
+        ][$tipo] ?? "Esito non riconosciuto ($tipo)";
+        return ["ok" => true, "tipo" => $tipo, "dati" => null, "errore" => $descr];
+    }
+    return ["ok" => false, "tipo" => null, "dati" => null, "errore" => "Risultato del batch non ancora disponibile"];
 }

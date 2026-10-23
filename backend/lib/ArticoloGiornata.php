@@ -1176,3 +1176,303 @@ function art_segna_immagini_usate($conn, array $ids): void
     if (!$ids) return;
     mysqli_query($conn, "UPDATE NEW_IMMAGINI_GAZZETTA SET ultimo_utilizzo = NOW() WHERE id IN (" . implode(",", $ids) . ")");
 }
+
+// ------------------------------------------------------------
+// SALVATAGGIO DELLA BOZZA (comune a generazione immediata e differita)
+// ------------------------------------------------------------
+
+/**
+ * Legge la risposta del modello, la interpreta (articolo o edizione) e salva
+ * la bozza in NEW_ARTICOLI (+ NEW_ARTICOLI_PAGINE). Ritorna il payload della
+ * risposta API. In caso di errore chiama api_error() (termina lo script).
+ *
+ * $c: stagione, giornata, formato, contesto, utenza, modello, prompt, stima,
+ *     interrotto, costo_approssimato, avviso (string|null), ms, fattore (costo)
+ * $dati: messaggio del modello (content[], stop_reason, usage)
+ */
+function art_salva_bozza($conn, array $c, array $dati): array
+{
+    $stagione = (int) $c["stagione"];
+    $giornata = (int) $c["giornata"];
+    $formato = (string) $c["formato"];
+    $contestoGiornata = (string) $c["contesto"];
+    $utenza = (string) $c["utenza"];
+    $modello = (string) $c["modello"];
+    $prompt = $c["prompt"];
+    $stima = $c["stima"];
+    $interrotto = (bool) $c["interrotto"];
+    $costoApprossimato = (bool) $c["costo_approssimato"];
+    $fattore = (float) ($c["fattore"] ?? 1.0);
+
+$grezzo = "";
+foreach (($dati["content"] ?? []) as $blocco) {
+    if (($blocco["type"] ?? "") === "text") $grezzo .= (string) ($blocco["text"] ?? "");
+}
+if (trim($grezzo) === "") {
+    api_error("Il modello non ha restituito testo (stop_reason: " . ($dati["stop_reason"] ?? "n/d") . ")", 502);
+}
+
+$tokIn   = (int) ($dati["usage"]["input_tokens"] ?? 0);
+$tokOut  = (int) ($dati["usage"]["output_tokens"] ?? 0);
+$costo   = ai_costo_usd($modello, $tokIn, $tokOut);
+if ($costo !== null) $costo *= $fattore;
+$troncato = $interrotto || (($dati["stop_reason"] ?? "") === "max_tokens");
+if ($formato === "edizione") {
+    $parsed = art_parse_edizione($grezzo, $prompt["pagine_attese"], $prompt["catalogo_ids"]);
+    $pagine = $parsed["pagine"];
+    $testoDb = $parsed["testo"];
+} else {
+    $parsed = art_parse_testo($grezzo, $prompt["catalogo_ids"], (int) art_cfg("max_immagini_inline", 2));
+    $pagine = [];
+    $testoDb = $parsed["testo"];
+}
+$idCop = $parsed["id_immagine"];
+$immaginiUsate = art_immagini_usate_csv($idCop, $testoDb, $pagine);
+
+$episodiIds = implode(",", array_map(fn($e) => (int) $e["id"], $prompt["riepilogo"]["episodi"]));
+$troncatoFlag = $troncato ? "Y" : "N";
+$tokStima = (int) $stima["token_input"];
+$costoStima = $stima["costo_tipico_usd"];
+$costoVal = $costo;
+$titoloDb = $parsed["titolo"];
+$sommarioDb = $parsed["sommario"];
+$contestoDb = $contestoGiornata;
+
+mysqli_begin_transaction($conn);
+$st = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI
+        (stagione, giornata, titolo, sommario, testo, stato, modello, troncato,
+         token_input_stimati, costo_stimato_usd, token_input, token_output, costo_usd,
+         creato_da, episodi_usati, formato, contesto_giornata, id_immagine_copertina, immagini_usate)
+        VALUES (?, ?, ?, ?, ?, 'bozza', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+if (!$st) {
+    mysqli_rollback($conn);
+    api_error("Articolo generato ma non salvato (errore DB: " . mysqli_error($conn) . ")", 500);
+}
+mysqli_stmt_bind_param($st, "iisssssidiidssssis",
+    $stagione, $giornata, $titoloDb, $sommarioDb, $testoDb,
+    $modello, $troncatoFlag, $tokStima, $costoStima, $tokIn, $tokOut, $costoVal,
+    $utenza, $episodiIds, $formato, $contestoDb, $idCop, $immaginiUsate);
+if (!mysqli_stmt_execute($st)) {
+    $errDb = mysqli_stmt_error($st);
+    mysqli_rollback($conn);
+    api_error("Articolo generato ma non salvato (errore DB: $errDb)", 500);
+}
+$idArticolo = (int) mysqli_insert_id($conn);
+mysqli_stmt_close($st);
+
+$pagineOut = [];
+foreach ($pagine as $i => $pg) {
+    $ordine = $i + 1;
+    $tipoPg = $pg["tipo"];
+    $compPg = $pg["competizione"];
+    $titPg  = $pg["titolo"];
+    $txtPg  = $pg["testo"];
+    $imgPg  = $pg["id_immagine"];
+    $didPg  = $pg["didascalia"];
+    $datiPg = json_encode($pg["dati"], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    $sp = mysqli_prepare($conn, "INSERT INTO NEW_ARTICOLI_PAGINE
+            (id_articolo, ordine, tipo, competizione, titolo, testo, id_immagine, didascalia, dati)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    if (!$sp) {
+        $errDb = mysqli_error($conn);
+        mysqli_rollback($conn);
+        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
+    }
+    mysqli_stmt_bind_param($sp, "iissssiss", $idArticolo, $ordine, $tipoPg, $compPg, $titPg, $txtPg, $imgPg, $didPg, $datiPg);
+    if (!mysqli_stmt_execute($sp)) {
+        $errDb = mysqli_stmt_error($sp);
+        mysqli_rollback($conn);
+        api_error("Edizione generata ma non salvata (errore DB: $errDb)", 500);
+    }
+    mysqli_stmt_close($sp);
+    $pagineOut[] = ["ordine" => $ordine, "tipo" => $tipoPg, "competizione" => $compPg, "titolo" => $titPg,
+                    "id_immagine" => $imgPg, "didascalia" => $didPg, "senza_testo" => trim($txtPg) === ""];
+}
+mysqli_commit($conn);
+
+// Rotazione degli aneddoti e delle immagini: segno quelli usati
+if ($episodiIds !== "") {
+    mysqli_query($conn, "UPDATE NEW_EPISODI_LEGA SET ultimo_utilizzo = NOW() WHERE id IN ($episodiIds)");
+}
+art_segna_immagini_usate($conn, $parsed["immagini"]);
+
+return [
+    "articolo" => [
+        "id"        => $idArticolo,
+        "stagione"  => $stagione,
+        "giornata"  => $giornata,
+        "titolo"    => $parsed["titolo"],
+        "sommario"  => $parsed["sommario"],
+        "testo"     => $parsed["testo"],
+        "stato"     => "bozza",
+        "modello"   => $modello,
+        "troncato"  => $troncato,
+        "formato"   => $formato,
+        "id_immagine_copertina" => $idCop,
+        "pagine"    => $pagineOut,
+    ],
+    "pagine_mancanti"    => $formato === "edizione" ? $parsed["mancanti"] : [],
+    "interrotto"         => $interrotto,
+    "avviso_interruzione" => $interrotto ? ($c["avviso"] ?? null) : null,
+    "costo_approssimato" => $costoApprossimato,
+    "formato_ok"         => $parsed["formato_ok"],
+    "token_input"        => $tokIn,
+    "token_output"       => $tokOut,
+    "costo_usd"          => $costo,
+    "costo_stimato_usd"  => $costoStima,
+    "costo_massimo_usd"  => $stima["costo_massimo_usd"],
+    "ms"                 => (int) ($c["ms"] ?? 0),
+];
+}
+
+// ------------------------------------------------------------
+// GENERAZIONE DIFFERITA (Message Batches) — tabella NEW_AI_JOBS
+// ------------------------------------------------------------
+
+/** La tabella dei job differiti esiste? (Script DB/migrazione_ai_jobs.sql) */
+function art_jobs_presenti($conn): bool
+{
+    return art_tabella_presente($conn, "NEW_AI_JOBS");
+}
+
+/** La generazione differita è abilitata (config "batch"."abilitato", default true)? */
+function art_differita_abilitata($conn): bool
+{
+    return (bool) (ai_config()["batch"]["abilitato"] ?? true) && art_jobs_presenti($conn);
+}
+
+/** Job di una stagione (null se non esiste). */
+function art_job_leggi($conn, int $id, int $stagione): ?array
+{
+    return query_one("SELECT * FROM NEW_AI_JOBS WHERE id = $id AND stagione = $stagione") ?: null;
+}
+
+/** Job ancora aperto per la stessa giornata e lo stesso formato (null se nessuno). */
+function art_job_aperto($conn, int $stagione, int $giornata, string $formato): ?array
+{
+    $f = mysqli_real_escape_string($conn, $formato);
+    return query_one("SELECT id, modello, stato, data_creazione FROM NEW_AI_JOBS
+                      WHERE stagione = $stagione AND giornata = $giornata AND formato = '$f'
+                        AND stato IN ('in_corso', 'in_salvataggio')
+                      ORDER BY id DESC LIMIT 1") ?: null;
+}
+
+/** Sintesi di un job per il frontend. */
+function art_job_pubblico(array $j): array
+{
+    return [
+        "id"            => (int) $j["id"],
+        "stato"         => $j["stato"],
+        "modello"       => $j["modello"],
+        "formato"       => $j["formato"],
+        "giornata"      => (int) $j["giornata"],
+        "creato_il"     => $j["data_creazione"],
+        "errore"        => $j["errore"] ?? null,
+        "id_articolo"   => isset($j["id_articolo"]) ? (int) $j["id_articolo"] : null,
+    ];
+}
+
+/** Segna il job come fallito. */
+function art_job_fallito($conn, int $id, string $errore): void
+{
+    $e = mysqli_real_escape_string($conn, mb_substr($errore, 0, 1000));
+    mysqli_query($conn, "UPDATE NEW_AI_JOBS SET stato = 'errore', errore = '$e', data_fine = NOW() WHERE id = $id");
+}
+
+/** Ricostruisce il payload di una bozza già salvata (poll successivi a un job completato). */
+function art_carica_risultato($conn, int $idArticolo, array $job): ?array
+{
+    $a = query_one("SELECT * FROM NEW_ARTICOLI WHERE id = $idArticolo");
+    if (!$a) return null;
+    $pagine = [];
+    foreach (query_all("SELECT ordine, tipo, competizione, titolo, id_immagine, didascalia, testo
+                        FROM NEW_ARTICOLI_PAGINE WHERE id_articolo = $idArticolo ORDER BY ordine, id") as $p) {
+        $pagine[] = ["ordine" => (int) $p["ordine"], "tipo" => $p["tipo"], "competizione" => $p["competizione"],
+                     "titolo" => $p["titolo"], "id_immagine" => $p["id_immagine"] !== null ? (int) $p["id_immagine"] : null,
+                     "didascalia" => $p["didascalia"], "senza_testo" => trim((string) $p["testo"]) === ""];
+    }
+    return [
+        "articolo" => [
+            "id" => (int) $a["id"], "stagione" => (int) $a["stagione"], "giornata" => (int) $a["giornata"],
+            "titolo" => $a["titolo"], "sommario" => $a["sommario"], "testo" => $a["testo"],
+            "stato" => $a["stato"], "modello" => $a["modello"], "troncato" => $a["troncato"] === "Y",
+            "formato" => $a["formato"],
+            "id_immagine_copertina" => $a["id_immagine_copertina"] !== null ? (int) $a["id_immagine_copertina"] : null,
+            "pagine" => $pagine,
+        ],
+        "pagine_mancanti" => [], "interrotto" => false, "avviso_interruzione" => null,
+        "costo_approssimato" => false, "formato_ok" => true,
+        "token_input" => $a["token_input"] !== null ? (int) $a["token_input"] : null,
+        "token_output" => $a["token_output"] !== null ? (int) $a["token_output"] : null,
+        "costo_usd" => $a["costo_usd"] !== null ? (float) $a["costo_usd"] : null,
+        "costo_stimato_usd" => $a["costo_stimato_usd"] !== null ? (float) $a["costo_stimato_usd"] : null,
+        "costo_massimo_usd" => $job["costo_massimo_usd"] !== null ? (float) $job["costo_massimo_usd"] : null,
+        "ms" => 0,
+    ];
+}
+
+/**
+ * Avanza un job differito (chiamata a ogni controllo dello stato):
+ *   - batch ancora in elaborazione → ritorna lo stato;
+ *   - batch finito → (una sola richiesta alla volta) scarica il risultato e salva la bozza.
+ * Non lancia errori per problemi temporanei di rete: ritorna "avviso" e si riprova al prossimo controllo.
+ */
+function art_job_avanza($conn, array $job): array
+{
+    $id = (int) $job["id"];
+    $out = fn(array $j, array $extra = []) => array_merge(["job" => art_job_pubblico($j)], $extra);
+
+    if ($job["stato"] === "completato") {
+        $res = $job["id_articolo"] ? art_carica_risultato($conn, (int) $job["id_articolo"], $job) : null;
+        return $out($job, $res ?? []);
+    }
+    if ($job["stato"] === "errore") return $out($job);
+
+    $st = ai_batch_stato((string) $job["batch_id"]);
+    if (!$st["ok"]) return $out($job, ["avviso" => "Controllo non riuscito, riprovo: " . $st["errore"]]);
+    if (!$st["finito"]) return $out($job, ["elaborazione" => $st["stato"], "conteggi" => $st["conteggi"]]);
+
+    // Un solo "finalizzatore" alla volta (due schede aperte non devono salvare due bozze);
+    // un salvataggio rimasto appeso da più di 2 minuti può essere ripreso.
+    mysqli_query($conn, "UPDATE NEW_AI_JOBS SET stato = 'in_salvataggio'
+                         WHERE id = $id AND (stato = 'in_corso'
+                               OR (stato = 'in_salvataggio' AND data_aggiornamento < NOW() - INTERVAL 2 MINUTE))");
+    if (mysqli_affected_rows($conn) < 1) {
+        $j = art_job_leggi($conn, $id, (int) $job["stagione"]) ?? $job;
+        if ($j["stato"] === "completato") return art_job_avanza($conn, $j);
+        return $out($j);
+    }
+
+    $ris = ai_batch_risultato((string) $job["batch_id"]);
+    if (!$ris["ok"]) {
+        mysqli_query($conn, "UPDATE NEW_AI_JOBS SET stato = 'in_corso' WHERE id = $id");
+        return $out($job, ["avviso" => "Risultato non ancora scaricabile, riprovo: " . $ris["errore"]]);
+    }
+    if ($ris["tipo"] !== "succeeded") {
+        art_job_fallito($conn, $id, (string) $ris["errore"]);
+        return $out(art_job_leggi($conn, $id, (int) $job["stagione"]) ?? $job);
+    }
+
+    $stagione = (int) $job["stagione"];
+    $prompt = art_costruisci($conn, $stagione, (int) $job["giornata"],
+                             ["formato" => $job["formato"], "contesto_giornata" => (string) $job["contesto_giornata"]]);
+    if (isset($prompt["errore"])) {
+        art_job_fallito($conn, $id, $prompt["errore"]);
+        return $out(art_job_leggi($conn, $id, $stagione) ?? $job);
+    }
+    $stima = ["token_input" => (int) $job["token_input_stimati"],
+              "costo_tipico_usd" => $job["costo_stimato_usd"] !== null ? (float) $job["costo_stimato_usd"] : null,
+              "costo_massimo_usd" => $job["costo_massimo_usd"] !== null ? (float) $job["costo_massimo_usd"] : null];
+    $esito = art_salva_bozza($conn, [
+        "stagione" => $stagione, "giornata" => (int) $job["giornata"], "formato" => $job["formato"],
+        "contesto" => (string) $job["contesto_giornata"], "utenza" => (string) $job["creato_da"],
+        "modello" => $job["modello"], "prompt" => $prompt, "stima" => $stima,
+        "interrotto" => false, "costo_approssimato" => false, "avviso" => null, "ms" => 0,
+        "fattore" => ai_fattore_batch(),
+    ], $ris["dati"]);
+
+    $idArt = (int) $esito["articolo"]["id"];
+    mysqli_query($conn, "UPDATE NEW_AI_JOBS SET stato = 'completato', id_articolo = $idArt, data_fine = NOW() WHERE id = $id");
+    $j = art_job_leggi($conn, $id, $stagione) ?? $job;
+    return $out($j, $esito);
+}

@@ -7,7 +7,7 @@ import { PageHeader, Spinner } from '../components/ui'
 import ArticoloTesto from '../components/ArticoloTesto'
 import { Importo, Avviso, fmtUsd } from '../components/AiUi'
 import {
-  Newspaper, Calculator, Sparkles, Lock, CheckCircle2, XCircle, AlertTriangle, ChevronDown, BookOpen, FileText,
+  Newspaper, Calculator, Sparkles, Lock, CheckCircle2, XCircle, AlertTriangle, ChevronDown, BookOpen, FileText, Clock, RefreshCw,
 } from 'lucide-react'
 
 // ============================================================
@@ -29,6 +29,15 @@ import {
 // dimenticata, il sorpasso in classifica...), inserite nel prompt. Contesto
 // fisso, stile e immagini si gestiscono dalle pagine "Profili ed episodi" e
 // "Immagini".
+//
+// Due modalità di generazione:
+//   - "differita" (consigliata): l'ordine parte con una richiesta breve alle
+//     Message Batches di Anthropic e la pagina controlla lo stato ogni ~15 s;
+//     nessuna connessione lunga (immune ai tagli dell'hosting), costo -50%,
+//     tempi di norma di pochi minuti. Se chiudi la pagina, rifai l'anteprima
+//     e riprendi il controllo del job in corso.
+//   - "immediata": una sola richiesta, il risultato arriva subito ma una
+//     connessione lunga può essere interrotta dall'hosting.
 //
 // Accesso: solo utenze con NEW_UTENZE.abilita_ai = 'Y'. Ogni chiamata
 // richiede utenza e password, verificate lato server.
@@ -54,6 +63,10 @@ export default function AiArticolo() {
   const [modello,  setModello]  = useState(null)
   const [risultato, setRisultato] = useState(null)
   const [cambio,   setCambio]   = useState(null)   // euro per 1 USD (opzionale, da config_ai.php)
+  const [differita, setDifferita] = useState(true)   // generazione differita (Message Batches)
+  const [job,       setJob]       = useState(null)   // ordine differito in corso / fallito
+  const [avvisoJob, setAvvisoJob] = useState(null)   // problema temporaneo nel controllo (si riprova)
+  const [tick,      setTick]      = useState(0)      // fa ripartire il timer dopo ogni controllo
 
   // Giornata predefinita: l'ultima chiusa
   useEffect(() => {
@@ -86,19 +99,58 @@ export default function AiArticolo() {
     }
   }
 
+  const usaDifferita = differita && !!anteprima?.differita_disponibile
+
   const conferma = async () => {
     setErrore(null)
     setFase('genera')
     try {
-      const res = await chiama('genera', { modello, prompt_hash: anteprima.prompt_hash })
-      setRisultato(res)
-      setAnteprima(null)
+      if (usaDifferita) {
+        const res = await chiama('genera', { modello, prompt_hash: anteprima.prompt_hash, asincrono: true })
+        setJob(res.job)
+        setAvvisoJob(null)
+        setAnteprima(null)
+      } else {
+        const res = await chiama('genera', { modello, prompt_hash: anteprima.prompt_hash })
+        setRisultato(res)
+        setAnteprima(null)
+      }
     } catch (err) {
       setErrore(err.message)
     } finally {
       setFase(null)
     }
   }
+
+  // Controllo dello stato di un ordine differito (richiesta breve). Problemi di
+  // rete o ritardi dell'AI non lo interrompono: si riprova al giro successivo.
+  const controllaJob = async (id) => {
+    try {
+      const res = await chiama('stato', { job_id: id })
+      setAvvisoJob(res.avviso ?? null)
+      if (res.articolo) { setRisultato(res); setJob(null) } else { setJob(res.job) }
+    } catch (err) {
+      setAvvisoJob(err.message)
+    } finally {
+      setTick(t => t + 1)
+    }
+  }
+
+  useEffect(() => {
+    if (!job || !['in_corso', 'in_salvataggio'].includes(job.stato)) return undefined
+    const t = setTimeout(() => controllaJob(job.id), 15000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id, job?.stato, tick])
+
+  const riprendiJob = (j) => {
+    setJob({ id: j.id, stato: j.stato, modello: j.modello, creato_il: j.data_creazione })
+    setAvvisoJob(null)
+    setAnteprima(null)
+  }
+
+  const costoTipico  = m => usaDifferita ? m.costo_tipico_differita_usd  : m.costo_tipico_usd
+  const costoMassimo = m => usaDifferita ? m.costo_massimo_differita_usd : m.costo_massimo_usd
 
   const scelto = anteprima?.modelli.find(m => m.modello === modello) ?? null
 
@@ -251,6 +303,40 @@ export default function AiArticolo() {
             </li>
           </ul>
 
+          {anteprima.job_in_corso && (
+            <Avviso tono="gold" icona={Clock}>
+              C'è già una generazione differita in corso per questa giornata e formato (modello {anteprima.job_in_corso.modello}).
+              {' '}
+              <button type="button" onClick={() => riprendiJob(anteprima.job_in_corso)} className="underline">
+                Controlla lo stato
+              </button>
+            </Avviso>
+          )}
+
+          {anteprima.differita_disponibile && (
+            <fieldset>
+              <legend className="text-xs text-slate-600 mb-2">Modalità di generazione</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { v: true,  t: 'Differita (consigliata)', d: `Nessuna connessione lunga: non viene interrotta dall'hosting. Costa circa il ${Math.round((1 - (anteprima.sconto_differita ?? 0.5)) * 100)}% in meno. Di solito pochi minuti, al massimo 24 ore.` },
+                  { v: false, t: 'Immediata', d: "Una sola richiesta, il risultato arriva subito, ma l'hosting può interromperla se dura troppo." },
+                ].map(o => (
+                  <label key={String(o.v)} className={`rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
+                    differita === o.v ? 'border-grass-500/50 bg-grass-500/5' : 'border-white/10 hover:border-white/20'}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="radio" name="modalita" className="mt-1" checked={differita === o.v}
+                        onChange={() => setDifferita(o.v)} />
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">{o.t}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{o.d}</p>
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
           <fieldset>
             <legend className="text-xs text-slate-600 mb-2">Modello</legend>
             <div className="space-y-2">
@@ -275,7 +361,7 @@ export default function AiArticolo() {
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4">
                         <span className="text-sm font-medium text-slate-200">{m.etichetta}</span>
                         <span className="text-sm text-slate-200">
-                          circa <Importo usd={m.costo_tipico_usd} cambio={cambio} />
+                          circa <Importo usd={costoTipico(m)} cambio={cambio} />
                         </span>
                       </div>
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 text-xs text-slate-500 mt-0.5">
@@ -283,7 +369,7 @@ export default function AiArticolo() {
                           {m.approssimato ? '≈ ' : ''}{m.token_input} token di input
                           {m.approssimato && ' (stima approssimativa)'}
                         </span>
-                        <span>al massimo <Importo usd={m.costo_massimo_usd} cambio={cambio} /></span>
+                        <span>al massimo <Importo usd={costoMassimo(m)} cambio={cambio} /></span>
                       </div>
                       {!m.entro_tetto && (
                         <p className="text-xs text-red-300 mt-1">Supererebbe il tetto mensile di spesa.</p>
@@ -323,15 +409,53 @@ export default function AiArticolo() {
           <button
             type="button"
             onClick={conferma}
-            disabled={!scelto || !scelto.entro_tetto || !!fase}
+            disabled={!scelto || !scelto.entro_tetto || !!fase || (usaDifferita && !!anteprima.job_in_corso)}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-grass-500 hover:bg-grass-400
                        text-pitch-950 font-semibold text-sm transition-all duration-150 active:scale-95
                        disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
           >
             {fase === 'genera'
-              ? <><Spinner size="sm" /> Generazione in corso (può richiedere un minuto)...</>
-              : <><Sparkles className="w-4 h-4" /> Conferma e genera{scelto ? ` — circa ${fmtUsd(scelto.costo_tipico_usd)}` : ''}</>}
+              ? <><Spinner size="sm" /> {usaDifferita ? 'Invio della richiesta...' : 'Generazione in corso (può richiedere un minuto)...'}</>
+              : <><Sparkles className="w-4 h-4" /> {usaDifferita ? 'Conferma e invia in generazione differita' : 'Conferma e genera'}{scelto ? ` — circa ${fmtUsd(costoTipico(scelto))}` : ''}</>}
           </button>
+        </div>
+      )}
+
+      {/* ── Generazione differita in corso ────────────────────── */}
+      {job && (
+        <div className="card p-6 max-w-2xl mb-6 space-y-3">
+          <h3 className="font-semibold text-slate-200 flex items-center gap-2">
+            <Clock className="w-4 h-4 text-slate-400" />
+            {job.stato === 'errore' ? 'Generazione differita non riuscita' : 'Generazione differita in corso'}
+          </h3>
+          {job.stato === 'errore' ? (
+            <Avviso tono="red" icona={XCircle}>{job.errore || 'Errore sconosciuto.'}</Avviso>
+          ) : (
+            <>
+              <p className="text-sm text-slate-400 flex items-center gap-2">
+                <Spinner size="sm" />
+                {job.stato === 'in_salvataggio' ? 'Risultato pronto: salvataggio della bozza...' : "L'AI sta scrivendo."}
+              </p>
+              <p className="text-xs text-slate-500">
+                Ordine {job.id} · {job.modello}{job.creato_il ? ` · inviato il ${job.creato_il}` : ''}. Lo stato viene controllato
+                ogni 15 secondi: di solito bastano pochi minuti (al massimo 24 ore). Puoi tenere aperta questa pagina; se la chiudi,
+                rifai «Calcola costo previsto» e riprendi il controllo dell'ordine in corso.
+              </p>
+              {avvisoJob && <Avviso tono="gold" icona={AlertTriangle}>{avvisoJob}</Avviso>}
+            </>
+          )}
+          <div className="flex gap-2">
+            {job.stato !== 'errore' && (
+              <button type="button" onClick={() => controllaJob(job.id)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-sm">
+                <RefreshCw className="w-3.5 h-3.5" /> Controlla ora
+              </button>
+            )}
+            {job.stato === 'errore' && (
+              <button type="button" onClick={() => setJob(null)} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:text-white hover:border-white/20 text-sm">
+                Chiudi
+              </button>
+            )}
+          </div>
         </div>
       )}
 

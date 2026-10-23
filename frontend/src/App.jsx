@@ -16,7 +16,6 @@ const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
-const AlboOro     = lazy(() => import('./pages/AlboOro'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
 const Login       = lazy(() => import('./pages/Login'))
@@ -30,6 +29,9 @@ const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSeri
 const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
 const AiTest = lazy(() => import('./pages/AiTest'))
+const ApiFootballTest = lazy(() => import('./pages/ApiFootballTest'))
+const ApiFootballMappatura = lazy(() => import('./pages/ApiFootballMappatura'))
+const ApiFootballSync = lazy(() => import('./pages/ApiFootballSync'))
 const AiArticolo = lazy(() => import('./pages/AiArticolo'))
 const AiArticoli = lazy(() => import('./pages/AiArticoli'))
 const AiContesto = lazy(() => import('./pages/AiContesto'))
@@ -115,7 +117,6 @@ function AppShell() {
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
-                  <Route path="/albo-oro"     element={<AlboOro />} />
                   <Route path="/gazzetta"     element={<Gazzetta />} />
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={
@@ -157,6 +158,15 @@ function AppShell() {
                   } />
                   <Route path="/importa-calendario-serie-a" element={
                     <AdminRoute><ImportaCalendarioSerieA /></AdminRoute>
+                  } />
+                  <Route path="/api-football/test" element={
+                    <AdminRoute><ApiFootballTest /></AdminRoute>
+                  } />
+                  <Route path="/api-football/mappatura" element={
+                    <AdminRoute><ApiFootballMappatura /></AdminRoute>
+                  } />
+                  <Route path="/api-football/sync" element={
+                    <AdminRoute><ApiFootballSync /></AdminRoute>
                   } />
                   <Route path="/regole-calcolo" element={
                     <AdminRoute><GestisciRegoleCalcolo /></AdminRoute>

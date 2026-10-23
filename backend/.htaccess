@@ -19,6 +19,12 @@ RewriteEngine On
     Deny from all
 </FilesMatch>
 
+# Blocca accesso diretto alla configurazione API-Football (contiene chiave API e token del cron)
+<FilesMatch "^config_api_football(\.example)?\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
 # Blocca accesso diretto alla cartella admin dall'esterno
 # (gli endpoint admin devono essere chiamati solo da IP fidati
 #  oppure con un token - vedi autenticazione admin sotto)

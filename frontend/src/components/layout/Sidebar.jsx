@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Link2, Activity
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -16,7 +16,6 @@ const NAV_SECTIONS = [
       { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
       { to: '/statistiche',  icon: BarChart2, label: 'Statistiche'   },
       { to: '/gazzetta',     icon: Newspaper, label: 'La Gazzetta'   },
-      { to: '/albo-oro',     icon: Award,     label: "Albo d'oro"   },
     ],
   },
   {
@@ -67,6 +66,9 @@ const ADMIN_SECTIONS = [
       { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
       { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializza stagione' },
       { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
+      { to: '/api-football/test',          icon: PlugZap,   label: 'Test API-Football' },
+      { to: '/api-football/mappatura',      icon: Link2,     label: 'Mappatura API-Football' },
+      { to: '/api-football/sync',           icon: Activity,  label: 'Sync API-Football' },
     ],
   },
   {

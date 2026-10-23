@@ -9,6 +9,7 @@ backend/vendor/
 backend/.env
 backend/connect.php
 backend/config_ai.php
+backend/config_api_football.php
 
 # Varie
 .DS_Store

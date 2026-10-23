@@ -85,9 +85,6 @@ export const updateSistema  = (stagione, label, valore) =>
 
 export const getGenerale = (stagione) => get('generale.php', { stagione })
 
-// Albo d'oro storico (campionato e Champions), tutte le stagioni
-export const getAlboOro = () => get('albo_oro.php')
-
 // ── Calendario ───────────────────────────────────────────────
 
 export const getCalendario = (stagione) => get('calendario.php', { stagione })
@@ -310,6 +307,38 @@ export const adminEliminaBackup = (bk_ids, { utenza, password, conferma, accetta
 export const aiConnessione = (stagione, { utenza, password, azione = 'test' }) =>
   post('admin/ai_test.php', { stagione, utenza, password, azione })
 
+// ── API-Football: statistiche giocatori a fine partita ────────
+// Tutte le chiamate sono POST con { stagione, utenza, password, azione, ... }:
+// credenziali di un'utenza AMMINISTRATORE, verificate lato server.
+
+// admin/api_football_test.php (Fase 0, nessun salvataggio)
+//   azione 'diagnostica' → controlli locali: { ambiente, ora_roma, file_configurazione,
+//     chiave_impostata, token_cron_valido, proxy, lega, season_api, regole,
+//     quota_max_locale, richieste_oggi, tabelle_mancanti }
+//   azione 'rete'        → raggiungibilità di API-Football (gratuita): { esito, prove }
+//   azione 'stato'       → piano e quota dell'account (1 richiesta)
+//   azione 'copertura'   → copertura della Serie A per stagione (1 richiesta)
+//   azione 'prova_fixture' (+ fixture_id opzionale) → analisi di una partita conclusa (2-4 richieste)
+export const afTest = (stagione, { utenza, password, azione = 'diagnostica', ...extra }) =>
+  post('admin/api_football_test.php', { stagione, utenza, password, azione, ...extra })
+
+// admin/api_football_mapping.php (Fase 1)
+//   azioni: stato · squadre_carica · squadre_elenco · squadra_associa { api_team_id, squadra_serie_a }
+//           giocatori_carica { api_team_id } · giocatori_automatch { soglia? }
+//           giocatori_elenco { filtro: 'da_associare'|'associati', squadra?, q?, limite? }
+//           giocatori_cerca_api { q, api_team_id? } · giocatore_associa { id_giocatore, api_player_id|null }
+export const afMappatura = (stagione, { utenza, password, azione = 'stato', ...extra }) =>
+  post('admin/api_football_mapping.php', { stagione, utenza, password, azione, ...extra })
+
+// admin/api_football_sync.php (Fase 1)
+//   azione 'stato' { giornata? } → { ora_roma, giornate, giornata, partite[], regole, richieste_oggi,
+//                                    quota_max_locale, mappatura, ultime_chiamate[] }
+//   azione 'simula'  → regole del cron senza chiamate API
+//   azione 'esegui'  → sincronizzazione immediata (come il cron)
+//   azione 'forza' { giornata, n_partita } → rilegge una singola partita
+export const afSync = (stagione, { utenza, password, azione = 'stato', ...extra }) =>
+  post('admin/api_football_sync.php', { stagione, utenza, password, azione, ...extra })
+
 // ── Gazzetta: articoli AI pubblicati (articoli.php, pubblico) ──
 // GET ?stagione=2026 → [{ id, giornata, titolo, sommario, data_pubblicazione,
 //                         formato, id_immagine_copertina }]
@@ -388,16 +417,8 @@ export const aiImmaginiCarica = (stagione, { utenza, password, file, ...campi })
 //                      id_immagine_copertina, pagine[] }, pagine_mancanti[],
 //            formato_ok, token_input, token_output, costo_usd,
 //            costo_stimato_usd, costo_massimo_usd, ms }
-//        GENERAZIONE DIFFERITA (Message Batches: nessuna connessione lunga, -50% di costo,
-//        di solito pochi minuti): azione 'genera' con asincrono = true risponde subito
-//          { differita: true, job{ id, stato, modello, formato, giornata, creato_il } }
-//        e poi azione 'stato' con job_id (richiesta breve, da ripetere ogni ~15 s)
-//          { job{ stato: 'in_corso' | 'in_salvataggio' | 'completato' | 'errore', errore, ... },
-//            [avviso], [articolo{...} e gli altri campi di 'genera' a lavoro completato] }
-//        L'anteprima riporta anche differita_disponibile, sconto_differita, job_in_corso
-//        e, per ogni modello, costo_tipico_differita_usd / costo_massimo_differita_usd.
-export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata, asincrono, job_id }) =>
-  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata, asincrono, job_id })
+export const aiArticolo = (stagione, { utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata }) =>
+  post('admin/ai_articolo.php', { stagione, utenza, password, azione, giornata, modello, prompt_hash, formato, contesto_giornata })
 
 // ── Inizializzazione stagione (pagina admin) ──────────────────
 // GET  → dati per la stagione, una riga per squadra (join Squadre +

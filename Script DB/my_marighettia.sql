@@ -270,15 +270,13 @@ CREATE TABLE `NEW_ACCESSI` (
 -- piazzamento di rilievo. La squadra e' identificata da NEW_UTENZE.utenza
 -- (stabile tra le stagioni, a differenza dell'id squadra).
 --   competizione: 'CAMP' (campionato) | 'CHAMP' (Champions)
---   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP),
---                 99 = ultimo posto (solo CAMP, maglia nera)
--- Usata anche dalla pagina "Albo d'oro" (api/albo_oro.php).
+--   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP)
 --
 
 CREATE TABLE `NEW_ALBO_ORO` (
   `stagione` int NOT NULL,
   `competizione` varchar(5) NOT NULL COMMENT 'CAMP | CHAMP',
-  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa, 99 = ultimo (solo CAMP)',
+  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa',
   `utenza` varchar(50) NOT NULL COMMENT 'NEW_UTENZE.utenza',
   PRIMARY KEY (`stagione`,`competizione`,`posizione`),
   KEY `idx_albo_utenza` (`utenza`)
@@ -298,6 +296,120 @@ CREATE TABLE `NEW_ALLENATORI` (
   `stagione` int NOT NULL DEFAULT '0',
   `email` varchar(120) NOT NULL DEFAULT ''
 ) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_API_LOG`
+--
+
+CREATE TABLE `NEW_API_LOG` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `data_ora` datetime NOT NULL COMMENT 'UTC (il contatore giornaliero di API-Football riparte a mezzanotte UTC)',
+  `stagione` int NOT NULL DEFAULT '0',
+  `endpoint` varchar(80) NOT NULL,
+  `parametri` varchar(255) NOT NULL DEFAULT '',
+  `http` smallint NOT NULL DEFAULT '0',
+  `ms` int NOT NULL DEFAULT '0',
+  `ok` char(1) NOT NULL DEFAULT 'N' COMMENT 'Y = risposta valida senza errori',
+  `richieste_rimaste` int DEFAULT NULL COMMENT 'Richieste giornaliere residue (header x-ratelimit-requests-remaining)',
+  `errore` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_data` (`data_ora`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_API_MAPPING_GIOCATORI`
+--
+
+CREATE TABLE `NEW_API_MAPPING_GIOCATORI` (
+  `stagione` int NOT NULL,
+  `api_player_id` int NOT NULL COMMENT 'ID giocatore in API-Football',
+  `api_team_id` int DEFAULT NULL,
+  `api_nome` varchar(80) NOT NULL DEFAULT '',
+  `api_ruolo` varchar(20) NOT NULL DEFAULT '' COMMENT 'Goalkeeper, Defender, Midfielder, Attacker',
+  `numero` smallint DEFAULT NULL,
+  `id_giocatore` int DEFAULT NULL COMMENT 'NEW_GIOCATORI_BASE_ASTA.id_giocatore (NULL = non ancora associato)',
+  `metodo` varchar(10) DEFAULT NULL COMMENT 'AUTO | MANUALE',
+  `punteggio` smallint DEFAULT NULL COMMENT 'Affidabilità dell''abbinamento automatico (0-100)',
+  `aggiornato_il` datetime NOT NULL,
+  PRIMARY KEY (`stagione`,`api_player_id`),
+  KEY `idx_giocatore` (`stagione`,`id_giocatore`),
+  KEY `idx_team` (`stagione`,`api_team_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_API_MAPPING_SQUADRE`
+--
+
+CREATE TABLE `NEW_API_MAPPING_SQUADRE` (
+  `stagione` int NOT NULL,
+  `api_team_id` int NOT NULL COMMENT 'ID squadra in API-Football',
+  `api_nome` varchar(80) NOT NULL DEFAULT '',
+  `squadra_serie_a` varchar(50) DEFAULT NULL COMMENT 'Nome come in NEW_CALENDARIO_SERIE_A / NEW_GIOCATORI_BASE_ASTA (NULL = non associata)',
+  `metodo` varchar(10) DEFAULT NULL COMMENT 'AUTO | MANUALE',
+  `aggiornato_il` datetime NOT NULL,
+  PRIMARY KEY (`stagione`,`api_team_id`),
+  KEY `idx_squadra` (`stagione`,`squadra_serie_a`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_API_PARTITE`
+--
+
+CREATE TABLE `NEW_API_PARTITE` (
+  `stagione` int NOT NULL,
+  `giornata` int NOT NULL COMMENT 'Giornata di SERIE A (come NEW_CALENDARIO_SERIE_A)',
+  `n_partita` int NOT NULL COMMENT 'N° partita nella giornata (come NEW_CALENDARIO_SERIE_A)',
+  `api_fixture_id` int DEFAULT NULL,
+  `api_stato` varchar(10) NOT NULL DEFAULT '' COMMENT 'Stato API-Football: NS, 1H, HT, 2H, ET, P, FT, AET, PEN, PST, CANC, ABD, SUSP, INT, AWD, WO',
+  `gol_casa` smallint DEFAULT NULL,
+  `gol_ospite` smallint DEFAULT NULL,
+  `ultimo_controllo` datetime DEFAULT NULL COMMENT 'Ultima chiamata API su questa partita (ora di Roma)',
+  `ultimo_sync` datetime DEFAULT NULL COMMENT 'Ultimo salvataggio delle statistiche giocatore (ora di Roma)',
+  `n_controlli` int NOT NULL DEFAULT '0',
+  `dettaglio_finale` char(1) NOT NULL DEFAULT 'N' COMMENT 'Y = statistiche a partita conclusa già salvate: nessuna ulteriore chiamata',
+  `n_giocatori` int NOT NULL DEFAULT '0' COMMENT 'Giocatori con statistiche salvate',
+  `n_non_mappati` int NOT NULL DEFAULT '0' COMMENT 'Giocatori della partita senza associazione a NEW_GIOCATORI_BASE_ASTA',
+  `errore` varchar(255) DEFAULT NULL,
+  PRIMARY KEY (`stagione`,`giornata`,`n_partita`),
+  KEY `idx_fixture` (`stagione`,`api_fixture_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_API_STATISTICHE`
+--
+
+CREATE TABLE `NEW_API_STATISTICHE` (
+  `stagione` int NOT NULL,
+  `api_fixture_id` int NOT NULL,
+  `api_player_id` int NOT NULL,
+  `api_team_id` int DEFAULT NULL,
+  `presente` char(1) NOT NULL DEFAULT 'N' COMMENT 'Y = ha giocato (minuti > 0), N = in distinta ma non entrato',
+  `minuti` smallint NOT NULL DEFAULT '0',
+  `titolare` char(1) NOT NULL DEFAULT 'N',
+  `voto_api` decimal(3,1) DEFAULT NULL COMMENT 'Rating di API-Football (NON è il fantavoto)',
+  `gf` int NOT NULL DEFAULT '0',
+  `gs` int NOT NULL DEFAULT '0',
+  `rp` int NOT NULL DEFAULT '0',
+  `rs` int NOT NULL DEFAULT '0',
+  `rf` int NOT NULL DEFAULT '0',
+  `au` int NOT NULL DEFAULT '0',
+  `amm` int NOT NULL DEFAULT '0',
+  `esp` int NOT NULL DEFAULT '0',
+  `ass` int NOT NULL DEFAULT '0',
+  `aggiornato_il` datetime NOT NULL,
+  PRIMARY KEY (`stagione`,`api_fixture_id`,`api_player_id`),
+  KEY `idx_player` (`stagione`,`api_player_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 
@@ -353,36 +465,6 @@ CREATE TABLE `NEW_ARTICOLI_PAGINE` (
   PRIMARY KEY (`id`),
   KEY `idx_articolo_ordine` (`id_articolo`,`ordine`),
   CONSTRAINT `fk_pagine_articolo` FOREIGN KEY (`id_articolo`) REFERENCES `NEW_ARTICOLI` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- --------------------------------------------------------
-
---
--- Struttura della tabella `NEW_AI_JOBS`
---
-
-CREATE TABLE `NEW_AI_JOBS` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `stagione` int NOT NULL,
-  `giornata` int NOT NULL,
-  `formato` varchar(10) NOT NULL DEFAULT 'articolo' COMMENT 'articolo | edizione',
-  `modello` varchar(60) NOT NULL DEFAULT '',
-  `batch_id` varchar(80) NOT NULL DEFAULT '' COMMENT 'id del Message Batch di Anthropic',
-  `stato` varchar(14) NOT NULL DEFAULT 'in_corso' COMMENT 'in_corso | in_salvataggio | completato | errore',
-  `prompt_hash` varchar(64) NOT NULL DEFAULT '',
-  `contesto_giornata` text COMMENT 'Note di giornata inserite da chi genera',
-  `creato_da` varchar(50) NOT NULL DEFAULT '',
-  `token_input_stimati` int DEFAULT NULL,
-  `costo_stimato_usd` decimal(10,6) DEFAULT NULL,
-  `costo_massimo_usd` decimal(10,6) DEFAULT NULL,
-  `id_articolo` int DEFAULT NULL COMMENT 'NEW_ARTICOLI.id della bozza salvata',
-  `errore` text,
-  `data_creazione` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `data_aggiornamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `data_fine` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_stagione_giornata` (`stagione`,`giornata`,`formato`),
-  KEY `idx_stato` (`stato`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -960,16 +1042,7 @@ CREATE TABLE `NEW_SIMULAZIONE_RISULTATI_CHAMP` (
   `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
   `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
   `calcolato_il` datetime(3) NOT NULL,
-  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione',
-  `supp_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita ha avuto i supplementari',
-  `supp_ftotale` decimal(6,2) NOT NULL DEFAULT '0.00' COMMENT 'Punti dei 3 panchinari dei supplementari (squadra)',
-  `supp_golf` int NOT NULL DEFAULT '0' COMMENT 'Gol segnati ai supplementari',
-  `supp_gols` int NOT NULL DEFAULT '0' COMMENT 'Gol subiti ai supplementari',
-  `rig_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita e'' stata decisa ai calci di rigore',
-  `rig_golf` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati',
-  `rig_gols` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati dall''avversaria',
-  `passa` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la squadra vince la sfida (solo turni con supplementari/rigori)',
-  `dett_extra` text COMMENT 'JSON con il dettaglio di supplementari e rigori'
+  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

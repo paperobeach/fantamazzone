@@ -174,6 +174,7 @@ function StatoCandidato({ c }) {
 function GiocatoriLive({ live }) {
   const [aperto, setAperto] = useState(false)
   const nGiocatori = live.oggi.reduce((n, m) => n + m.giocatori.length, 0)
+  const nAvversari = live.oggi.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
   const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.length, 0)
 
   return (
@@ -182,7 +183,7 @@ function GiocatoriLive({ live }) {
               className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-white/[0.03] transition-colors">
         <Users className="w-4 h-4 text-grass-400 flex-shrink-0" />
         <span className="text-sm text-slate-200">Giocatori nelle prossime partite di oggi</span>
-        <span className="ml-auto text-xs font-mono text-slate-500">{nGiocatori} titolari · {nPanch} panchinari</span>
+        <span className="ml-auto text-xs font-mono text-slate-500">{nGiocatori} tuoi · {nAvversari} avversari · {nPanch} panchinari</span>
         {aperto ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
       </button>
 
@@ -199,7 +200,9 @@ function GiocatoriLive({ live }) {
                 </span>
                 <span className="text-slate-300">{m.casa} – {m.ospite}</span>
               </p>
-              {m.giocatori.length === 0 ? (
+              {m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
+                <p className="text-[11px] text-slate-700 mt-1">Nessun titolare tuo né degli avversari.</p>
+              ) : m.giocatori.length === 0 ? (
                 <p className="text-[11px] text-slate-700 mt-1">Nessun tuo titolare.</p>
               ) : (
                 <div className="mt-1.5 flex flex-wrap gap-1">
@@ -212,6 +215,27 @@ function GiocatoriLive({ live }) {
                   ))}
                 </div>
               )}
+
+              {(m.avversari ?? []).map(a => (
+                <div key={a.id_squadra} className="mt-2">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                    {a.competizioni.includes('CAMP') && <Trophy className="w-3 h-3 text-grass-400" aria-label="Campionato" />}
+                    {a.competizioni.includes('CHAMP') && <Crown className="w-3 h-3 text-sky-400" aria-label="Champions" />}
+                    Avversario: <span className="text-slate-300 normal-case tracking-normal">{a.nome}</span>
+                  </p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {a.giocatori.map(g => (
+                      <span key={g.id_giocatore} title={g.squadra_serie_a ?? ''}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-[11px] text-slate-300">
+                        <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
+                        {g.competizioni.includes('CAMP') && g.competizioni.includes('CHAMP') && (
+                          <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
 

@@ -22,6 +22,9 @@
 //               apre con live_dettaglio.php (id_squadra = id_casa).
 //   oggi        partite di Serie A di OGGI non ancora concluse, con i
 //               titolari della squadra coinvolti (stato: in_corso | da_giocare)
+//               e, in "avversari", i titolari delle squadre avversarie di
+//               giornata (campionato e/o Champions) che giocano in quella
+//               partita: [{ id_squadra, nome, competizioni, giocatori }]
 //   senza_voto  titolari la cui partita è finita senza voto (sarà sostituito)
 //   panchinari  per ruolo, i primi panchinari che entrerebbero se i titolari
 //               ancora da giocare (o senza voto) non prendessero voto
@@ -119,8 +122,18 @@ function dl_formazione_squadra(int $stagione, int $giornata, string $tab, int $i
     return pd_carica_formazione($stagione, $giornata, $tab, [$idSquadra])[$idSquadra] ?? [];
 }
 
+/** Registra l'avversario di una competizione con la sua formazione (la stessa squadra può comparire in entrambe). */
+function dl_registra_avversario(array &$avversari, int $idAvv, string $nome, string $comp, array $righe): void
+{
+    if (!isset($avversari[$idAvv])) $avversari[$idAvv] = ["nome" => $nome, "competizioni" => [], "righe" => []];
+    $avversari[$idAvv]["competizioni"][] = $comp;
+    // la formazione è per competizione: si tiene quella di ogni competizione, i titolari si uniscono dopo
+    $avversari[$idAvv]["righe"][$comp] = $righe;
+}
+
 $partite = [];
 $formazioni = [];   // competizione => righe di formazione (titolari + panchina)
+$avversari  = [];   // id squadra avversaria => [nome, competizioni, righe di formazione]
 
 // Campionato
 $ac = ds_avversario_camp($stagione, $giornata, $idSquadra);
@@ -135,6 +148,8 @@ if ($ac) {
             "io_casa" => $ac["casa"],
         ] + dl_risultato("NEW_RISULTATI", "id_squadra", "NEW_SIMULAZIONE_RISULTATI", $stagione, $giornata, $idSquadra);
         $formazioni["CAMP"] = dl_formazione_squadra($stagione, $giornata, FORMAZIONE_TAB_CAMPIONATO, $idSquadra);
+        dl_registra_avversario($avversari, $ac["id_avv"], $avv["nome"], "CAMP",
+            dl_formazione_squadra($stagione, $giornata, FORMAZIONE_TAB_CAMPIONATO, $ac["id_avv"]));
     }
 }
 
@@ -155,6 +170,8 @@ foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
     ] + dl_risultato("NEW_RISULTATI_CHAMP", "squadra", "NEW_SIMULAZIONE_RISULTATI_CHAMP", $stagione, $giornata, $idSquadra);
     $formazioni["CHAMP"] = dl_formazione_squadra(
         $stagione, $giornata, formazione_tabella_champions($stagione, $giornata, $idSquadra), $idSquadra);
+    dl_registra_avversario($avversari, $idAvv, $avv["nome"], "CHAMP", dl_formazione_squadra(
+        $stagione, $giornata, formazione_tabella_champions($stagione, $giornata, $idAvv), $idAvv));
     break;
 }
 
@@ -205,6 +222,28 @@ foreach ($formazioni as $comp => $righe) {
     }
 }
 
+// Titolari delle squadre avversarie di giornata (maglia 1-11), con la loro partita di Serie A
+$titolariAvv = [];   // id squadra avversaria => [id giocatore => giocatore]
+foreach ($avversari as $idAvv => $a) {
+    foreach ($a["righe"] as $comp => $righe) {
+        foreach ($righe as $r) {
+            if ($r["maglia"] < 1 || $r["maglia"] > 11) continue;
+            $id = $r["id_giocatore"];
+            if (isset($titolariAvv[$idAvv][$id])) { $titolariAvv[$idAvv][$id]["competizioni"][] = $comp; continue; }
+            $sa = $ctx["squadre"][$id] ?? null;
+            $sn = $sa !== null ? sim_norm($sa) : "";
+            $partita = $sn !== "" ? ($perSquadra[$sn] ?? null) : null;
+            $titolariAvv[$idAvv][$id] = [
+                "id_giocatore" => $id, "nome" => $r["giocatore"], "ruolo" => $r["ruolo"],
+                "squadra_serie_a" => $sa !== null && trim($sa) !== "" ? $sa : null,
+                "stato_partita" => dl_stato_partita($partita, $sn, $ctx, $ora),
+                "senza_voto" => isset($ctx["voti"][$id]) && ($ctx["voti"][$id]["sv"] === "Y" || $ctx["voti"][$id]["voto"] === null),
+                "competizioni" => [$comp], "_partita" => $partita,
+            ];
+        }
+    }
+}
+
 // ── Partite di Serie A di oggi con i titolari coinvolti ──────────
 
 $oggi = date("Y-m-d", $ora);
@@ -226,6 +265,17 @@ foreach ($titolari as $t) {
     if ($p["data"] === $oggi) $perPartita[$p["n_partita"]][] = $t;
 }
 
+// Titolari avversari ancora da giocare / in corso, per partita di Serie A di oggi
+$perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
+foreach ($titolariAvv as $idAvv => $gioc) {
+    foreach ($gioc as $t) {
+        $p = $t["_partita"];
+        if ($p === null || $p["data"] !== $oggi) continue;
+        if ($t["senza_voto"] || $t["stato_partita"] === "conclusa") continue;
+        $perPartitaAvv[$p["n_partita"]][$idAvv][] = $t;
+    }
+}
+
 $outOggi = [];
 foreach ($partiteSerieA as $p) {
     $n = (int) $p["n_partita"];
@@ -241,6 +291,14 @@ foreach ($partiteSerieA as $p) {
             "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
             "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"],
         ], $perPartita[$n] ?? []),
+        "avversari" => array_values(array_map(fn($idAvv, $gioc) => [
+            "id_squadra" => $idAvv, "nome" => $avversari[$idAvv]["nome"],
+            "competizioni" => $avversari[$idAvv]["competizioni"],
+            "giocatori" => array_map(fn($g) => [
+                "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
+                "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"],
+            ], $gioc),
+        ], array_keys($perPartitaAvv[$n] ?? []), array_values($perPartitaAvv[$n] ?? []))),
     ];
 }
 

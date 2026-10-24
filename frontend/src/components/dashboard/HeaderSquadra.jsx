@@ -187,27 +187,27 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
 
         <div className="flex flex-wrap items-center justify-end gap-2 ml-auto min-w-0">
           {live && <LiveChip live={live} />}
-          {!f.stagione_conclusa && residuo && (
+          {!live && !f.stagione_conclusa && residuo && (
             <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-mono ${URGENZA[residuo.urgenza]}`}
                   title={scadenzaTesto ? `Limite formazione: ${scadenzaTesto}` : undefined}>
               <Timer className="w-3.5 h-3.5" /> {residuo.testo}
             </span>
           )}
-          {ap.campionato && (
+          {!live && ap.campionato && (
             <span className="hidden md:inline-flex items-center gap-1.5" title={`Campionato: ${ap.campionato.avversario.nome}`}>
               <Trophy className="w-3.5 h-3.5 text-grass-400" />
               <TeamLogo logo={ap.campionato.avversario.logo} nome={ap.campionato.avversario.nome} size="sm" />
               <StatoFormazione compatto stato={ap.campionato.formazione_avv} etichetta="Avversario campionato" />
             </span>
           )}
-          {ap.champions && (
+          {!live && ap.champions && (
             <span className="hidden md:inline-flex items-center gap-1.5" title={`Champions: ${ap.champions.avversario.nome}`}>
               <Crown className="w-3.5 h-3.5 text-sky-400" />
               <TeamLogo logo={ap.champions.avversario.logo} nome={ap.champions.avversario.nome} size="sm" />
               <StatoFormazione compatto stato={ap.champions.formazione_avv} etichetta="Avversario Champions" />
             </span>
           )}
-          {!f.stagione_conclusa && (
+          {!live && !f.stagione_conclusa && (
             <span title={tuttiInseriti ? 'Formazione inserita' : 'Formazione da inserire'}
                   className={`w-6 h-6 rounded-full border inline-flex items-center justify-center ${
                     tuttiInseriti ? 'bg-green-500/15 text-green-400 border-green-500/30'
@@ -269,7 +269,8 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
                 </div>
               </div>
 
-              {/* Appuntamenti */}
+              {/* Appuntamenti (sostituiti dal pannello LIVE quando è attivo) */}
+              {!live && (
               <div className="flex-1 min-w-0 space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <CardMatch tipo="campionato" app={ap.campionato} />
@@ -301,9 +302,10 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
                   )}
                 </div>
               </div>
+              )}
 
               {/* Azioni */}
-              <div className="lg:w-48 flex-shrink-0 lg:self-end">{bottoni(false)}</div>
+              <div className={`lg:w-48 flex-shrink-0 lg:self-end ${live ? 'lg:ml-auto' : ''}`}>{bottoni(false)}</div>
             </div>
 
             {/* LIVE: dalla prima partita di Serie A alla conclusione dell'ultima */}

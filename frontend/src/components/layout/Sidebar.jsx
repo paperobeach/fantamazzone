@@ -22,7 +22,7 @@ const NAV_SECTIONS = [
     title: 'Campionato',
     items: [
       { to: '/calendario',   icon: Calendar,  label: 'Calendario'    },
-      { to: '/',             icon: Trophy,    label: 'Classifica'    },
+      { to: '/classifica',   icon: Trophy,    label: 'Classifica'    },
       { to: '/top-flop',     icon: Star,      label: 'Top / Flop 11' },
     ],
   },
@@ -37,13 +37,13 @@ const NAV_SECTIONS = [
 
 // Voci con rotta annidata (/champions e /champions/top-flop): evidenziano
 // solo la propria pagina, non anche quella annidata.
-const NAV_END = new Set(['/', '/champions'])
+const NAV_END = new Set(['/', '/classifica', '/champions'])
 
 // Menu "Gestione squadra": disponibile solo per gli utenti loggati,
 // per la gestione della propria squadra ("Formazione" è stata
 // spostata qui e rinominata in "Inserimento formazione").
 const TEAM_NAV = [
-  { to: '/dashboard-squadra', icon: LayoutDashboard, label: 'Dashboard squadra' },
+  { to: '/',              icon: LayoutDashboard, label: 'Dashboard squadra' },
   { to: '/formazione',   icon: ClipboardList,label: 'Inserimento formazione' },
 ]
 
@@ -281,6 +281,7 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
               <NavLink
                 key={to}
                 to={to}
+                end={NAV_END.has(to)}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                     isActive

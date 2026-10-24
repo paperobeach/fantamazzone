@@ -39,6 +39,13 @@ const AiImmagini = lazy(() => import('./pages/AiImmagini'))
 const Gazzetta = lazy(() => import('./pages/Gazzetta'))
 const GazzettaArticolo = lazy(() => import('./pages/GazzettaArticolo'))
 
+// Home: la dashboard della propria squadra per gli utenti loggati;
+// per i visitatori non autenticati resta la classifica.
+function Home() {
+  const { utente } = useApp()
+  return utente ? <DashboardSquadra /> : <Classifica />
+}
+
 function PageLoader() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -104,7 +111,8 @@ function AppShell() {
             <ErrorBoundary key={location.pathname}>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                  <Route path="/"              element={<Classifica />} />
+                  <Route path="/"              element={<Home />} />
+                  <Route path="/classifica"    element={<Classifica />} />
                   <Route path="/calendario"   element={<Calendario />} />
                   <Route path="/live"         element={<LiveGiornata />} />
                   <Route path="/squadre"      element={<Squadre />} />
@@ -122,9 +130,8 @@ function AppShell() {
                   <Route path="/formazione"   element={
                     <ProtectedRoute><Formazione /></ProtectedRoute>
                   } />
-                  <Route path="/dashboard-squadra" element={
-                    <ProtectedRoute><DashboardSquadra /></ProtectedRoute>
-                  } />
+                  {/* La dashboard squadra è la home: il vecchio indirizzo resta come redirect */}
+                  <Route path="/dashboard-squadra" element={<Navigate to="/" replace />} />
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={
                     <AdminRoute><Admin /></AdminRoute>

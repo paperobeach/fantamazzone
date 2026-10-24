@@ -25,6 +25,9 @@
 //               e, in "avversari", i titolari delle squadre avversarie di
 //               giornata (campionato e/o Champions) che giocano in quella
 //               partita: [{ id_squadra, nome, competizioni, giocatori }]
+//   avversari   per ciascuna squadra avversaria di giornata: stessi dati di
+//               senza_voto e panchinari calcolati sulla sua formazione
+//               [{ id_squadra, nome, competizioni, senza_voto, panchinari }]
 //   senza_voto  titolari la cui partita è finita senza voto (sarà sostituito)
 //   panchinari  per ruolo, i primi panchinari che entrerebbero se i titolari
 //               ancora da giocare (o senza voto) non prendessero voto
@@ -194,87 +197,131 @@ function dl_stato_partita(?array $partita, string $squadraNorm, array $ctx, int 
     return $ora >= $partita["inizio"] ? "in_corso" : "da_giocare";
 }
 
-$titolari = [];   // id => giocatore (unione delle competizioni)
-$bench    = [];   // ruolo => [id => giocatore] in ordine di maglia
-foreach ($formazioni as $comp => $righe) {
-    foreach ($righe as $r) {
-        $id = $r["id_giocatore"];
-        $sa = $ctx["squadre"][$id] ?? null;
-        $sn = $sa !== null ? sim_norm($sa) : "";
-        $partita = $sn !== "" ? ($perSquadra[$sn] ?? null) : null;
-        $g = [
-            "id_giocatore" => $id, "nome" => $r["giocatore"], "ruolo" => $r["ruolo"],
-            "squadra_serie_a" => $sa !== null && trim($sa) !== "" ? $sa : null,
-            "stato_partita" => dl_stato_partita($partita, $sn, $ctx, $ora),
-            "data" => $partita["data"] ?? null, "ora" => $partita["ora"] ?? null,
-            "voto_reale" => isset($ctx["voti"][$id]) && $ctx["voti"][$id]["voto"] !== null && $ctx["voti"][$id]["sv"] !== "Y"
-                            ? (float) $ctx["voti"][$id]["voto"] : null,
-            "senza_voto" => isset($ctx["voti"][$id]) && ($ctx["voti"][$id]["sv"] === "Y" || $ctx["voti"][$id]["voto"] === null),
-            "_norm" => $sn, "_partita" => $partita,
-        ];
-        if ($r["maglia"] >= 1 && $r["maglia"] <= 11) {
-            if (!isset($titolari[$id])) $titolari[$id] = $g + ["competizioni" => []];
-            $titolari[$id]["competizioni"][] = $comp;
-        } elseif ($r["maglia"] > 11) {
-            if (!isset($bench[$g["ruolo"]][$id])) $bench[$g["ruolo"]][$id] = $g + ["competizioni" => []];
-            $bench[$g["ruolo"]][$id]["competizioni"][] = $comp;
-        }
-    }
+/** Giocatore di una riga di formazione, con la sua partita di Serie A e il suo stato. */
+function dl_giocatore(array $r, array $ctx, array $perSquadra, int $ora): array
+{
+    $id = $r["id_giocatore"];
+    $sa = $ctx["squadre"][$id] ?? null;
+    $sn = $sa !== null ? sim_norm($sa) : "";
+    $partita = $sn !== "" ? ($perSquadra[$sn] ?? null) : null;
+    return [
+        "id_giocatore" => $id, "nome" => $r["giocatore"], "ruolo" => $r["ruolo"],
+        "squadra_serie_a" => $sa !== null && trim($sa) !== "" ? $sa : null,
+        "stato_partita" => dl_stato_partita($partita, $sn, $ctx, $ora),
+        "data" => $partita["data"] ?? null, "ora" => $partita["ora"] ?? null,
+        "voto_reale" => isset($ctx["voti"][$id]) && $ctx["voti"][$id]["voto"] !== null && $ctx["voti"][$id]["sv"] !== "Y"
+                        ? (float) $ctx["voti"][$id]["voto"] : null,
+        "senza_voto" => isset($ctx["voti"][$id]) && ($ctx["voti"][$id]["sv"] === "Y" || $ctx["voti"][$id]["voto"] === null),
+        "_norm" => $sn, "_partita" => $partita,
+    ];
 }
 
-// Titolari delle squadre avversarie di giornata (maglia 1-11), con la loro partita di Serie A
-$titolariAvv = [];   // id squadra avversaria => [id giocatore => giocatore]
-foreach ($avversari as $idAvv => $a) {
-    foreach ($a["righe"] as $comp => $righe) {
+/**
+ * Titolari (maglia 1-11) e panchinari (maglia > 11) di una squadra, uniti sulle
+ * competizioni. $formazioni: competizione => righe di formazione.
+ * @return array{0:array,1:array} [titolari id => giocatore, panchina ruolo => [id => giocatore]]
+ */
+function dl_carica_squadra(array $formazioni, array $ctx, array $perSquadra, int $ora): array
+{
+    $titolari = [];
+    $bench    = [];
+    foreach ($formazioni as $comp => $righe) {
         foreach ($righe as $r) {
-            if ($r["maglia"] < 1 || $r["maglia"] > 11) continue;
             $id = $r["id_giocatore"];
-            if (isset($titolariAvv[$idAvv][$id])) { $titolariAvv[$idAvv][$id]["competizioni"][] = $comp; continue; }
-            $sa = $ctx["squadre"][$id] ?? null;
-            $sn = $sa !== null ? sim_norm($sa) : "";
-            $partita = $sn !== "" ? ($perSquadra[$sn] ?? null) : null;
-            $titolariAvv[$idAvv][$id] = [
-                "id_giocatore" => $id, "nome" => $r["giocatore"], "ruolo" => $r["ruolo"],
-                "squadra_serie_a" => $sa !== null && trim($sa) !== "" ? $sa : null,
-                "stato_partita" => dl_stato_partita($partita, $sn, $ctx, $ora),
-                "senza_voto" => isset($ctx["voti"][$id]) && ($ctx["voti"][$id]["sv"] === "Y" || $ctx["voti"][$id]["voto"] === null),
-                "competizioni" => [$comp], "_partita" => $partita,
-            ];
+            if ($r["maglia"] >= 1 && $r["maglia"] <= 11) {
+                if (!isset($titolari[$id])) $titolari[$id] = dl_giocatore($r, $ctx, $perSquadra, $ora) + ["competizioni" => []];
+                $titolari[$id]["competizioni"][] = $comp;
+            } elseif ($r["maglia"] > 11) {
+                $ruolo = $r["ruolo"];
+                if (!isset($bench[$ruolo][$id])) $bench[$ruolo][$id] = dl_giocatore($r, $ctx, $perSquadra, $ora) + ["competizioni" => []];
+                $bench[$ruolo][$id]["competizioni"][] = $comp;
+            }
         }
     }
+    return [$titolari, $bench];
+}
+
+/** Versione sintetica di un giocatore per la risposta. */
+function dl_out_giocatore(array $g): array
+{
+    return [
+        "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
+        "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"] ?? [],
+    ];
+}
+
+/**
+ * Analisi LIVE di una squadra.
+ * @return array{per_partita:array, senza_voto:array, panchinari:array}
+ *   per_partita: n_partita => titolari ancora da giocare/in corso nelle partite di OGGI
+ *   senza_voto : titolari con partita finita e nessun voto (sarà sostituito)
+ *   panchinari : per ruolo, i primi panchinari che entrerebbero
+ */
+function dl_analizza_squadra(array $titolari, array $bench, string $oggi): array
+{
+    $perPartita = [];
+    $senzaVoto  = [];
+    $aRischio   = [];   // ruolo => numero di titolari non ancora "sicuri"
+
+    foreach ($titolari as $t) {
+        $p = $t["_partita"];
+        if ($p === null) continue;   // squadra non determinata o a riposo
+        if ($t["senza_voto"]) {      // partita finita, nessun voto: sarà sostituito
+            $senzaVoto[] = $t;
+            $aRischio[$t["ruolo"]] = ($aRischio[$t["ruolo"]] ?? 0) + 1;
+            continue;
+        }
+        if ($t["stato_partita"] === "conclusa") continue;     // ha già (o avrà) il suo voto
+        // da giocare o in corso
+        $aRischio[$t["ruolo"]] = ($aRischio[$t["ruolo"]] ?? 0) + 1;
+        if ($p["data"] === $oggi) $perPartita[$p["n_partita"]][] = $t;
+    }
+
+    $panchinari = [];
+    foreach ([1, 2, 3, 4] as $ruolo) {
+        $nRischio = $aRischio[$ruolo] ?? 0;
+        if ($nRischio === 0) continue;
+        $candidati = [];
+        foreach ($bench[$ruolo] ?? [] as $b) {
+            if ($b["senza_voto"]) continue;                       // già s.v.: non può entrare
+            $candidati[] = [
+                "id_giocatore" => $b["id_giocatore"], "nome" => $b["nome"], "ruolo" => $ruolo,
+                "squadra_serie_a" => $b["squadra_serie_a"], "competizioni" => $b["competizioni"],
+                "stato_partita" => $b["stato_partita"], "voto" => $b["voto_reale"],
+                "data" => $b["data"], "ora" => $b["ora"],
+            ];
+            if (count($candidati) >= min($nRischio, 3)) break;
+        }
+        $panchinari[] = ["ruolo" => $ruolo, "a_rischio" => $nRischio, "candidati" => $candidati];
+    }
+
+    return [
+        "per_partita" => $perPartita,
+        "senza_voto"  => array_map("dl_out_giocatore", $senzaVoto),
+        "panchinari"  => $panchinari,
+    ];
+}
+
+$oggi = date("Y-m-d", $ora);
+
+// La squadra
+[$titolari, $bench] = dl_carica_squadra($formazioni, $ctx, $perSquadra, $ora);
+$mia = dl_analizza_squadra($titolari, $bench, $oggi);
+
+// Le squadre avversarie di giornata (campionato e/o Champions): stessa analisi
+$outAvversari = [];
+$perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
+foreach ($avversari as $idAvv => $a) {
+    [$tAvv, $bAvv] = dl_carica_squadra($a["righe"], $ctx, $perSquadra, $ora);
+    $an = dl_analizza_squadra($tAvv, $bAvv, $oggi);
+    foreach ($an["per_partita"] as $n => $gioc) $perPartitaAvv[$n][$idAvv] = $gioc;
+    $outAvversari[] = [
+        "id_squadra" => $idAvv, "nome" => $a["nome"], "competizioni" => $a["competizioni"],
+        "senza_voto" => $an["senza_voto"], "panchinari" => $an["panchinari"],
+    ];
 }
 
 // ── Partite di Serie A di oggi con i titolari coinvolti ──────────
-
-$oggi = date("Y-m-d", $ora);
-$perPartita = [];   // n_partita => giocatori
-$senzaVoto = [];
-$aRischio  = [];    // ruolo => numero di titolari non ancora "sicuri"
-
-foreach ($titolari as $t) {
-    $p = $t["_partita"];
-    if ($p === null) continue;   // squadra non determinata o a riposo
-    if ($t["senza_voto"]) {      // partita finita, nessun voto: sarà sostituito
-        $senzaVoto[] = $t;
-        $aRischio[$t["ruolo"]] = ($aRischio[$t["ruolo"]] ?? 0) + 1;
-        continue;
-    }
-    if ($t["stato_partita"] === "conclusa") continue;     // ha già (o avrà) il suo voto
-    // da giocare o in corso
-    $aRischio[$t["ruolo"]] = ($aRischio[$t["ruolo"]] ?? 0) + 1;
-    if ($p["data"] === $oggi) $perPartita[$p["n_partita"]][] = $t;
-}
-
-// Titolari avversari ancora da giocare / in corso, per partita di Serie A di oggi
-$perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
-foreach ($titolariAvv as $idAvv => $gioc) {
-    foreach ($gioc as $t) {
-        $p = $t["_partita"];
-        if ($p === null || $p["data"] !== $oggi) continue;
-        if ($t["senza_voto"] || $t["stato_partita"] === "conclusa") continue;
-        $perPartitaAvv[$p["n_partita"]][$idAvv][] = $t;
-    }
-}
 
 $outOggi = [];
 foreach ($partiteSerieA as $p) {
@@ -287,39 +334,13 @@ foreach ($partiteSerieA as $p) {
         "n_partita" => $n, "data" => $p["data_partita"], "ora" => $p["ora_partita"],
         "stato" => $stCasa === "in_corso" || $stOsp === "in_corso" ? "in_corso" : "da_giocare",
         "casa" => $p["squadra_casa"], "ospite" => $p["squadra_ospite"],
-        "giocatori" => array_map(fn($g) => [
-            "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
-            "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"],
-        ], $perPartita[$n] ?? []),
+        "giocatori" => array_map("dl_out_giocatore", $mia["per_partita"][$n] ?? []),
         "avversari" => array_values(array_map(fn($idAvv, $gioc) => [
             "id_squadra" => $idAvv, "nome" => $avversari[$idAvv]["nome"],
             "competizioni" => $avversari[$idAvv]["competizioni"],
-            "giocatori" => array_map(fn($g) => [
-                "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
-                "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"],
-            ], $gioc),
+            "giocatori" => array_map("dl_out_giocatore", $gioc),
         ], array_keys($perPartitaAvv[$n] ?? []), array_values($perPartitaAvv[$n] ?? []))),
     ];
-}
-
-// ── Panchinari: i primi candidati per ruolo ──────────────────────
-
-$panchinari = [];
-foreach ([1, 2, 3, 4] as $ruolo) {
-    $nRischio = $aRischio[$ruolo] ?? 0;
-    if ($nRischio === 0) continue;
-    $candidati = [];
-    foreach ($bench[$ruolo] ?? [] as $b) {
-        if ($b["senza_voto"]) continue;                       // già s.v.: non può entrare
-        $candidati[] = [
-            "id_giocatore" => $b["id_giocatore"], "nome" => $b["nome"], "ruolo" => $ruolo,
-            "squadra_serie_a" => $b["squadra_serie_a"], "competizioni" => $b["competizioni"],
-            "stato_partita" => $b["stato_partita"], "voto" => $b["voto_reale"],
-            "data" => $b["data"], "ora" => $b["ora"],
-        ];
-        if (count($candidati) >= min($nRischio, 3)) break;
-    }
-    $panchinari[] = ["ruolo" => $ruolo, "a_rischio" => $nRischio, "candidati" => $candidati];
 }
 
 api_success([
@@ -330,9 +351,7 @@ api_success([
     "finestra"         => $finestra,
     "partite"          => $partite,
     "oggi"             => $outOggi,
-    "senza_voto"       => array_map(fn($g) => [
-        "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
-        "squadra_serie_a" => $g["squadra_serie_a"],
-    ], $senzaVoto),
-    "panchinari"       => $panchinari,
+    "senza_voto"       => $mia["senza_voto"],
+    "panchinari"       => $mia["panchinari"],
+    "avversari"        => $outAvversari,   // per ogni avversario: senza_voto e panchinari (stessa struttura)
 ]);

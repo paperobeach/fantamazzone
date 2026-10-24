@@ -162,7 +162,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
 
   const bottoni = (piccoli) => (
     <div className={`flex ${piccoli ? 'gap-1.5' : 'flex-col sm:flex-row lg:flex-col gap-2'}`}>
-      {!f.stagione_conclusa && (
+      {!f.stagione_conclusa && !live && (
         <Link to="/formazione" className={`btn-primary text-sm justify-center ${piccoli ? '!px-2.5 !py-1.5' : ''}`}
               title={f.inserita ? 'Modifica formazione' : 'Inserisci formazione'}>
           <ClipboardList className="w-4 h-4" />
@@ -309,7 +309,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
             </div>
 
             {/* LIVE: dalla prima partita di Serie A alla conclusione dell'ultima */}
-            {live && <div className="mt-4"><LivePanel live={live} stagione={stagione} /></div>}
+            {live && <div className="mt-4"><LivePanel live={live} stagione={stagione} nomeSquadra={d.squadra.nome} /></div>}
           </div>
         </div>
       </div>

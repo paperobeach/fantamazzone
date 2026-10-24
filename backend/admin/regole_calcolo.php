@@ -176,6 +176,8 @@ function parametri_default(): array
         ['codice' => 'TOPFLOP_SOGLIA_PERCENTUALE',   'etichetta' => 'Top/Flop 11: giocate minime (% delle partite giocate)', 'valore' => '50'],
         ['codice' => 'GIORNATA_SERIE_A_INIZIO',      'etichetta' => 'Giornata di Serie A di partenza',              'valore' => '4'],
         ['codice' => 'FORMAZIONE_CHAMPIONS_DIVERSA', 'etichetta' => 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)', 'valore' => '1'],
+        ['codice' => 'BLOCCO_FORMAZIONE_ATTIVO',     'etichetta' => 'Blocco inserimento formazione a 1 minuto dalla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
+        ['codice' => 'NASCONDI_FORMAZIONE_CONSENTITO', 'etichetta' => 'Consenti di nascondere la formazione fino alla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
         // Casi particolari della conversione punteggio -> gol
@@ -335,6 +337,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             }
             if ($cod === 'GIORNATA_SERIE_A_INIZIO' && (!ctype_digit($val) || (int) $val < 1)) {
                 api_error("La giornata di Serie A di partenza deve essere un intero >= 1", 400);
+            }
+            if (in_array($cod, ['BLOCCO_FORMAZIONE_ATTIVO', 'NASCONDI_FORMAZIONE_CONSENTITO'], true)
+                && !in_array($val, ['0', '1'], true)) {
+                api_error("Il parametro \"$cod\" ammette solo 0 o 1", 400);
             }
             if ($cod === 'RISERVE_UFFICIO_MAX' && (!ctype_digit($val) || (int) $val > 11)) {
                 api_error("Il numero massimo di riserve d'ufficio deve essere un intero tra 0 e 11", 400);

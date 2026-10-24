@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import { ArrowRightLeft, Briefcase, ChevronDown, Clock, Pencil, Radio, MinusCircle, UserMinus } from 'lucide-react'
+import { ArrowRightLeft, Briefcase, ChevronDown, Clock, Pencil, Radio, MinusCircle, UserMinus, EyeOff } from 'lucide-react'
 import { RoleBadge } from './ui'
 import { Bandiera } from './Bandiera'
 
@@ -300,6 +300,16 @@ export function PanchinaTable({ panchina }) {
   )
 }
 
+// Formazione nascosta dall'allenatore fino alla prima partita di Serie A della giornata
+function FormazioneNascosta() {
+  return (
+    <div className="flex items-center gap-2 px-3 py-6 justify-center text-slate-600">
+      <EyeOff className="w-4 h-4" aria-hidden="true" />
+      <p className="text-xs">Formazione nascosta fino all'inizio della prima partita di Serie A della giornata</p>
+    </div>
+  )
+}
+
 // ── Riepilogo modificatori (difesa / centrocampo / attacco) di una squadra ──
 function ModBox({ label, value }) {
   const num = value === null || value === undefined ? null : Number(value)
@@ -469,7 +479,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error, extra = null })
           <p className="text-xs font-semibold text-slate-400">{casa.nome}</p>
         </div>
         <ModificatoriRow squadra={casa} />
-        <GiocatoriTable giocatori={casa.giocatori} soloFormazione={!!casa.solo_formazione} />
+        {casa.formazione_nascosta ? <FormazioneNascosta /> : <GiocatoriTable giocatori={casa.giocatori} soloFormazione={!!casa.solo_formazione} />}
         {haPanchina && mostraPanchina && <PanchinaTable panchina={casa.panchina} />}
       </div>
       <div>
@@ -477,7 +487,7 @@ export function MatchDetailPanel({ casa, ospite, loading, error, extra = null })
           <p className="text-xs font-semibold text-slate-400">{ospite.nome}</p>
         </div>
         <ModificatoriRow squadra={ospite} />
-        <GiocatoriTable giocatori={ospite.giocatori} soloFormazione={!!ospite.solo_formazione} />
+        {ospite.formazione_nascosta ? <FormazioneNascosta /> : <GiocatoriTable giocatori={ospite.giocatori} soloFormazione={!!ospite.solo_formazione} />}
         {haPanchina && mostraPanchina && <PanchinaTable panchina={ospite.panchina} />}
       </div>
     </div>

@@ -24,9 +24,17 @@
 // formazione inserita (NEW_FORMAZIONI, o quella effettiva di Champions):
 // casa/ospite con "solo_formazione": true, titolari (maglia 1..11) e
 // panchina (12+), senza voti né modificatori.
+//
+// FORMAZIONE NASCOSTA: se una squadra ha scelto "nascondi formazione"
+// (parametro NASCONDI_FORMAZIONE_CONSENTITO, vedi lib/FormazioniBlocco.php)
+// e la prima partita di Serie A della giornata non è ancora iniziata, nel
+// fallback "solo formazione" il suo lato ha giocatori = [] e
+// "formazione_nascosta": true, a meno che id_richiedente (id della squadra
+// di chi guarda) coincida con la squadra stessa.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
+require_once __DIR__ . "/lib/FormazioniBlocco.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/PanchinaDettaglio.php";
 
@@ -34,6 +42,7 @@ $stagione    = param_int("stagione");
 $giornata    = param_int("giornata");
 $id_squadra  = param_int("id_squadra", false);
 $id_ospite_req = param_int("id_ospite", false);
+$id_richiedente = param_int("id_richiedente", false);
 $comp        = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
 if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Parametro competizione non valido (CAMP o CHAMP)", 400);
 $champ       = $comp === "CHAMP";
@@ -70,11 +79,20 @@ function dp_solo_formazione(int $stagione, int $giornata, int $id_casa, int $id_
         $per[(int)$r["id_squadra"]][] = $r;
     }
 
+    // Formazione nascosta dall'allenatore fino all'inizio della prima partita di Serie A
+    global $id_richiedente;
+    $nascoste = [];
+    foreach ([$id_casa, $id_ospite] as $id) {
+        $nascoste[$id] = fb_formazione_nascosta_a($stagione, $giornata, $id, $id_richiedente);
+        if ($nascoste[$id]) $per[$id] = [];
+    }
+
     $lato = fn(int $id) => [
         "id" => $id, "nome" => $squadre[$id]["nome"], "logo" => $squadre[$id]["logo"],
         "ftotale" => null, "mod_dif" => null, "mod_cc" => null, "mod_att" => null,
         "num_cc" => null, "tot_cc" => null,
         "solo_formazione" => true,
+        "formazione_nascosta" => $nascoste[$id],
         "giocatori" => $per[$id],
     ];
     return [[

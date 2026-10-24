@@ -29,17 +29,25 @@
 // inserita dall'avversario è mostrata anche PRIMA del limite di inserimento
 // (comportamento della dashboard esistente). Con false resta nascosta fino
 // alla scadenza.
+// FORMAZIONE NASCOSTA: se l'avversario ha scelto "nascondi formazione"
+// (parametro NASCONDI_FORMAZIONE_CONSENTITO, lib/FormazioniBlocco.php), la sua
+// formazione resta nascosta (avversario_nascosta = true) fino all'inizio della
+// prima partita di Serie A della giornata. Lo stesso vale per la formazione
+// "mia" se la dashboard è guardata da un'altra squadra (id_richiedente, che
+// se assente coincide con id_squadra): mia_nascosta = true.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/ChampionsCalendario.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/DashboardSquadra.php";
+require_once __DIR__ . "/lib/FormazioniBlocco.php";
 
 const FORMAZIONE_AVVERSARIO_VISIBILE = true;
 
 $stagione  = param_int("stagione");
 $idSquadra = param_int("id_squadra");
+$idRichiedente = param_int("id_richiedente", false) ?? $idSquadra;
 $comp      = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
 if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Competizione non valida (CAMP o CHAMP)", 400);
 $champ = $comp === "CHAMP";
@@ -67,7 +75,7 @@ if (!query_one("SELECT id FROM NEW_SQUADRE WHERE id = $idSquadra AND stagione = 
 $vuoto = [
     "stagione" => $stagione, "competizione" => $comp, "conclusa" => $conclusa,
     "match" => null, "forma_avversario" => [], "moduli_avversario" => null,
-    "formazioni" => ["mia" => null, "avversario" => null, "avversario_nascosta" => false],
+    "formazioni" => ["mia" => null, "mia_nascosta" => false, "avversario" => null, "avversario_nascosta" => false],
     "giornata_serie_a" => null, "rosa" => [], "incontri_serie_a" => [],
 ];
 if ($conclusa) api_success($vuoto);
@@ -195,8 +203,14 @@ if ($match) {
     // Formazioni per questo scontro (se inserite)
     $mia = ds_formazione($stagione, $giornataMatch, $idSquadra, $tabMia);
     $avv = ds_formazione($stagione, $giornataMatch, $idAvv, $tabAvv);
+    $formazioni["mia_nascosta"] = false;
+    if ($mia && fb_formazione_nascosta_a($stagione, $giornataMatch, $idSquadra, $idRichiedente)) {
+        $mia = [];
+        $formazioni["mia_nascosta"] = true;
+    }
     $formazioni["mia"] = $mia ?: null;
-    if ($avv && !FORMAZIONE_AVVERSARIO_VISIBILE && !$scaduta) {
+    $avvNascosta = $avv && fb_formazione_nascosta_a($stagione, $giornataMatch, $idAvv, $idRichiedente);
+    if ($avv && (($avvNascosta) || (!FORMAZIONE_AVVERSARIO_VISIBILE && !$scaduta))) {
         $formazioni["avversario_nascosta"] = true;   // inserita, ma non ancora visibile
     } else {
         $formazioni["avversario"] = $avv ?: null;

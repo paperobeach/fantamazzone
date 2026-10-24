@@ -183,7 +183,7 @@ function ModuliAvversario({ moduli, nome }) {
 function FormazioniScontro({ p, m, d }) {
   const f = p.formazioni
   const colonne = [
-    { nome: d.squadra.nome, logo: d.squadra.logo, lista: f.mia, nascosta: false },
+    { nome: d.squadra.nome, logo: d.squadra.logo, lista: f.mia, nascosta: !!f.mia_nascosta },
     { nome: m.avversario.nome, logo: m.avversario.logo, lista: f.avversario, nascosta: f.avversario_nascosta },
   ]
   return (
@@ -199,7 +199,7 @@ function FormazioniScontro({ p, m, d }) {
               <div className="rounded-xl border border-dashed border-white/10 aspect-[3/4] flex flex-col items-center justify-center gap-2 px-4 text-center">
                 {nascosta && <EyeOff className="w-5 h-5 text-slate-600" />}
                 <p className="text-sm text-slate-600">
-                  {nascosta ? 'Formazione inserita: sarà visibile dopo il limite di inserimento' : 'Formazione non inserita'}
+                  {nascosta ? 'Formazione nascosta: sarà visibile all\'inizio della prima partita di Serie A della giornata' : 'Formazione non inserita'}
                 </p>
               </div>
             )}

@@ -34,9 +34,11 @@ require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/ChampionsCalendario.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/DashboardSquadra.php";
+require_once __DIR__ . "/lib/FormazioniBlocco.php";
 
 $stagione  = param_int("stagione");
 $idSquadra = param_int("id_squadra");
+$idRichiedente = param_int("id_richiedente", false) ?? $idSquadra;   // chi sta guardando (formazioni nascoste)
 
 // ── Contesto: giornate pubbliche ─────────────────────────────
 
@@ -251,6 +253,11 @@ if (!$conclusa) {
 
             $formMia = ds_formazione($stagione, $giornataF, $idSquadra);
             $formAvv = ds_formazione($stagione, $giornataF, $idAvv);
+            // "Nascondi formazione": non visibile agli altri fino alla prima partita di Serie A
+            $miaNascosta = $formMia && fb_formazione_nascosta_a($stagione, $giornataF, $idSquadra, $idRichiedente);
+            $avvNascosta = $formAvv && fb_formazione_nascosta_a($stagione, $giornataF, $idAvv, $idRichiedente);
+            if ($miaNascosta) $formMia = [];
+            if ($avvNascosta) $formAvv = [];
 
             $prossima = [
                 "giornata"  => $giornataF,
@@ -278,6 +285,8 @@ if (!$conclusa) {
                 "formazione_scontro" => [
                     "mia"        => $formMia ?: null,
                     "avversario" => $formAvv ?: null,
+                    "mia_nascosta"        => (bool) $miaNascosta,
+                    "avversario_nascosta" => (bool) $avvNascosta,
                 ],
                 "storico" => $storico,
             ];

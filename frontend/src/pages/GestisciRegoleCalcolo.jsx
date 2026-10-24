@@ -373,6 +373,8 @@ const DEFAULT_PARAMETRI = {
   GIORNATA_SERIE_A_INIZIO: ['4', 'Giornata di Serie A di partenza'],
   ULTIMA_GIORNATA_FATTORE_CASA: ['28', 'Ultima giornata con fattore casa (vuoto = sempre)'],
   FORMAZIONE_CHAMPIONS_DIVERSA: ['1', 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)'],
+  BLOCCO_FORMAZIONE_ATTIVO: ['0', 'Blocco inserimento formazione a 1 minuto dalla prima partita di Serie A (1 = sì, 0 = no)'],
+  NASCONDI_FORMAZIONE_CONSENTITO: ['0', 'Consenti di nascondere la formazione fino alla prima partita di Serie A (1 = sì, 0 = no)'],
   GOL_DISTACCO_MIN_PUNTI: ['3', 'Punti di scarto minimo in fasce diverse'],
   GOL_SOGLIA_PAREGGIO: ['66', 'Scarto minimo 1 a 0'],
   GOL_SOGLIA_OMAGGIO: ['59', 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario'],
@@ -851,6 +853,46 @@ export default function GestisciRegoleCalcolo() {
                       <p className="text-[11px] text-slate-700 mt-2 max-w-md">
                         Se disattivo, la formazione inserita vale per entrambe le competizioni. Se attivo, la scelta
                         compare solo nelle giornate in cui la squadra gioca un turno di Champions (non se riposa).
+                      </p>
+                    </Sottosezione>
+
+                    <Sottosezione
+                      titolo="Inserimento e visibilità della formazione"
+                      descrizione="Regole sul momento in cui la formazione può essere inserita e su chi può vederla."
+                    >
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={getValoreParametro('BLOCCO_FORMAZIONE_ATTIVO', '0') === '1'}
+                          onChange={e => setValoreParametro(
+                            'BLOCCO_FORMAZIONE_ATTIVO',
+                            e.target.checked ? '1' : '0',
+                            'Blocco inserimento formazione a 1 minuto dalla prima partita di Serie A (1 = sì, 0 = no)',
+                          )}
+                          className="w-4 h-4"
+                        />
+                        Blocco inserimento formazione attivo
+                      </label>
+                      <p className="text-[11px] text-slate-700 mt-2 max-w-md">
+                        Se attivo, la formazione si può inserire o modificare fino a un minuto prima dell'inizio della
+                        prima partita di Serie A della giornata. Le formazioni tornano modificabili una volta chiusa la giornata.
+                      </p>
+                      <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer mt-4">
+                        <input
+                          type="checkbox"
+                          checked={getValoreParametro('NASCONDI_FORMAZIONE_CONSENTITO', '0') === '1'}
+                          onChange={e => setValoreParametro(
+                            'NASCONDI_FORMAZIONE_CONSENTITO',
+                            e.target.checked ? '1' : '0',
+                            'Consenti di nascondere la formazione fino alla prima partita di Serie A (1 = sì, 0 = no)',
+                          )}
+                          className="w-4 h-4"
+                        />
+                        Consenti "nascondi formazione"
+                      </label>
+                      <p className="text-[11px] text-slate-700 mt-2 max-w-md">
+                        Se attivo, l'utente può nascondere la propria formazione agli altri: resta non visibile fino
+                        all'inizio della prima partita di Serie A della giornata.
                       </p>
                     </Sottosezione>
 

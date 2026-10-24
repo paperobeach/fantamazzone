@@ -14,9 +14,22 @@
 //        squadra di Serie A, avversaria della giornata e incontro in casa (true) o in
 //        trasferta (false); avversaria/casa = null se la squadra non gioca nella giornata
 //        o se calendario/squadra del giocatore non sono disponibili (vedi lib/AvversarieSerieA.php)
+// GET  ?stagione=2024&giornata=5&id_squadra=3&modo=stato         → { blocco_attivo, bloccata, inizio_giornata,
+//        limite_inserimento, nascondi_consentito, nascosta }: stato del blocco inserimento
+//        (parametro BLOCCO_FORMAZIONE_ATTIVO) e dell'opzione "nascondi formazione"
+//        (parametro NASCONDI_FORMAZIONE_CONSENTITO), vedi lib/FormazioniBlocco.php
+//
+// Tutte le GET accettano id_richiedente (id della squadra di chi guarda): se la formazione
+// richiesta è nascosta e il richiedente non è la squadra stessa, la risposta è vuota ([]).
+//
 // POST { stagione, giornata, id_squadra, giocatori: [{id, maglia}],
 //        competizione: "CAMP" (default) | "CHAMP", entrambe: bool (default false),
-//        rigoristi?: [idGiocatore, ...] }
+//        rigoristi?: [idGiocatore, ...], nascondi?: bool }
+//      Con il parametro BLOCCO_FORMAZIONE_ATTIVO il salvataggio è rifiutato (403) da un minuto
+//      prima della prima partita di Serie A della giornata fino alla chiusura della giornata.
+//      "nascondi" (facoltativo, solo con NASCONDI_FORMAZIONE_CONSENTITO attivo) = true nasconde la
+//      formazione agli altri fino all'inizio della prima partita di Serie A della giornata;
+//      false la rende di nuovo visibile; se omesso la scelta già salvata resta invariata.
 //      "rigoristi" (facoltativo) = ordine dei calci di rigore, solo per i turni di Champions
 //      che prevedono supplementari e rigori (flag del calendario Champions): titolari da 1 a
 //      11 poi panchinari. Viene salvato in NEW_RIGORISTI_CHAMP insieme alla formazione usata
@@ -50,6 +63,7 @@ require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/mailer.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/AvversarieSerieA.php";
+require_once __DIR__ . "/lib/FormazioniBlocco.php";
 
 $stagione = param_int("stagione");
 
@@ -85,6 +99,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         api_error("Giornata già chiusa, impossibile modificare la formazione", 403);
     }
 
+    // Blocco inserimento formazione (parametro di stagione): chiuso da un minuto
+    // prima della prima partita di Serie A della giornata, fino alla chiusura della giornata.
+    $blocco = fb_stato_blocco($stagione, $giornata);
+    if ($blocco["bloccata"]) {
+        api_error("Inserimento formazione chiuso: il limite era " . date("d/m/Y H:i", strtotime($blocco["limite"]))
+                  . " (un minuto prima della prima partita di Serie A della giornata). "
+                  . "Tornerà possibile a giornata chiusa.", 403);
+    }
+
+    // Opzione "nascondi formazione": va validata prima di scrivere qualunque cosa
+    $nascondi = null;   // null = scelta invariata
+    if (array_key_exists("nascondi", $body)) {
+        $nascondi_raw = $body["nascondi"];
+        $nascondi = !empty($nascondi_raw) && !in_array(strtolower((string)$nascondi_raw), ["false", "0", "no"], true);
+        if ($nascondi && !fb_nascondi_consentito($stagione)) {
+            api_error("Nascondere la formazione non è consentito in questa stagione", 403);
+        }
+    }
+
     // La formazione Champions distinta è ammessa solo se previsto dal
     // parametro di stagione e se la squadra gioca la Champions nella giornata.
     $ammessa = formazione_champions_separata_ammessa($stagione, $giornata, $id_squadra);
@@ -109,6 +142,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             mysqli_query($conn, "INSERT INTO $tabella (STAGIONE, ID_SQUADRA, ID_GIOCATORE, GIORNATA, MAGLIA)
                                  VALUES ($stagione, $id_squadra, $id_g, $giornata, $maglia)");
         }
+    }
+
+    if ($nascondi !== null) {
+        fb_imposta_nascosta($stagione, $giornata, $id_squadra, $nascondi);
     }
 
     // Ordine dei rigoristi: solo se il turno di Champions lo prevede e la formazione
@@ -143,6 +180,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     api_success([
         "ok"            => true,
         "salvata_per"   => $destinazioni,
+        "nascosta"      => fb_flag_nascosta($stagione, $giornata, $id_squadra) && fb_nascondi_consentito($stagione),
         "rigoristi_salvati" => $rigoristi_salvati, // null = non applicabile; altrimenti numero di rigoristi in lista
         "email_inviata" => $esito_email["ok"],
         "motivo_email"  => $esito_email["motivo"], // null se inviata; altrimenti spiega il perché
@@ -152,8 +190,28 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $giornata   = param_int("giornata");
     $id_squadra = param_int("id_squadra");
+    $id_richiedente = param_int("id_richiedente", false);
+    $modo_get   = param_str("modo", false) ?? "";
 
-    if ((param_str("modo", false) ?? "") === "contesto") {
+    // Formazione nascosta dall'allenatore: agli altri non si restituisce nulla
+    // (modi "contesto", "stato" e "avversarie" non espongono la formazione).
+    $nascosta_a_chi_guarda = !in_array($modo_get, ["contesto", "stato", "avversarie"], true)
+        && fb_formazione_nascosta_a($stagione, $giornata, $id_squadra, $id_richiedente);
+
+    if ($nascosta_a_chi_guarda) {
+        api_success([]);
+    } elseif ($modo_get === "stato") {
+        $blocco = fb_stato_blocco($stagione, $giornata);
+        $consentito = fb_nascondi_consentito($stagione);
+        api_success([
+            "blocco_attivo"       => $blocco["attivo"],
+            "bloccata"            => $blocco["bloccata"],
+            "inizio_giornata"     => $blocco["inizio"],
+            "limite_inserimento"  => $blocco["limite"],
+            "nascondi_consentito" => $consentito,
+            "nascosta"            => $consentito && fb_flag_nascosta($stagione, $giornata, $id_squadra),
+        ]);
+    } elseif ((param_str("modo", false) ?? "") === "contesto") {
         // Contesto: l'utente può inserire una formazione Champions distinta?
         $gioca  = champions_squadra_gioca_in_giornata($stagione, $giornata, $id_squadra);
         $attiva = formazione_champions_separata_attiva($stagione);

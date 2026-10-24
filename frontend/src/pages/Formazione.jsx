@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
+import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getFormazioneStato, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, TabBar } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
 import { OrdineRigoristi, ordinaSecondo as ordinaRig } from '../components/OrdineRigoristi'
 import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
-import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info } from 'lucide-react'
+import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info, EyeOff } from 'lucide-react'
 
 const MODULO_DEFAULT = '4-4-2'
 
@@ -108,6 +108,15 @@ function costruisciStato(fonte, rosa) {
  *   stesso ordinamento si applica quando l'utente clicca "Svuota il
  *   campo" (logica nel componente FormationBuilder).
  * - POST quando l'utente clicca "Salva formazione" (solo se completa).
+ *
+ * BLOCCO INSERIMENTO e NASCONDI FORMAZIONE (parametri di stagione, vedi
+ * formazioni.php?modo=stato e backend/lib/FormazioniBlocco.php):
+ * - BLOCCO_FORMAZIONE_ATTIVO: la formazione è modificabile fino a un minuto
+ *   prima della prima partita di Serie A della giornata; poi la pagina è in
+ *   sola lettura fino alla chiusura della giornata (la giornata di
+ *   riferimento diventa la successiva e torna modificabile);
+ * - NASCONDI_FORMAZIONE_CONSENTITO: compare l'opzione "Nascondi formazione",
+ *   che la rende invisibile agli altri fino alla prima partita di Serie A.
  *
  * La pagina è protetta (ProtectedRoute in App.jsx): "utente" è quindi
  * sempre presente. La squadra caricata è sempre e solo quella
@@ -232,6 +241,19 @@ export default function Formazione() {
   const rigoristiPronti = !rigoriPrevisti || Array.isArray(rigoristiSalvati) || !!errorRigoristi
   const [rigoristi, setRigoristi] = useState(null) // null = ordine di default (per maglia)
 
+  // ── Blocco inserimento e opzione "nascondi formazione" ──
+  // Un errore non blocca la pagina: il backend rifiuta comunque un salvataggio non consentito.
+  const { data: stato } = useFetch(
+    idSquadra !== null && ultimaStagione !== null && giornata !== null
+      ? () => getFormazioneStato(ultimaStagione, giornata, idSquadra)
+      : null,
+    [ultimaStagione, idSquadra, giornata]
+  )
+  const bloccata = !!stato?.bloccata
+  const nascondiConsentito = !!stato?.nascondi_consentito
+  const [nascondi, setNascondi] = useState(false)
+  useEffect(() => { setNascondi(!!stato?.nascosta) }, [stato])
+
   const tuttoPronto = formazioniPronte && contestoPronto && champPronta && rigoristiPronti
 
   const statoIniziale = { modulo: MODULO_DEFAULT, titolari: [], panchina: [], tribuna: [] }
@@ -295,7 +317,7 @@ export default function Formazione() {
   const formazioneCompleta = titolari.length === 11 &&
     JSON.stringify(conteggio) === JSON.stringify(attesi)
 
-  const readOnly = nessunaGiornataAperta
+  const readOnly = nessunaGiornataAperta || bloccata
 
   // Qualsiasi modifica successiva a un salvataggio invalida il messaggio
   // "salvata" e l'eventuale errore precedente. Le modifiche riguardano
@@ -374,7 +396,8 @@ export default function Formazione() {
         separata ? comp : 'CAMP', separata && entrambe,
         inviaRigoristi
           ? (rigoristi ? [...ordinaRig(titolariPerMaglia, rigoristi), ...ordinaRig(panchina, rigoristi)] : [])
-          : undefined
+          : undefined,
+        nascondiConsentito ? nascondi : undefined
       )
       // Salvata in entrambe: le due schede sono ora identiche.
       if (separata && entrambe) setForms(f => ({ CAMP: f[comp], CHAMP: f[comp] }))
@@ -420,6 +443,24 @@ export default function Formazione() {
           <Lock className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-slate-400">
             La stagione non ha più giornate aperte: la formazione non può essere modificata.
+          </p>
+        </div>
+      )}
+      {bloccata && !nessunaGiornataAperta && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
+          <Lock className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-slate-400">
+            Inserimento chiuso: la formazione era modificabile fino a un minuto prima della prima partita di Serie A
+            della giornata{stato?.limite_inserimento ? ` (${new Date(stato.limite_inserimento.replace(' ', 'T')).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })})` : ''}.
+            Tornerà modificabile a giornata chiusa.
+          </p>
+        </div>
+      )}
+      {!bloccata && stato?.blocco_attivo && stato?.limite_inserimento && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
+          <Info className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-slate-400">
+            Puoi inserire o modificare la formazione fino al {new Date(stato.limite_inserimento.replace(' ', 'T')).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.
           </p>
         </div>
       )}
@@ -510,6 +551,24 @@ export default function Formazione() {
                 )}
               </div>
             </div>
+
+            {nascondiConsentito && (
+              <label className="flex items-start gap-2 mb-3 text-sm text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={nascondi}
+                  disabled={readOnly}
+                  onChange={e => { setNascondi(e.target.checked); setConfermaAperta(false); resetEsito() }}
+                  className="w-4 h-4 mt-0.5"
+                />
+                <span>
+                  <span className="inline-flex items-center gap-1.5"><EyeOff className="w-3.5 h-3.5 text-slate-500" /> Nascondi formazione</span>
+                  <span className="block text-xs text-slate-500">
+                    Gli altri non la vedranno fino all'inizio della prima partita di Serie A della giornata. Vale al salvataggio.
+                  </span>
+                </span>
+              </label>
+            )}
 
             {confermaAperta && (
               <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 mb-3">

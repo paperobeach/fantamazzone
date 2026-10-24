@@ -641,6 +641,18 @@ CREATE TABLE `NEW_FORMAZIONI_CHAMP` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_FORMAZIONI_NASCOSTE`
+--
+
+CREATE TABLE `NEW_FORMAZIONI_NASCOSTE` (
+  `STAGIONE` int NOT NULL DEFAULT '0',
+  `GIORNATA` int NOT NULL DEFAULT '0',
+  `ID_SQUADRA` int NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_FORMAZIONI_CK`
 --
 
@@ -1802,6 +1814,12 @@ ALTER TABLE `NEW_KULOVIC`
 --
 ALTER TABLE `NEW_NAZIONI`
   ADD PRIMARY KEY (`nazione`);
+
+--
+-- Indici per le tabelle `NEW_FORMAZIONI_NASCOSTE`
+--
+ALTER TABLE `NEW_FORMAZIONI_NASCOSTE`
+  ADD PRIMARY KEY (`STAGIONE`,`GIORNATA`,`ID_SQUADRA`);
 
 --
 -- Indici per le tabelle `NEW_PARAMETRI_STAGIONE`

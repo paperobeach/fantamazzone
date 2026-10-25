@@ -309,7 +309,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
             </div>
 
             {/* LIVE: dalla prima partita di Serie A alla conclusione dell'ultima */}
-            {live && <div className="mt-4"><LivePanel live={live} stagione={stagione} nomeSquadra={d.squadra.nome} /></div>}
+            {live && <div className="mt-4"><LivePanel live={live} stagione={stagione} nomeSquadra={d.squadra.nome} idSquadra={idSquadra} /></div>}
           </div>
         </div>
       </div>

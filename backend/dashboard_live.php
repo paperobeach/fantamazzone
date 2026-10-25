@@ -28,15 +28,21 @@
 //   avversari   per ciascuna squadra avversaria di giornata: stessi dati di
 //               senza_voto e panchinari calcolati sulla sua formazione
 //               [{ id_squadra, nome, competizioni, senza_voto, panchinari }]
-//   senza_voto  titolari la cui partita è finita senza voto (sarà sostituito)
-//   panchinari  per ruolo, i primi panchinari che entrerebbero se i titolari
-//               ancora da giocare (o senza voto) non prendessero voto
+//   senza_voto  titolari senza voto secondo la SIMULAZIONE: SV ufficiale (voto
+//               assente / squadra di Serie A già scesa in campo senza di lui)
+//               o SV inserito a mano nell'editing (voto 0); "manuale" lo distingue
+//   panchinari  per ruolo (con titolari da verificare), i prossimi 3 subentranti
+//               nella situazione aggiornata della simulazione:
+//               - "entra": true per chi la simulazione fa già entrare al posto
+//                 di un titolare senza voto (stessa logica di sim_carica_formazione,
+//                 compresi i limiti di sostituzioni e di riserve d'ufficio)
+//               - "salta": true per i panchinari già senza voto (non possono entrare)
+//               - stato_dato: reale | manuale | provvisorio | senza_voto, voto simulato
 //
-// Regole di sostituzione (come sim_carica_formazione): per ogni titolare
-// senza voto si provano i panchinari dello STESSO ruolo in ordine di maglia
-// e entra il primo che ha voto. I panchinari già senza voto (s.v.) non
-// possono entrare e quindi non vengono proposti. I limiti di sostituzioni
-// e di riserve d'ufficio non sono considerati: la lista è indicativa.
+// Ogni giocatore riporta stato_dato / voto / modificabile come in
+// live_simulazione.php (GET): il front end ne permette l'editing con
+// live_simulazione.php (azioni salva_edit / elimina_edit), che ricalcola la
+// simulazione della sola partita interessata.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
@@ -77,7 +83,20 @@ $fine    = $ultimo + DURATA_PARTITA_MIN * 60;
 $ora     = time();
 $fmt     = fn(int $t) => date("Y-m-d H:i:s", $t);
 
-$ctx = sim_contesto($stagione, $giornata);   // voti Serie A, squadre già scese in campo, squadra di ogni giocatore
+$ctx = sim_contesto($stagione, $giornata);   // voti Serie A, squadre già scese in campo, editing manuale, squadra di ogni giocatore
+
+// Stessi limiti della simulazione (sostituzioni e riserve d'ufficio)
+$config = caricaConfigurazioneCalcolo($conn, $stagione);
+$cfg = [
+    "max_movimento" => (int) ($config["parametri"]["SOSTITUZIONI_MAX_MOVIMENTO"] ?? 5),
+    "max_portiere"  => (int) ($config["parametri"]["SOSTITUZIONI_MAX_PORTIERE"] ?? 1),
+    "ufficio" => [
+        "max"            => max(0, (int) sim_parametro_numerico($config, "RISERVE_UFFICIO_MAX", 1)),
+        "voto_portiere"  => sim_parametro_numerico($config, "VOTO_UFFICIO_PORTIERE", 3),
+        "voto_movimento" => sim_parametro_numerico($config, "VOTO_UFFICIO_MOVIMENTO", 4),
+        "voto_ammonito"  => sim_parametro_numerico($config, "VOTO_UFFICIO_AMMONITO", 5),
+    ],
+];
 
 $tutteConVoti = true;
 foreach ($partiteSerieA as $p) {
@@ -126,16 +145,18 @@ function dl_formazione_squadra(int $stagione, int $giornata, string $tab, int $i
 }
 
 /** Registra l'avversario di una competizione con la sua formazione (la stessa squadra può comparire in entrambe). */
-function dl_registra_avversario(array &$avversari, int $idAvv, string $nome, string $comp, array $righe): void
+function dl_registra_avversario(array &$avversari, int $idAvv, string $nome, string $comp, array $righe, string $tab): void
 {
-    if (!isset($avversari[$idAvv])) $avversari[$idAvv] = ["nome" => $nome, "competizioni" => [], "righe" => []];
+    if (!isset($avversari[$idAvv])) $avversari[$idAvv] = ["nome" => $nome, "competizioni" => [], "righe" => [], "tab" => []];
     $avversari[$idAvv]["competizioni"][] = $comp;
+    $avversari[$idAvv]["tab"][$comp] = $tab;
     // la formazione è per competizione: si tiene quella di ogni competizione, i titolari si uniscono dopo
     $avversari[$idAvv]["righe"][$comp] = $righe;
 }
 
 $partite = [];
 $formazioni = [];   // competizione => righe di formazione (titolari + panchina)
+$tabMie     = [];   // competizione => tabella di formazione della squadra
 $avversari  = [];   // id squadra avversaria => [nome, competizioni, righe di formazione]
 
 // Campionato
@@ -151,8 +172,9 @@ if ($ac) {
             "io_casa" => $ac["casa"],
         ] + dl_risultato("NEW_RISULTATI", "id_squadra", "NEW_SIMULAZIONE_RISULTATI", $stagione, $giornata, $idSquadra);
         $formazioni["CAMP"] = dl_formazione_squadra($stagione, $giornata, FORMAZIONE_TAB_CAMPIONATO, $idSquadra);
+        $tabMie["CAMP"] = FORMAZIONE_TAB_CAMPIONATO;
         dl_registra_avversario($avversari, $ac["id_avv"], $avv["nome"], "CAMP",
-            dl_formazione_squadra($stagione, $giornata, FORMAZIONE_TAB_CAMPIONATO, $ac["id_avv"]));
+            dl_formazione_squadra($stagione, $giornata, FORMAZIONE_TAB_CAMPIONATO, $ac["id_avv"]), FORMAZIONE_TAB_CAMPIONATO);
     }
 }
 
@@ -173,8 +195,10 @@ foreach (champions_partite_giornata($stagione, $giornata)["partite"] as $p) {
     ] + dl_risultato("NEW_RISULTATI_CHAMP", "squadra", "NEW_SIMULAZIONE_RISULTATI_CHAMP", $stagione, $giornata, $idSquadra);
     $formazioni["CHAMP"] = dl_formazione_squadra(
         $stagione, $giornata, formazione_tabella_champions($stagione, $giornata, $idSquadra), $idSquadra);
-    dl_registra_avversario($avversari, $idAvv, $avv["nome"], "CHAMP", dl_formazione_squadra(
-        $stagione, $giornata, formazione_tabella_champions($stagione, $giornata, $idAvv), $idAvv));
+    $tabMie["CHAMP"] = formazione_tabella_champions($stagione, $giornata, $idSquadra);
+    $tabAvv = formazione_tabella_champions($stagione, $giornata, $idAvv);
+    dl_registra_avversario($avversari, $idAvv, $avv["nome"], "CHAMP",
+        dl_formazione_squadra($stagione, $giornata, $tabAvv, $idAvv), $tabAvv);
     break;
 }
 
@@ -197,21 +221,33 @@ function dl_stato_partita(?array $partita, string $squadraNorm, array $ctx, int 
     return $ora >= $partita["inizio"] ? "in_corso" : "da_giocare";
 }
 
-/** Giocatore di una riga di formazione, con la sua partita di Serie A e il suo stato. */
+/** Giocatore di una riga di formazione, con la sua partita di Serie A e il suo stato nella SIMULAZIONE. */
 function dl_giocatore(array $r, array $ctx, array $perSquadra, int $ora): array
 {
     $id = $r["id_giocatore"];
     $sa = $ctx["squadre"][$id] ?? null;
     $sn = $sa !== null ? sim_norm($sa) : "";
     $partita = $sn !== "" ? ($perSquadra[$sn] ?? null) : null;
+
+    // Dato usato dalla simulazione: reale | senza voto | editing manuale | 6 provvisorio
+    $warn = [];
+    $stat = sim_stat_giocatore($ctx, $id, $warn, (string) $r["giocatore"]);
+    $sv   = (bool) $stat["sv"];
+    $stato = isset($ctx["voti"][$id]) ? ($sv ? "senza_voto" : "reale")
+           : (!empty($stat["manuale"]) ? ($sv ? "senza_voto" : "manuale")
+           : ($sv ? "senza_voto" : "provvisorio"));
+    [$modificabile] = sim_giocatore_modificabile($ctx, $id);
+
     return [
         "id_giocatore" => $id, "nome" => $r["giocatore"], "ruolo" => $r["ruolo"],
         "squadra_serie_a" => $sa !== null && trim($sa) !== "" ? $sa : null,
         "stato_partita" => dl_stato_partita($partita, $sn, $ctx, $ora),
         "data" => $partita["data"] ?? null, "ora" => $partita["ora"] ?? null,
-        "voto_reale" => isset($ctx["voti"][$id]) && $ctx["voti"][$id]["voto"] !== null && $ctx["voti"][$id]["sv"] !== "Y"
-                        ? (float) $ctx["voti"][$id]["voto"] : null,
-        "senza_voto" => isset($ctx["voti"][$id]) && ($ctx["voti"][$id]["sv"] === "Y" || $ctx["voti"][$id]["voto"] === null),
+        "stato_dato" => $stato,
+        "voto" => !$sv && $stat["voto"] !== null ? (float) $stat["voto"] : null,
+        "senza_voto" => $sv,
+        "sv_manuale" => $sv && !empty($stat["manuale"]),
+        "modificabile" => $modificabile,
         "_norm" => $sn, "_partita" => $partita,
     ];
 }
@@ -247,27 +283,54 @@ function dl_out_giocatore(array $g): array
     return [
         "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
         "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"] ?? [],
+        "stato_dato" => $g["stato_dato"], "voto" => $g["voto"],
+        "modificabile" => $g["modificabile"], "sv_manuale" => $g["sv_manuale"],
     ];
 }
 
 /**
- * Analisi LIVE di una squadra.
+ * Panchinari che la simulazione fa già entrare (al posto dei titolari senza voto),
+ * con la stessa logica e gli stessi limiti di sim_carica_formazione, per ogni
+ * formazione (campionato / Champions) della squadra.
+ * @return array id panchinaro => true
+ */
+function dl_subentranti(array $tabelle, int $idSquadra, array $ctx, int $stagione, int $giornata, array $cfg): array
+{
+    $out = [];
+    foreach ($tabelle as $tab) {
+        try {
+            $w = []; $ng = [];
+            $f = sim_carica_formazione($ctx, $stagione, $giornata, $idSquadra, $w, $ng,
+                $cfg["max_movimento"], $cfg["max_portiere"], $cfg["ufficio"], $tab);
+            foreach ($f["sostituti_entrati"] as $id) $out[(int) $id] = true;
+        } catch (Throwable $e) {
+            // formazione assente: nessun subentrante
+        }
+    }
+    return $out;
+}
+
+/**
+ * Analisi LIVE di una squadra, nella situazione aggiornata della simulazione.
+ * @param array $subentranti id panchinaro => true (chi la simulazione fa già entrare)
  * @return array{per_partita:array, senza_voto:array, panchinari:array}
  *   per_partita: n_partita => titolari ancora da giocare/in corso nelle partite di OGGI
- *   senza_voto : titolari con partita finita e nessun voto (sarà sostituito)
- *   panchinari : per ruolo, i primi panchinari che entrerebbero
+ *   senza_voto : titolari senza voto (ufficiale o manuale): saranno sostituiti
+ *   panchinari : per ruolo, i prossimi 3 subentranti (chi entra già per primo)
  */
-function dl_analizza_squadra(array $titolari, array $bench, string $oggi): array
+function dl_analizza_squadra(array $titolari, array $bench, array $subentranti, string $oggi): array
 {
     $perPartita = [];
     $senzaVoto  = [];
     $aRischio   = [];   // ruolo => numero di titolari non ancora "sicuri"
+    $svPerRuolo = [];   // ruolo => titolari senza voto
 
     foreach ($titolari as $t) {
         $p = $t["_partita"];
         if ($p === null) continue;   // squadra non determinata o a riposo
-        if ($t["senza_voto"]) {      // partita finita, nessun voto: sarà sostituito
+        if ($t["senza_voto"]) {      // SV ufficiale o manuale: sarà sostituito
             $senzaVoto[] = $t;
+            $svPerRuolo[$t["ruolo"]] = ($svPerRuolo[$t["ruolo"]] ?? 0) + 1;
             $aRischio[$t["ruolo"]] = ($aRischio[$t["ruolo"]] ?? 0) + 1;
             continue;
         }
@@ -279,20 +342,32 @@ function dl_analizza_squadra(array $titolari, array $bench, string $oggi): array
 
     $panchinari = [];
     foreach ([1, 2, 3, 4] as $ruolo) {
-        $nRischio = $aRischio[$ruolo] ?? 0;
-        if ($nRischio === 0) continue;
+        if (($aRischio[$ruolo] ?? 0) === 0) continue;
         $candidati = [];
+        $nValidi   = 0;
+        $nEntrano  = 0;
         foreach ($bench[$ruolo] ?? [] as $b) {
-            if ($b["senza_voto"]) continue;                       // già s.v.: non può entrare
-            $candidati[] = [
-                "id_giocatore" => $b["id_giocatore"], "nome" => $b["nome"], "ruolo" => $ruolo,
-                "squadra_serie_a" => $b["squadra_serie_a"], "competizioni" => $b["competizioni"],
-                "stato_partita" => $b["stato_partita"], "voto" => $b["voto_reale"],
-                "data" => $b["data"], "ora" => $b["ora"],
+            $entra = isset($subentranti[$b["id_giocatore"]]);
+            if ($entra) $nEntrano++;
+            if ($nValidi >= 3 && !$entra) break;
+            if ($b["senza_voto"]) {                                // già s.v.: non può entrare
+                $candidati[] = dl_out_giocatore($b) + [
+                    "stato_partita" => $b["stato_partita"], "data" => $b["data"], "ora" => $b["ora"],
+                    "entra" => false, "salta" => true,
+                ];
+                continue;
+            }
+            $candidati[] = dl_out_giocatore($b) + [
+                "stato_partita" => $b["stato_partita"], "data" => $b["data"], "ora" => $b["ora"],
+                "entra" => $entra, "salta" => false,
             ];
-            if (count($candidati) >= min($nRischio, 3)) break;
+            $nValidi++;
         }
-        $panchinari[] = ["ruolo" => $ruolo, "a_rischio" => $nRischio, "candidati" => $candidati];
+        $panchinari[] = [
+            "ruolo" => $ruolo, "a_rischio" => $aRischio[$ruolo],
+            "titolari_sv" => $svPerRuolo[$ruolo] ?? 0, "entrano" => $nEntrano,
+            "candidati" => $candidati,
+        ];
     }
 
     return [
@@ -306,14 +381,14 @@ $oggi = date("Y-m-d", $ora);
 
 // La squadra
 [$titolari, $bench] = dl_carica_squadra($formazioni, $ctx, $perSquadra, $ora);
-$mia = dl_analizza_squadra($titolari, $bench, $oggi);
+$mia = dl_analizza_squadra($titolari, $bench, dl_subentranti($tabMie, $idSquadra, $ctx, $stagione, $giornata, $cfg), $oggi);
 
 // Le squadre avversarie di giornata (campionato e/o Champions): stessa analisi
 $outAvversari = [];
 $perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
 foreach ($avversari as $idAvv => $a) {
     [$tAvv, $bAvv] = dl_carica_squadra($a["righe"], $ctx, $perSquadra, $ora);
-    $an = dl_analizza_squadra($tAvv, $bAvv, $oggi);
+    $an = dl_analizza_squadra($tAvv, $bAvv, dl_subentranti($a["tab"], $idAvv, $ctx, $stagione, $giornata, $cfg), $oggi);
     foreach ($an["per_partita"] as $n => $gioc) $perPartitaAvv[$n][$idAvv] = $gioc;
     $outAvversari[] = [
         "id_squadra" => $idAvv, "nome" => $a["nome"], "competizioni" => $a["competizioni"],

@@ -3,20 +3,16 @@ import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import {
   getLiveGiornata, getLiveDettaglio, getLiveGiocatori, getDettaglioPartita,
-  simulaGiornata, salvaEditLive, eliminaEditLive, eliminaSimulazionePartita,
+  simulaGiornata, eliminaSimulazionePartita,
 } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
 import { MatchDetailPanel } from '../components/MatchDetail'
+import { CAMPI, ThStat, ThVoto, BadgeStatoDato, nomeUtente, useEditGiocatore } from '../components/LiveEdit'
 import { Bandiera } from '../components/Bandiera'
 import { MatchResultRow } from '../components/MatchResult'
 import {
-  Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator,
+  Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator, X,
 } from 'lucide-react'
-
-// Nome dell'utente registrato come autore delle simulazioni
-function nomeUtente(utente) {
-  return utente?.descrizione || utente?.utenza || 'Ospite'
-}
 
 function fmtDataOra(v) {
   if (!v) return null
@@ -24,67 +20,26 @@ function fmtDataOra(v) {
   return isNaN(d) ? String(v) : d.toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
-// ── Editor voti (admin) ─────────────────────────────────────
-const CAMPI = [
-  ['gf', '⚽'], ['ass', 'Ass'], ['gs', 'GS'], ['au', 'AG'],
-  ['rp', 'Rp'], ['rf', 'Rf'], ['rs', 'Rs'], ['amm', '🟨'], ['esp', '🟥'],
-]
-const TITOLI_CAMPI = {
-  gf: 'Gol fatti', ass: 'Assist', gs: 'Gol subiti', au: 'Autogol',
-  rp: 'Rigori parati', rf: 'Rigori realizzati', rs: 'Rigori sbagliati', amm: 'Ammonizioni', esp: 'Espulsioni',
-}
+// ── Editor voti ─────────────────────────────────────────────
+// Tabella con intestazione di colonna e colonna del giocatore fisse
+// (sticky): scorre dentro il proprio contenitore.
 
 function RigaEdit({ g, stagione, onChanged }) {
-  const { utente } = useApp()
-  const [form, setForm] = useState(() => ({
-    voto: g.voto ?? 6, gf: g.gf, gs: g.gs, rp: g.rp, rs: g.rs, rf: g.rf, au: g.au, amm: g.amm, esp: g.esp, ass: g.ass,
-  }))
-  const [busy, setBusy] = useState(false)
-  const [err, setErr]   = useState(null)
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-
-  const run = async (fn) => {
-    setBusy(true); setErr(null)
-    try {
-      await fn()   // il backend ricalcola e salva la sola partita del giocatore
-      onChanged()
-    } catch (e) {
-      setErr(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const salva = () => run(() => salvaEditLive(Number(stagione), {
-    id_giocatore: g.id_giocatore,
-    utente: nomeUtente(utente),
-    voto: Number(form.voto),
-    ...Object.fromEntries(CAMPI.map(([k]) => [k, Number(form[k]) || 0])),
-  }))
-  const reset = () => run(async () => {
-    await eliminaEditLive(Number(stagione), g.id_giocatore, nomeUtente(utente))
-    setForm(f => ({ ...f, voto: 6, gf: 0, gs: 0, rp: 0, rs: 0, rf: 0, au: 0, amm: 0, esp: 0, ass: 0 }))
-  })
-
-  const badge = {
-    reale:       <span className="text-[10px] font-mono uppercase text-slate-500">voto reale</span>,
-    senza_voto:  <span className="text-[10px] font-mono uppercase text-red-400">senza voto</span>,
-    provvisorio: <span className="text-[10px] font-mono uppercase text-sky-400">6 provvisorio</span>,
-    manuale:     <span className="text-[10px] font-mono uppercase text-violet-400">manuale</span>,
-  }[g.stato_dato]
+  const { form, set, busy, err, salva, reset } = useEditGiocatore(g, stagione, onChanged)
 
   return (
-    <tr className={`border-b border-white/[0.03] ${g.modificabile ? '' : 'opacity-60'}`}>
-      <td className="px-2 py-2"><RoleBadge ruolo={g.ruolo} /></td>
-      <td className="px-2 py-2 text-slate-300 text-xs min-w-[150px]">
-        <div className="font-medium flex items-center gap-1.5">
-          <Bandiera id={g.id_giocatore} />
-          <span>{g.giocatore} {!g.titolare && <span className="text-slate-600">(panchina)</span>}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          {badge}
-          {g.squadra_serie_a && <span className="text-[10px] text-slate-600">{g.squadra_serie_a}</span>}
+    <tr className="border-b border-white/[0.03]">
+      <td className="sticky left-0 z-10 bg-pitch-900 px-2 py-2 text-slate-300 text-xs min-w-[150px] max-w-[190px] border-r border-white/5">
+        <div className={g.modificabile ? '' : 'opacity-60'}>
+          <div className="font-medium flex items-center gap-1.5">
+            <RoleBadge ruolo={g.ruolo} />
+            <Bandiera id={g.id_giocatore} />
+            <span className="truncate">{g.giocatore} {!g.titolare && <span className="text-slate-600">(panchina)</span>}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <BadgeStatoDato stato={g.stato_dato} />
+            {g.squadra_serie_a && <span className="text-[10px] text-slate-600">{g.squadra_serie_a}</span>}
+          </div>
         </div>
         {err && <div className="text-[10px] text-red-400 mt-1">{err}</div>}
       </td>
@@ -95,10 +50,10 @@ function RigaEdit({ g, stagione, onChanged }) {
               onChange={e => set('voto', e.target.value)}
               className="fanta-input !px-2 !py-1 !w-16 text-center" aria-label="Voto" />
           </td>
-          {CAMPI.map(([k, label]) => (
-            <td key={k} className="px-1 py-2">
-              <input type="number" min="0" max="20" value={form[k]}
-                onChange={e => set(k, e.target.value)} title={TITOLI_CAMPI[k]} aria-label={TITOLI_CAMPI[k]}
+          {CAMPI.map(c => (
+            <td key={c.k} className="px-1 py-2">
+              <input type="number" min="0" max="20" value={form[c.k]}
+                onChange={e => set(c.k, e.target.value)} title={c.titolo} aria-label={c.titolo}
                 className="fanta-input !px-1 !py-1 !w-12 text-center" />
             </td>
           ))}
@@ -130,15 +85,16 @@ function EditorSquadra({ stagione, squadra, onChanged, competizione = 'CAMP' }) 
   if (!giocatori.length) return <p className="px-3 py-4 text-xs text-slate-600">Nessuna formazione inserita per questa squadra.</p>
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs min-w-[640px]">
+    <div className="flex-1 min-h-0 overflow-auto">
+      <table className="w-full text-xs min-w-[640px] border-separate border-spacing-0">
         <thead>
-          <tr className="border-b border-white/5 text-slate-700 font-mono uppercase tracking-widest">
-            <th className="px-2 py-2 text-left font-normal">R</th>
-            <th className="px-2 py-2 text-left font-normal">Giocatore</th>
-            <th className="px-1 py-2 font-normal">Voto</th>
-            {CAMPI.map(([k, l]) => <th key={k} className="px-1 py-2 font-normal" title={TITOLI_CAMPI[k]}>{l}</th>)}
-            <th />
+          <tr className="text-slate-500">
+            <th scope="col" className="sticky top-0 left-0 z-30 bg-pitch-900 px-2 py-2 text-left font-mono font-normal uppercase tracking-widest text-[10px] border-r border-white/5">
+              Giocatore
+            </th>
+            <ThVoto />
+            {CAMPI.map(c => <ThStat key={c.k} c={c} />)}
+            <th scope="col" className="sticky top-0 z-20 bg-pitch-900" />
           </tr>
         </thead>
         <tbody>
@@ -152,12 +108,13 @@ function EditorSquadra({ stagione, squadra, onChanged, competizione = 'CAMP' }) 
   )
 }
 
-function EditorPartita({ stagione, partita, onChanged, competizione = 'CAMP' }) {
+// Il pannello occupa tutto lo spazio del dettaglio partita su cui è sovrapposto
+function EditorPartita({ stagione, partita, onChanged, onClose, competizione = 'CAMP' }) {
   const [lato, setLato] = useState('casa')
   const sq = partita[lato]
   return (
-    <div className="border-t border-white/5 bg-violet-400/[0.02]">
-      <div className="px-3 py-2 flex items-center gap-2 flex-wrap">
+    <div className="flex flex-col h-full bg-violet-400/[0.03]">
+      <div className="px-3 py-2 flex items-center gap-2 flex-wrap border-b border-white/5">
         <Pencil className="w-3.5 h-3.5 text-violet-400" />
         <span className="text-xs text-slate-400">Editing voti (solo giocatori la cui partita di Serie A non è ancora stata giocata):</span>
         {['casa', 'ospite'].map(l => (
@@ -166,6 +123,9 @@ function EditorPartita({ stagione, partita, onChanged, competizione = 'CAMP' }) 
             {partita[l].nome}
           </button>
         ))}
+        <button onClick={onClose} className="ml-auto btn-ghost !px-2 !py-1 text-xs" title="Chiudi l'editing e torna al dettaglio">
+          <X className="w-4 h-4" /> Chiudi
+        </button>
       </div>
       <EditorSquadra key={`${competizione}-${sq.id}`} stagione={stagione} squadra={sq} onChanged={onChanged} competizione={competizione} />
     </div>
@@ -312,15 +272,23 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
               {' '}(le altre squadre schierano la formazione di campionato).
             </p>
           )}
-          {fonte
-            ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} extra={det?.extra} loading={loading} error={error} />
-            : <>
-                <MatchDetailPanel casa={formMatch?.casa} ospite={formMatch?.ospite} loading={loadingForm} error={errorForm} />
-                <p className="px-4 py-2 text-center text-[11px] text-slate-600 border-t border-white/5">
-                  Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".
-                </p>
-              </>}
-          {!isReale && editing && <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged} competizione={competizione} />}
+          {/* Con l'editing attivo il pannello si sovrappone al dettaglio partita */}
+          <div className={`relative ${editing && !isReale ? 'h-[75vh] max-h-[46rem] overflow-hidden' : ''}`}>
+            {fonte
+              ? <MatchDetailPanel casa={det?.casa} ospite={det?.ospite} extra={det?.extra} loading={loading} error={error} />
+              : <>
+                  <MatchDetailPanel casa={formMatch?.casa} ospite={formMatch?.ospite} loading={loadingForm} error={errorForm} />
+                  <p className="px-4 py-2 text-center text-[11px] text-slate-600 border-t border-white/5">
+                    Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".
+                  </p>
+                </>}
+            {!isReale && editing && (
+              <div className="absolute inset-0 z-40 bg-pitch-900 border-t border-violet-500/30 shadow-[0_0_24px_rgba(0,0,0,0.5)]">
+                <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged}
+                  onClose={() => setEdit(false)} competizione={competizione} />
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

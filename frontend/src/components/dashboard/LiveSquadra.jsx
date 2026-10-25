@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ChevronDown, ChevronUp, Trophy, Crown, PlayCircle, Users, ArrowRightLeft, FlaskConical,
+  ChevronDown, ChevronUp, Trophy, Crown, PlayCircle, Users, ArrowRightLeft, FlaskConical, Pencil, Clock,
 } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardLive, getLiveDettaglio } from '../../api/client'
@@ -9,6 +9,7 @@ import { RoleBadge } from '../ui'
 import { MatchDetailPanel } from '../MatchDetail'
 import TeamLogo from '../TeamLogo'
 import { Bandiera } from '../Bandiera'
+import { EditorGiocatoreModal } from '../LiveEdit'
 import { SEGNO, fmt, fmtDataOra } from './shared'
 
 // ── Dati: si aggiornano ogni minuto durante la giornata ──────
@@ -19,6 +20,7 @@ import { SEGNO, fmt, fmtDataOra } from './shared'
  * accorgersi della partenza della prima partita.
  */
 export function useLiveSquadra(stagione, idSquadra) {
+  const [versione, setVersione] = useState(0)
   const { data, refetch } = useFetch(
     stagione && idSquadra ? () => getDashboardLive(stagione, idSquadra) : null,
     [stagione, idSquadra]
@@ -32,7 +34,10 @@ export function useLiveSquadra(stagione, idSquadra) {
     const t = setInterval(() => refetchRef.current(), attiva ? 60_000 : 300_000)
     return () => clearInterval(t)
   }, [attiva, stagione, idSquadra])
-  return data?.attiva ? data : null
+  // Dopo un editing la simulazione è già stata ricalcolata dal backend: si ricarica lo stato
+  // LIVE e si invalida il dettaglio delle partite (versione).
+  const aggiorna = useCallback(() => { setVersione(v => v + 1); refetchRef.current() }, [])
+  return useMemo(() => (data?.attiva ? { ...data, aggiorna, versione } : null), [data, aggiorna, versione])
 }
 
 // ── Utilità ──────────────────────────────────────────────────
@@ -90,13 +95,13 @@ export function LiveChip({ live }) {
 
 // ── Partita fanta con dettaglio espandibile ──────────────────
 
-function PartitaLive({ stagione, p }) {
+function PartitaLive({ stagione, p, versione = 0 }) {
   const [aperto, setAperto] = useState(false)
   const champ = p.competizione === 'CHAMP'
   const pt = punteggio(p)
   const { data: det, loading, error } = useFetch(
     aperto && p.fonte ? () => getLiveDettaglio(stagione, p.id_casa, 'auto', p.competizione) : null,
-    [aperto, stagione, p.id_casa, p.competizione, p.fonte]
+    [aperto, stagione, p.id_casa, p.competizione, p.fonte, versione]
   )
   const esito = SEGNO[p.mio?.segno]
 
@@ -163,57 +168,116 @@ function PartitaLive({ stagione, p }) {
 
 // ── Giocatori delle prossime partite e panchinari ────────────
 
+/** Stato del dato nella simulazione del candidato panchinaro. */
 function StatoCandidato({ c }) {
-  if (c.voto !== null && c.voto !== undefined) return <span className="text-green-400">voto {fmt(c.voto, 1)}</span>
-  if (c.stato_partita === 'in_corso') return <span className="text-gold-400">in campo ora</span>
-  if (c.stato_partita === 'da_giocare') return <span className="text-slate-400">gioca {quando(c.data, c.ora)}</span>
-  if (c.stato_partita === 'conclusa') return <span className="text-slate-500">attesa voto</span>
-  return <span className="text-slate-600">nessuna partita</span>
+  if (c.salta) return <span className="text-red-400">S.V.</span>
+  if (c.stato_dato === 'reale') return <span className="text-green-400">voto {fmt(c.voto, 1)}</span>
+  if (c.stato_dato === 'manuale') {
+    return <span className="inline-flex items-center gap-1 text-violet-300"><Pencil className="w-3 h-3" aria-hidden />manuale {fmt(c.voto, 1)}</span>
+  }
+  const quandoGioca = c.stato_partita === 'in_corso' ? 'in campo ora'
+    : c.stato_partita === 'da_giocare' ? `gioca ${quando(c.data, c.ora)}`
+    : c.stato_partita === 'conclusa' ? 'attesa voto' : 'nessuna partita'
+  return (
+    <span className="inline-flex items-center gap-1 text-slate-500">
+      <Clock className="w-3 h-3 text-sky-400" aria-hidden /><span className="text-sky-300">6 prov.</span> · {quandoGioca}
+    </span>
+  )
 }
 
-/** Titolari senza voto (partita finita): al loro posto entra il panchinaro. */
-function BloccoSenzaVoto({ giocatori }) {
+/** Competizione in cui un giocatore è schierato (campionato se presente). */
+const compDi = (g) => (g.competizioni?.includes('CAMP') ? 'CAMP' : g.competizioni?.[0] ?? 'CAMP')
+
+const TONI = {
+  mio: 'bg-grass-500/10 border-grass-500/20 text-grass-300 hover:bg-grass-500/20',
+  avv: 'bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/[0.08]',
+  sv:  'bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20',
+}
+
+/** Giocatore cliccabile: apre l'editing come nella simulazione. */
+function ChipGiocatore({ g, tono, onEdit }) {
+  const titolo = [g.squadra_serie_a, 'clic per modificare il voto nella simulazione'].filter(Boolean).join(' · ')
+  return (
+    <button type="button" onClick={() => onEdit(g)} title={titolo}
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] transition-colors cursor-pointer ${TONI[tono]}`}>
+      <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
+      {g.stato_dato === 'manuale' && (
+        <span className="inline-flex items-center gap-0.5 font-mono text-violet-300" title="Voto inserito manualmente">
+          <Pencil className="w-3 h-3" aria-hidden />{fmt(g.voto, 1)}
+        </span>
+      )}
+      {g.sv_manuale && <span className="font-mono text-violet-300" title="S.V. inserito manualmente">S.V.</span>}
+      {g.competizioni?.includes('CHAMP') && g.competizioni?.includes('CAMP') && (
+        <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />
+      )}
+    </button>
+  )
+}
+
+/** Titolari senza voto (ufficiale o manuale): al loro posto entra il panchinaro. */
+function BloccoSenzaVoto({ giocatori, onEdit }) {
   if (!giocatori?.length) return null
   return (
     <div>
       <p className="text-[10px] uppercase tracking-widest text-red-400">Senza voto: entra il panchinaro</p>
       <div className="mt-1.5 flex flex-wrap gap-1">
-        {giocatori.map(g => (
-          <span key={g.id_giocatore} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
-            <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
-          </span>
-        ))}
+        {giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="sv" onEdit={onEdit} />)}
       </div>
     </div>
   )
 }
 
-/** Primi panchinari che entrerebbero, per ruolo, se i titolari da verificare non prendessero voto. */
-function BloccoPanchinari({ panchinari }) {
+/**
+ * Prossimi 3 subentranti per ruolo nella situazione aggiornata della simulazione.
+ * Evidenziati quelli che entrano già (titolare con S.V.); i panchinari già S.V. sono saltati.
+ */
+function BloccoPanchinari({ panchinari, onEdit }) {
   if (!panchinari?.length) return null
   return (
     <div className="space-y-2">
       <p className="text-[10px] uppercase tracking-widest text-gold-400 flex items-center gap-1.5">
-        <ArrowRightLeft className="w-3 h-3" /> Primi panchinari coinvolti se un titolare non prende voto
+        <ArrowRightLeft className="w-3 h-3" /> Prossimi subentranti per ruolo (secondo la simulazione)
       </p>
-      {panchinari.map(r => (
-        <div key={r.ruolo}>
-          <p className="text-[11px] text-slate-500">
-            {NOME_RUOLO[r.ruolo]} <span className="text-slate-700">· {r.a_rischio} titolar{r.a_rischio === 1 ? 'e' : 'i'} da verificare</span>
-          </p>
-          {r.candidati.length === 0 ? (
-            <p className="text-[11px] text-slate-700">Nessun panchinaro disponibile per il ruolo.</p>
-          ) : r.candidati.map((c, i) => (
-            <div key={c.id_giocatore} className="flex items-center gap-2 text-xs py-0.5">
-              <span className="text-slate-700 font-mono w-3">{i + 1}</span>
-              <RoleBadge ruolo={c.ruolo} />
-              <Bandiera id={c.id_giocatore} />
-              <span className="text-slate-300 truncate">{c.nome}</span>
-              <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
-            </div>
-          ))}
-        </div>
-      ))}
+      {panchinari.map(r => {
+        let n = 0
+        const davaluta = r.a_rischio - r.titolari_sv
+        return (
+          <div key={r.ruolo}>
+            <p className="text-[11px] text-slate-500 flex items-center gap-x-2 flex-wrap">
+              <span>{NOME_RUOLO[r.ruolo]}</span>
+              {r.titolari_sv > 0 && <span className="text-red-400">{r.titolari_sv} titolar{r.titolari_sv === 1 ? 'e' : 'i'} s.v.</span>}
+              {r.entrano > 0 && <span className="text-emerald-400">{r.entrano} già in ingresso</span>}
+              {r.titolari_sv > r.entrano && <span className="text-amber-400">{r.titolari_sv - r.entrano} senza sostituto</span>}
+              {davaluta > 0 && <span className="text-slate-700">{davaluta} da verificare</span>}
+            </p>
+            {r.candidati.length === 0 ? (
+              <p className="text-[11px] text-slate-700">Nessun panchinaro disponibile per il ruolo.</p>
+            ) : r.candidati.map(c => {
+              if (!c.salta) n += 1
+              return (
+                <button key={c.id_giocatore} type="button" onClick={() => onEdit(c)}
+                        title="Clic per modificare il voto nella simulazione"
+                        className={`w-full flex items-center gap-2 text-xs py-1 px-1.5 rounded-md text-left transition-colors cursor-pointer ${
+                          c.salta ? 'opacity-50 hover:opacity-80'
+                          : c.entra ? 'bg-emerald-500/10 ring-1 ring-emerald-500/30 hover:bg-emerald-500/15'
+                          : 'hover:bg-white/[0.04]'}`}>
+                  <span className="text-slate-600 font-mono w-3 flex-shrink-0">{c.salta ? '–' : n}</span>
+                  <RoleBadge ruolo={c.ruolo} />
+                  <Bandiera id={c.id_giocatore} />
+                  <span className={`truncate ${c.salta ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{c.nome}</span>
+                  {c.entra && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40 flex-shrink-0"
+                          title="La simulazione lo fa già entrare al posto di un titolare senza voto">
+                      <ArrowRightLeft className="w-3 h-3" aria-hidden />Entra
+                    </span>
+                  )}
+                  <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
+                </button>
+              )
+            })}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -231,15 +295,19 @@ function TitoloSquadra({ nome, competizioni, tua = false }) {
 }
 
 // Il pannello è sempre aperto: durante la LIVE serve a colpo d'occhio.
-function GiocatoriLive({ live, nomeSquadra }) {
+// Ogni giocatore è cliccabile: l'editing salva nella simulazione e la ricalcola.
+function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
+  const [edit, setEdit] = useState(null)   // { giocatore, idSquadra, competizione }
   const avversari = live.avversari ?? []
   const nGiocatori = live.oggi.reduce((n, m) => n + m.giocatori.length, 0)
   const nAvversari = live.oggi.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
-  const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.length, 0)
+  const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.filter(c => !c.salta).length, 0)
   const comp = (live.partite ?? []).map(p => p.competizione)
 
   const sezioneTua = live.senza_voto.length > 0 || live.panchinari.length > 0
   const sezioniAvv = avversari.filter(a => a.senza_voto.length > 0 || a.panchinari.length > 0)
+
+  const editaDi = (idSq) => (g) => setEdit({ giocatore: g, idSquadra: idSq, competizione: compDi(g) })
 
   return (
     <div className="rounded-xl border border-white/10 bg-pitch-900/60 overflow-hidden">
@@ -267,13 +335,7 @@ function GiocatoriLive({ live, nomeSquadra }) {
               <p className="text-[11px] text-slate-700 mt-1">Nessun tuo titolare.</p>
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                {m.giocatori.map(g => (
-                  <span key={g.id_giocatore} title={g.squadra_serie_a ?? ''}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-grass-500/10 border border-grass-500/20 text-[11px] text-grass-300">
-                    <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
-                    {g.competizioni.includes('CHAMP') && <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />}
-                  </span>
-                ))}
+                {m.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="mio" onEdit={editaDi(idSquadra)} />)}
               </div>
             )}
 
@@ -285,15 +347,7 @@ function GiocatoriLive({ live, nomeSquadra }) {
                   Avversario: <span className="text-slate-300 normal-case tracking-normal">{a.nome}</span>
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {a.giocatori.map(g => (
-                    <span key={g.id_giocatore} title={g.squadra_serie_a ?? ''}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-[11px] text-slate-300">
-                      <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
-                      {g.competizioni.includes('CAMP') && g.competizioni.includes('CHAMP') && (
-                        <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />
-                      )}
-                    </span>
-                  ))}
+                  {a.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="avv" onEdit={editaDi(a.id_squadra)} />)}
                 </div>
               </div>
             ))}
@@ -303,27 +357,42 @@ function GiocatoriLive({ live, nomeSquadra }) {
         {sezioneTua && (
           <div className="px-3 py-2.5 space-y-2">
             <TitoloSquadra nome={nomeSquadra} competizioni={comp} tua />
-            <BloccoSenzaVoto giocatori={live.senza_voto} />
-            <BloccoPanchinari panchinari={live.panchinari} />
-            <p className="text-[10px] text-slate-700">Indicativo: entra il primo panchinaro del ruolo che prende voto; non si considerano i limiti di sostituzioni.</p>
+            <BloccoSenzaVoto giocatori={live.senza_voto} onEdit={editaDi(idSquadra)} />
+            <BloccoPanchinari panchinari={live.panchinari} onEdit={editaDi(idSquadra)} />
           </div>
         )}
 
         {sezioniAvv.map(a => (
           <div key={a.id_squadra} className="px-3 py-2.5 space-y-2">
             <TitoloSquadra nome={a.nome} competizioni={a.competizioni} />
-            <BloccoSenzaVoto giocatori={a.senza_voto} />
-            <BloccoPanchinari panchinari={a.panchinari} />
+            <BloccoSenzaVoto giocatori={a.senza_voto} onEdit={editaDi(a.id_squadra)} />
+            <BloccoPanchinari panchinari={a.panchinari} onEdit={editaDi(a.id_squadra)} />
           </div>
         ))}
+
+        <p className="px-3 py-2 text-[10px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span className="inline-flex items-center gap-1"><Pencil className="w-3 h-3 text-violet-400" aria-hidden />voto manuale</span>
+          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-sky-400" aria-hidden />6 provvisorio (partita da giocare)</span>
+          <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden />entra già al posto di un titolare s.v.</span>
+          <span>Clic su un giocatore per modificarne il voto: la simulazione si aggiorna.</span>
+        </p>
       </div>
+
+      {edit && (
+        <EditorGiocatoreModal
+          stagione={stagione} idSquadra={edit.idSquadra} competizione={edit.competizione}
+          giocatore={{ id_giocatore: edit.giocatore.id_giocatore, nome: edit.giocatore.nome }}
+          onClose={() => setEdit(null)}
+          onSaved={() => live.aggiorna?.()}
+        />
+      )}
     </div>
   )
 }
 
 // ── Blocco LIVE (intestazione estesa) ────────────────────────
 
-export function LivePanel({ live, stagione, nomeSquadra }) {
+export function LivePanel({ live, stagione, nomeSquadra, idSquadra }) {
   return (
     <div className="rounded-xl border border-red-500/30 bg-gradient-to-br from-red-500/[0.07] to-transparent p-3 sm:p-4 space-y-3">
       <div className="flex items-center gap-2 flex-wrap">
@@ -338,11 +407,11 @@ export function LivePanel({ live, stagione, nomeSquadra }) {
         <p className="text-xs text-slate-500">Nessuna tua partita in questa giornata.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {live.partite.map(p => <PartitaLive key={p.competizione} stagione={stagione} p={p} />)}
+          {live.partite.map(p => <PartitaLive key={p.competizione} stagione={stagione} p={p} versione={live.versione} />)}
         </div>
       )}
 
-      <GiocatoriLive live={live} nomeSquadra={nomeSquadra} />
+      <GiocatoriLive live={live} stagione={stagione} nomeSquadra={nomeSquadra} idSquadra={idSquadra} />
     </div>
   )
 }

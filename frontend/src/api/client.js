@@ -38,12 +38,6 @@ function parseErrorBody(body, resStatus) {
   return new ApiError(err ?? `HTTP ${resStatus}`, 'UNKNOWN', resStatus)
 }
 
-// Id della squadra di chi sta guardando (id utente = id squadra): serve al backend
-// per mostrare all'interessato la propria formazione anche se l'ha nascosta agli altri.
-function idRichiedente() {
-  try { return JSON.parse(localStorage.getItem('lfm_utente'))?.id ?? null } catch { return null }
-}
-
 async function get(endpoint, params = {}) {
   const url = new URL(`${BASE_URL}/${endpoint}`, window.location.origin)
   Object.entries(params).forEach(([k, v]) => {
@@ -156,7 +150,7 @@ export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id }
 // Tutti i dati della dashboard (albo, KPI, campionato, Champions,
 // prossima sfida) in un'unica chiamata.
 export const getDashboardSquadra = (stagione, id_squadra) =>
-  get('dashboard_squadra.php', { stagione, id_squadra, id_richiedente: idRichiedente() })
+  get('dashboard_squadra.php', { stagione, id_squadra })
 
 // Area "Statistiche" della dashboard: risultati e classifica di UNA
 // competizione. competizione: 'CAMP' (default) | 'CHAMP'.
@@ -175,7 +169,6 @@ export const getDettaglioPartita = (stagione, giornata, id_squadra = null, compe
     stagione, giornata, id_squadra,
     ...(competizione !== 'CAMP' ? { competizione } : {}),
     ...(id_ospite ? { id_ospite } : {}),
-    id_richiedente: idRichiedente(),
   })
 
 // ── Statistiche ──────────────────────────────────────────────
@@ -202,12 +195,7 @@ export const getChampions = (stagione, sezione = 'classifica', girone = null) =>
 
 // competizione: 'CAMP' (campionato, default) | 'CHAMP' (formazione Champions distinta)
 export const getFormazione = (stagione, giornata, id_squadra, competizione = 'CAMP') =>
-  get('formazioni.php', { stagione, giornata, id_squadra, id_richiedente: idRichiedente(), ...(competizione !== 'CAMP' ? { competizione } : {}) })
-
-// Stato del blocco inserimento e dell'opzione "nascondi formazione" (parametri di stagione):
-// { blocco_attivo, bloccata, inizio_giornata, limite_inserimento, nascondi_consentito, nascosta }
-export const getFormazioneStato = (stagione, giornata, id_squadra) =>
-  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'stato' })
+  get('formazioni.php', { stagione, giornata, id_squadra, ...(competizione !== 'CAMP' ? { competizione } : {}) })
 
 // Indica se per squadra+giornata è ammessa una formazione Champions diversa da quella di campionato:
 // { champions_in_giornata, separata_attiva, separata_ammessa, rigori_previsti }
@@ -223,18 +211,15 @@ export const getAvversarieSerieA = (stagione, giornata, id_squadra) =>
 // competizione: 'CAMP' | 'CHAMP'; entrambe = true salva la stessa formazione in entrambe le competizioni
 // rigoristi (facoltativo): ordine dei calci di rigore [idGiocatore, ...] (titolari 1-11, poi panchinari),
 // solo per i turni di Champions che prevedono supplementari e rigori; [] = nessuna lista
-// nascondi (facoltativo): true/false nasconde/mostra la formazione agli altri fino alla prima partita
-// di Serie A della giornata (solo se consentito dai parametri di stagione); undefined = invariato
-export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false, rigoristi = undefined, nascondi = undefined) =>
+export const saveFormazione = (stagione, giornata, id_squadra, giocatori, competizione = 'CAMP', entrambe = false, rigoristi = undefined) =>
   post('formazioni.php', {
     stagione, giornata, id_squadra, giocatori, competizione, entrambe,
-    ...(nascondi !== undefined ? { nascondi } : {}),
     ...(rigoristi !== undefined ? { rigoristi } : {}),
   })
 
 // Ordine dei rigoristi salvato per squadra+giornata: [{ id_giocatore, ordine }]
 export const getRigoristi = (stagione, giornata, id_squadra) =>
-  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'rigoristi', id_richiedente: idRichiedente() })
+  get('formazioni.php', { stagione, giornata, id_squadra, modo: 'rigoristi' })
 
 // ── Penalità ─────────────────────────────────────────────────
 
@@ -545,7 +530,7 @@ export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'C
 
 // Area "Prepara la prossima partita": avversario, Top 11, Serie A.
 export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP') =>
-  get('dashboard_prepara.php', { stagione, id_squadra, competizione, id_richiedente: idRichiedente() })
+  get('dashboard_prepara.php', { stagione, id_squadra, competizione })
 
 // Richiamo LIVE dell'intestazione della dashboard: finestra della giornata,
 // risultato (reale o simulato) delle partite della squadra, giocatori delle

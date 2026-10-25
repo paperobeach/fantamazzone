@@ -21,7 +21,7 @@ import {
 // ============================================================
 
 const MESSAGGI_RETE = {
-  raggiungibile: { tono: 'green', icona: CheckCircle2, testo: 'API-Football è raggiungibile dal server.' },
+  raggiungibile: { tono: 'green', icona: CheckCircle2, testo: 'Il fornitore dei dati è raggiungibile dal server.' },
   solo_diretto: {
     tono: 'gold', icona: AlertTriangle,
     testo: 'API-Football è raggiungibile solo saltando il proxy dell\'hosting. In config_api_football.php imposta "proxy" => "nessuno".',
@@ -49,7 +49,8 @@ function RisultatoDiagnostica({ d }) {
     <div className="space-y-4">
       <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
         <Voce ok={d.file_configurazione} label="File config_api_football.php presente" />
-        <Voce ok={d.chiave_impostata} label="Chiave API compilata" />
+        <Voce ok label="Fornitore dei dati" dettaglio={d.provider === 'thesportsdb' ? 'TheSportsDB' : 'API-Football'} />
+        <Voce ok={d.chiave_impostata} label="Chiave / token del fornitore compilato" />
         <Voce ok={d.token_cron_valido} label="Token del cron impostato (almeno 16 caratteri)" />
         <Voce ok={d.ambiente.curl_disponibile} label="cURL disponibile" />
         <Voce ok={d.ambiente.openssl_disponibile} label="OpenSSL disponibile (HTTPS)" />
@@ -110,9 +111,13 @@ function RisultatoStato({ r }) {
     <div className="space-y-3">
       <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
         <Voce ok={p.active !== false} label="Piano" dettaglio={`${p.plan ?? '—'}${p.end ? ` · scade ${String(p.end).slice(0, 10)}` : ''}`} />
-        <Voce ok label="Richieste di oggi secondo API-Football" dettaglio={`${q.current ?? '—'} / ${q.limit_day ?? '—'}`} />
+        <Voce ok label="Richieste di oggi secondo il fornitore" dettaglio={`${q.current ?? '—'} / ${q.limit_day ?? '—'}`} />
+        {r.richieste_residue_minuto != null && (
+          <Voce ok label="Richieste ancora disponibili in questo minuto" dettaglio={r.richieste_residue_minuto} />
+        )}
         <Voce ok label="Richieste registrate dall'app oggi" dettaglio={r.richieste_oggi_registro} />
       </ul>
+      {r.avviso && <Avviso tono="gold">{r.avviso}</Avviso>}
       {Number(q.limit_day) > 0 && Number(q.limit_day) <= 100 && (
         <Avviso tono="gold">
           Piano gratuito: 100 richieste al giorno e 10 al minuto. Le regole del cron (una chiamata all'ora, solo con
@@ -133,7 +138,7 @@ function RisultatoCopertura({ r }) {
       <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
         <Voce ok label="Lega" dettaglio={`${r.lega.nome} (${r.lega.paese}) · id ${r.lega.id}`} />
         <Voce ok={r.season_trovata} label={`Stagione ${r.season_richiesta} presente`}
-              dettaglio={r.season_trovata ? `${r.dettaglio_season.inizio} → ${r.dettaglio_season.fine}` : 'non trovata'} />
+              dettaglio={r.season_trovata ? ([r.dettaglio_season.inizio, r.dettaglio_season.fine].filter(Boolean).join(' → ') || 'presente') : 'non trovata'} />
         {c && <>
           <Voce ok={!!c.fixtures?.statistics_players} label="Statistiche per giocatore" dettaglio={FLAG(c.fixtures?.statistics_players)} />
           <Voce ok={!!c.fixtures?.events} label="Eventi di gioco (gol, autogol, cartellini)" dettaglio={FLAG(c.fixtures?.events)} />
@@ -141,9 +146,10 @@ function RisultatoCopertura({ r }) {
           <Voce ok={!!c.players} label="Rose dei giocatori" dettaglio={FLAG(c.players)} />
         </>}
       </ul>
+      {r.avviso && <Avviso tono="gold">{r.avviso}</Avviso>}
       {!r.season_trovata && (
         <Avviso tono="red" icona={XCircle}>
-          La stagione non risulta in API-Football: verifica <span className="font-mono">season_api</span> in config_api_football.php.
+          La stagione non risulta nel fornitore dei dati: verifica <span className="font-mono">season_api</span> / <span className="font-mono">tsdb_season</span> in config_api_football.php.
         </Avviso>
       )}
     </div>
@@ -155,6 +161,7 @@ function RisultatoProva({ r }) {
   return (
     <div className="space-y-4">
       {r.avvisi?.map((a, i) => <Avviso key={i} tono={r.ok ? 'gold' : 'red'}>{a}</Avviso>)}
+      {r.season_usata && <p className="text-xs text-slate-500">Stagione API usata: {r.season_usata}</p>}
       <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
         {r.passi.map((p, i) => (
           <Voce key={i} ok={p.ok} label={p.passo} dettaglio={p.errore ?? (p.trovate != null ? `${p.trovate} trovate` : (p.ms != null ? `${p.ms} ms` : null))} />
@@ -243,13 +250,16 @@ export default function ApiFootballTest() {
   const [azione, setAzione] = useState(null)
   const [errore, setErrore] = useState(null)
   const [fixtureId, setFixtureId] = useState('')
+  const [season, setSeason] = useState('')
   const [ris, setRis] = useState({})
 
   const esegui = async (tipo) => {
     setErrore(null)
     setAzione(tipo)
     try {
-      const extra = tipo === 'prova_fixture' && fixtureId.trim() !== '' ? { fixture_id: Number(fixtureId) } : {}
+      const extra = {}
+      if (tipo === 'prova_fixture' && fixtureId.trim() !== '') extra.fixture_id = Number(fixtureId)
+      if ((tipo === 'prova_fixture' || tipo === 'copertura') && season.trim() !== '') extra.season = Number(season)
       const res = await afTest(cred.stagioneRif, { ...cred.auth, azione: tipo, ...extra })
       setRis(r => ({ ...r, [tipo]: res }))
     } catch (err) {
@@ -265,7 +275,7 @@ export default function ApiFootballTest() {
       <PageHeader
         label="Avvio stagione"
         title="Test API-Football"
-        subtitle="Verifica che il server raggiunga API-Football, che chiave e piano siano validi e che i dati delle partite siano nel formato atteso. Non scrive nulla sul database."
+        subtitle="Verifica che il server raggiunga il fornitore dei dati (API-Football o TheSportsDB), che chiave e piano siano validi e che i dati delle partite siano nel formato atteso. Non scrive nulla sul database."
       />
 
       <CardCredenziali cred={cred} />
@@ -290,8 +300,18 @@ export default function ApiFootballTest() {
         </div>
 
         <div className="mt-5 pt-5 border-t border-white/5">
+          <div className="mb-4">
+            <label htmlFor="af-season" className="text-xs text-slate-600 mb-1 block">
+              Stagione API per «Copertura» e «Prova» (facoltativa: col piano gratuito usa una stagione passata, es. 2024)
+            </label>
+            <input
+              id="af-season" type="text" inputMode="numeric" maxLength={4} value={season}
+              onChange={e => setSeason(e.target.value.replace(/\D/g, ''))}
+              className="fanta-input max-w-[8rem]" placeholder="es. 2024"
+            />
+          </div>
           <label htmlFor="af-fixture" className="text-xs text-slate-600 mb-1 block">
-            ID partita (facoltativo: se vuoto si usa l'ultima partita conclusa)
+            ID partita (facoltativo: se vuoto si usa l'ultima partita conclusa della stagione)
           </label>
           <div className="flex flex-wrap gap-3 items-center">
             <input

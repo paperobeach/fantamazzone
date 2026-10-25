@@ -28,6 +28,9 @@ const STATI_IN_CORSO = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'SUSP', 'INT'
 
 function BadgeStato({ p }) {
   const s = p.api_stato
+  if (p.dettaglio_finale === 'Y' && p.n_giocatori === 0) {
+    return <span className="text-slate-400 text-xs">Conclusa: solo risultato (nessun dato giocatori)</span>
+  }
   if (p.dettaglio_finale === 'Y') {
     return <span className="inline-flex items-center gap-1 text-green-400 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Statistiche salvate</span>
   }

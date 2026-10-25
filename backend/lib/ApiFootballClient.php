@@ -2,7 +2,8 @@
 // ============================================================
 // backend/lib/ApiFootballClient.php
 //
-// Client minimale per API-Football (api-sports.io v3), senza librerie
+// Client minimale per API-Football (api-sports.io v3) e funzioni comuni ai due
+// fornitori supportati (vedi "provider" in config; TheSportsDB: TheSportsDbClient.php), senza librerie
 // esterne (hosting condiviso). Configurazione in backend/config_api_football.php
 // (NON versionato).
 //
@@ -41,13 +42,29 @@ function af_cfg(string $chiave, $default = null)
     return ($cfg !== null && array_key_exists($chiave, $cfg) && $cfg[$chiave] !== null) ? $cfg[$chiave] : $default;
 }
 
-function af_chiave_configurata(): bool
+/** Fornitore dei dati attivo: "api-football" (default) oppure "thesportsdb" (TheSportsDB). */
+function af_provider(): string
 {
-    $k = (string) af_cfg("api_key", "");
-    return $k !== "" && $k !== "INSERISCI_QUI_LA_CHIAVE";
+    $p = strtolower(trim((string) af_cfg("provider", "api-football")));
+    return in_array($p, ["thesportsdb", "the-sports-db", "tsdb"], true) ? "thesportsdb" : "api-football";
 }
 
-/** True se $token coincide col token del cron (e il token è stato davvero impostato). */
+/** Indirizzo base del fornitore attivo. */
+function af_base_url(): string
+{
+    return af_provider() === "thesportsdb"
+        ? rtrim((string) af_cfg("tsdb_base_url", "https://www.thesportsdb.com/api/v1/json"), "/")
+        : rtrim((string) af_cfg("base_url", "https://v3.football.api-sports.io"), "/");
+}
+
+/** Chiave del fornitore attivo effettivamente impostata. */
+function af_chiave_configurata(): bool
+{
+    $k = trim((string) af_cfg(af_provider() === "thesportsdb" ? "tsdb_key" : "api_key", ""));
+    return $k !== "" && strpos($k, "INSERISCI_") !== 0;
+}
+
+/** Il token del cron coincide con quello configurato? */
 function af_cron_token_valido(string $token): bool
 {
     $t = (string) af_cfg("cron_token", "");
@@ -55,10 +72,10 @@ function af_cron_token_valido(string $token): bool
     return $token !== "" && hash_equals($t, $token);
 }
 
-/** Anno di stagione da usare verso API-Football per la stagione $stagione del progetto. */
+/** Anno di stagione da usare verso il fornitore per la stagione $stagione del progetto. */
 function af_season(int $stagione): int
 {
-    $s = af_cfg("season_api", null);
+    $s = af_cfg(af_provider() === "thesportsdb" ? "tsdb_season" : "season_api", null);
     return $s !== null ? (int) $s : $stagione;
 }
 
@@ -131,9 +148,9 @@ function af_sonda_rete(): array
     if (!function_exists("curl_init")) {
         return ["esito" => "curl_assente", "prove" => []];
     }
-    $base = rtrim((string) af_cfg("base_url", "https://v3.football.api-sports.io"), "/");
+    $base = af_base_url();
     $bersagli = [
-        "api-football" => $base . "/",
+        af_provider() => $base . "/",
         "example.com"  => "https://example.com/",
         "api.github.com" => "https://api.github.com/",
     ];
@@ -143,7 +160,7 @@ function af_sonda_rete(): array
         $dir  = $pred["ok"] ? null : af_sonda_url($url, true);
         $prove[] = ["host" => $nome, "predefinito" => $pred, "diretto" => $dir];
     }
-    $af = $prove[0];
+    $af = $prove[0];   // il fornitore attivo è sempre il primo bersaglio
     $altriOk = false;
     foreach (array_slice($prove, 1) as $p) {
         if ($p["predefinito"]["ok"] || ($p["diretto"]["ok"] ?? false)) $altriOk = true;

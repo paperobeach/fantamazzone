@@ -2,7 +2,8 @@
 // ============================================================
 // backend/lib/ApiFootballSync.php
 //
-// Sincronizzazione delle statistiche dei giocatori a fine partita.
+// Sincronizzazione delle statistiche dei giocatori a fine partita (provider
+// API-Football; per TheSportsDB vedi TheSportsDbSync.php).
 //
 // REGOLE DEL CRON (una chiamata all'ora, vedi cron_api_football.php)
 //   Ad ogni esecuzione si guardano le partite di NEW_CALENDARIO_SERIE_A già
@@ -28,6 +29,8 @@
 // ============================================================
 
 require_once __DIR__ . "/ApiFootballMapping.php";
+require_once __DIR__ . "/TheSportsDbClient.php";
+require_once __DIR__ . "/TheSportsDbSync.php";
 
 const AF_STATI_FINALI   = ["FT", "AET", "PEN"];
 const AF_STATI_ANNULLATI = ["PST", "CANC", "ABD", "AWD", "WO"];
@@ -357,6 +360,12 @@ function af_sync_esegui(int $stagione, array $opz = []): array
         }
         if ($dry) {
             $rep["messaggio"] = count($attive) . " partite da verificare (simulazione: nessuna chiamata API effettuata)";
+            return $rep;
+        }
+
+        // Fornitore TheSportsDB: stato di ogni partita ed eventuali statistiche
+        if (af_provider() === "thesportsdb") {
+            tsdb_sync_attive($stagione, $attive, $rep, $adesso);
             return $rep;
         }
 

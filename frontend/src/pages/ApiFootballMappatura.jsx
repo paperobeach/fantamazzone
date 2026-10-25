@@ -49,6 +49,7 @@ export default function ApiFootballMappatura() {
   const [stato, setStato] = useState(null)
   const [sq, setSq] = useState(null)             // { squadre_api, squadre_progetto }
   const [avanz, setAvanz] = useState(null)       // { fatte, totale, corrente }
+  const [nota, setNota] = useState(null)         // avvisi del fornitore (limiti del piano)
   const interrompi = useRef(false)
 
   const [filtro, setFiltro] = useState('da_associare')
@@ -91,6 +92,7 @@ export default function ApiFootballMappatura() {
   // ── Squadre ──────────────────────────────────────────────
   const caricaSquadre = async () => {
     const r = await chiama('squadre_carica')
+    setNota(r?.avviso ?? null)
     if (r) { setSq({ squadre_api: r.squadre_api, squadre_progetto: r.squadre_progetto }); setStato(await raw('stato').catch(() => stato)) }
   }
   const associaSquadra = async (apiTeamId, nome) => {
@@ -99,6 +101,7 @@ export default function ApiFootballMappatura() {
   }
   const caricaRosa = async (apiTeamId) => {
     const r = await chiama('giocatori_carica', { api_team_id: apiTeamId }, `rosa-${apiTeamId}`)
+    setNota(r?.nota ?? null)
     if (r) await aggiornaStato()
   }
   const caricaTutteLeRose = async () => {
@@ -185,6 +188,7 @@ export default function ApiFootballMappatura() {
         )}
 
         {errore && <Avviso tono="red" icona={XCircle}>{errore}</Avviso>}
+        {nota && <Avviso>{nota}</Avviso>}
 
         {!stato && !errore && (
           <Avviso>

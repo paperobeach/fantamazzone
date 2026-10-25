@@ -18,6 +18,15 @@
 // ============================================================
 
 return [
+    // Fornitore dei dati:
+    //   "api-football"  API-Football (api-sports.io): statistiche per giocatore con minuti,
+    //                   eventi e rating; il piano gratuito NON include la stagione corrente
+    //   "thesportsdb"   TheSportsDB: dati inseriti dalla community. Con la chiave gratuita
+    //                   formazioni e cronologia delle partite sono TROPPO limitate (5 elementi):
+    //                   per le statistiche dei giocatori serve una chiave personale a pagamento
+    "provider" => "api-football",
+
+    // ── API-Football ─────────────────────────────────────────
     // Chiave API (header x-apisports-key)
     "api_key" => "INSERISCI_QUI_LA_CHIAVE",
 
@@ -47,6 +56,17 @@ return [
     // Prefisso del nome del turno: la giornata N è "Regular Season - N"
     "round_prefix" => "Regular Season - ",
 
+    // ── TheSportsDB (solo se provider = "thesportsdb") ───────
+    // Chiave: "123" = chiave gratuita di prova (risposte troncate); per i dati completi
+    // inserire la chiave personale del piano a pagamento (profilo utente di TheSportsDB)
+    "tsdb_key" => "123",
+    "tsdb_base_url" => "https://www.thesportsdb.com/api/v1/json",
+    // Serie A: id lega 4332, nome "Italian Serie A"
+    "tsdb_league_id" => 4332,
+    "tsdb_league_name" => "Italian Serie A",
+    // Anno di inizio stagione (2026 = 2026-2027). null = stagione del progetto.
+    "tsdb_season" => null,
+
     // ── Regole del cron (una chiamata all'ora) ───────────────
     // Fine stimata della partita = calcio d'inizio + questa durata (minuti).
     // Dopo la fine stimata, se lo stato API è "partita conclusa" e le
@@ -57,11 +77,12 @@ return [
     // conclusa viene abbandonata (es. sospesa): evita chiamate all'infinito.
     "limite_attesa_min" => 360,
 
-    // Tetto di sicurezza delle richieste giornaliere (il piano gratuito ne
-    // concede 100): superato, le chiamate vengono rifiutate in locale.
+    // Tetto di sicurezza delle richieste giornaliere (API-Football gratuito: 100;
+    // TheSportsDB non ha un tetto giornaliero): superato, le chiamate
+    // vengono rifiutate in locale.
     "quota_giornaliera_max" => 90,
 
-    // Pausa minima tra due chiamate consecutive (ms). Il piano gratuito
-    // consente 10 richieste al minuto: 6500 ms resta sotto il limite.
+    // Pausa minima tra due chiamate consecutive (ms). API-Football gratuito: 10 richieste
+    // al minuto → 6500; TheSportsDB gratuito: 30 al minuto → 2200 (a pagamento: 100 → 700).
     "pausa_tra_chiamate_ms" => 6500,
 ];

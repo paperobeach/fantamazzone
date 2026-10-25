@@ -10,10 +10,10 @@
 // ACCESSO: utenza amministratore (password verificata lato server).
 //
 // azione = "stato"               contatori di avanzamento
-// azione = "squadre_carica"      GET /teams (1 richiesta) + abbinamento automatico
+// azione = "squadre_carica"      elenco squadre del fornitore (1 richiesta) + abbinamento automatico
 // azione = "squadre_elenco"      squadre API con associazione + nomi del progetto
 // azione = "squadra_associa"     { api_team_id, squadra_serie_a|null }
-// azione = "giocatori_carica"    { api_team_id }: GET /players/squads (1 richiesta)
+// azione = "giocatori_carica"    { api_team_id }: rosa della squadra (1 richiesta; TheSportsDB gratuito: max 10 giocatori)
 // azione = "giocatori_automatch" abbinamento automatico locale (nessuna richiesta)
 // azione = "giocatori_elenco"    { filtro: da_associare|associati, squadra?, q?, limite? }
 // azione = "giocatori_cerca_api" { q, api_team_id? }: giocatori API non associati
@@ -64,6 +64,17 @@ function map_squadre_elenco(int $stagione): array
     return ["squadre_api" => $api, "squadre_progetto" => afm_squadre_db($stagione)];
 }
 
+/** Inserisce o aggiorna un giocatore del fornitore nell'elenco da associare (non tocca l'associazione). */
+function map_upsert_giocatore(int $stagione, int $teamId, int $pid, string $nome, string $ruolo, ?int $numero, string $adesso): void
+{
+    global $conn;
+    mysqli_query($conn, "INSERT INTO NEW_API_MAPPING_GIOCATORI (stagione, api_player_id, api_team_id, api_nome, api_ruolo, numero, aggiornato_il)
+                         VALUES ($stagione, $pid, $teamId, '" . af_esc(mb_substr($nome, 0, 80)) . "', '" . af_esc($ruolo) . "', "
+                         . ($numero === null ? "NULL" : (int) $numero) . ", '$adesso')
+                         ON DUPLICATE KEY UPDATE api_team_id = VALUES(api_team_id), api_nome = VALUES(api_nome),
+                             api_ruolo = VALUES(api_ruolo), numero = VALUES(numero), aggiornato_il = VALUES(aggiornato_il)");
+}
+
 // ------------------------------------------------------------
 if ($azione === "stato") {
     $s = query_one("SELECT COUNT(*) AS n, SUM(squadra_serie_a IS NOT NULL) AS m FROM NEW_API_MAPPING_SQUADRE WHERE stagione = $stagione");
@@ -83,16 +94,33 @@ if ($azione === "squadre_elenco") {
 }
 
 if ($azione === "squadre_carica") {
-    $res = af_chiamata("teams", ["league" => (int) af_cfg("league_id", 135), "season" => af_season($stagione)], $stagione);
-    if (!$res["ok"]) api_error("API-Football: " . $res["errore"], 502);
-    if (!$res["risposta"]) api_error("Nessuna squadra restituita per lega e stagione configurate", 404);
-    foreach ($res["risposta"] as $t) {
-        $id = (int) ($t["team"]["id"] ?? 0);
+    $elenco = [];   // [ [id, nome, rosa[]] ]
+    $avviso = null;
+    if (af_provider() === "thesportsdb") {
+        $res = tsdb_chiamata("search_all_teams.php", ["l" => (string) af_cfg("tsdb_league_name", "Italian Serie A")], $stagione);
+        if (!$res["ok"]) api_error("TheSportsDB: " . $res["errore"], 502);
+        foreach ($res["dati"]["teams"] ?? [] as $t) {
+            $elenco[] = [(int) ($t["idTeam"] ?? 0), (string) ($t["strTeam"] ?? ""), []];
+        }
+        if (tsdb_chiave_gratuita() && count($elenco) <= 10) {
+            $avviso = "Chiave gratuita di TheSportsDB: l'elenco squadre è limitato a 10 (la Serie A ne ha 20). Serve una chiave personale.";
+        }
+    } else {
+        $res = af_chiamata("teams", ["league" => (int) af_cfg("league_id", 135), "season" => af_season($stagione)], $stagione);
+        if (!$res["ok"]) api_error("API-Football: " . $res["errore"], 502);
+        foreach ($res["risposta"] as $t) $elenco[] = [(int) ($t["team"]["id"] ?? 0), (string) ($t["team"]["name"] ?? ""), []];
+    }
+    if (!$elenco) api_error("Nessuna squadra restituita per competizione e stagione configurate", 404);
+    $rosterCaricati = 0;
+    foreach ($elenco as [$id, $nomeSq, $rosa]) {
         if ($id <= 0) continue;
-        $nome = af_esc(mb_substr((string) ($t["team"]["name"] ?? ""), 0, 80));
+        $nome = af_esc(mb_substr($nomeSq, 0, 80));
         mysqli_query($conn, "INSERT INTO NEW_API_MAPPING_SQUADRE (stagione, api_team_id, api_nome, aggiornato_il)
                              VALUES ($stagione, $id, '$nome', '$adesso')
                              ON DUPLICATE KEY UPDATE api_nome = VALUES(api_nome)");
+        foreach ($rosa as $p) {
+            if ($p["id"] > 0) { map_upsert_giocatore($stagione, $id, $p["id"], $p["nome"], $p["ruolo"], $p["numero"], $adesso); $rosterCaricati++; }
+        }
     }
     // Abbinamento automatico delle sole squadre ancora libere
     $libereApi = [];
@@ -107,7 +135,8 @@ if ($azione === "squadre_carica") {
                              WHERE stagione = $stagione AND api_team_id = " . (int) $idApi);
         $auto++;
     }
-    api_success(["caricate" => count($res["risposta"]), "associate_automaticamente" => $auto] + map_squadre_elenco($stagione));
+    api_success(["caricate" => count($elenco), "associate_automaticamente" => $auto, "giocatori_caricati" => $rosterCaricati,
+                 "provider" => af_provider(), "avviso" => $avviso] + map_squadre_elenco($stagione));
 }
 
 if ($azione === "squadra_associa") {
@@ -133,24 +162,34 @@ if ($azione === "squadra_associa") {
 if ($azione === "giocatori_carica") {
     $idApi = (int) ($input["api_team_id"] ?? 0);
     $t = query_one("SELECT api_nome FROM NEW_API_MAPPING_SQUADRE WHERE stagione = $stagione AND api_team_id = $idApi");
-    if (!$t) api_error("Squadra API non trovata", 404);
-    $res = af_chiamata("players/squads", ["team" => $idApi], $stagione);
-    if (!$res["ok"]) api_error("API-Football: " . $res["errore"], 502);
-    $rosa = $res["risposta"][0]["players"] ?? [];
+    if (!$t) api_error("Squadra non trovata", 404);
     $n = 0;
-    foreach ($rosa as $p) {
-        $pid = (int) ($p["id"] ?? 0);
-        if ($pid <= 0) continue;
-        $nome = af_esc(mb_substr((string) ($p["name"] ?? ""), 0, 80));
-        $ruolo = af_esc(af_posizione_estesa($p["position"] ?? ""));
-        $num = isset($p["number"]) && $p["number"] !== null ? (int) $p["number"] : "NULL";
-        mysqli_query($conn, "INSERT INTO NEW_API_MAPPING_GIOCATORI (stagione, api_player_id, api_team_id, api_nome, api_ruolo, numero, aggiornato_il)
-                             VALUES ($stagione, $pid, $idApi, '$nome', '$ruolo', $num, '$adesso')
-                             ON DUPLICATE KEY UPDATE api_team_id = VALUES(api_team_id), api_nome = VALUES(api_nome),
-                                 api_ruolo = VALUES(api_ruolo), numero = VALUES(numero), aggiornato_il = VALUES(aggiornato_il)");
-        $n++;
+    $nota = null;
+    if (af_provider() === "thesportsdb") {
+        $res = tsdb_chiamata("lookup_all_players.php", ["id" => $idApi], $stagione);
+        if (!$res["ok"]) api_error("TheSportsDB: " . $res["errore"], 502);
+        foreach ($res["dati"]["player"] ?? [] as $p) {
+            $pid = (int) ($p["idPlayer"] ?? 0);
+            if ($pid <= 0) continue;
+            map_upsert_giocatore($stagione, $idApi, $pid, (string) ($p["strPlayer"] ?? ""), tsdb_posizione($p["strPosition"] ?? ""),
+                                 isset($p["strNumber"]) && $p["strNumber"] !== "" ? (int) $p["strNumber"] : null, $adesso);
+            $n++;
+        }
+        if ($n === 0) $nota = "TheSportsDB non ha restituito giocatori per questa squadra.";
+        elseif (tsdb_chiave_gratuita() && $n <= 10) $nota = "Chiave gratuita di TheSportsDB: rosa limitata a 10 giocatori. Serve una chiave personale.";
+    } else {
+        $res = af_chiamata("players/squads", ["team" => $idApi], $stagione);
+        if (!$res["ok"]) api_error("API-Football: " . $res["errore"], 502);
+        foreach ($res["risposta"][0]["players"] ?? [] as $p) {
+            $pid = (int) ($p["id"] ?? 0);
+            if ($pid <= 0) continue;
+            map_upsert_giocatore($stagione, $idApi, $pid, (string) ($p["name"] ?? ""), af_posizione_estesa($p["position"] ?? ""),
+                                 isset($p["number"]) && $p["number"] !== null ? (int) $p["number"] : null, $adesso);
+            $n++;
+        }
     }
-    api_success(["api_team_id" => $idApi, "squadra" => $t["api_nome"], "giocatori_caricati" => $n, "richieste_oggi" => af_richieste_oggi()]);
+    api_success(["api_team_id" => $idApi, "squadra" => $t["api_nome"], "giocatori_caricati" => $n, "nota" => $nota,
+                 "richieste_oggi" => af_richieste_oggi()]);
 }
 
 if ($azione === "giocatori_automatch") {

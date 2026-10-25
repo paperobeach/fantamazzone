@@ -170,7 +170,7 @@ function PartitaLive({ stagione, p, versione = 0 }) {
 
 /** Stato del dato nella simulazione del candidato panchinaro. */
 function StatoCandidato({ c }) {
-  if (c.salta) return <span className="text-red-400">S.V.</span>
+  if (c.sv_manuale) return <span className="inline-flex items-center gap-1 text-violet-300"><Pencil className="w-3 h-3" aria-hidden />S.V. manuale</span>
   if (c.stato_dato === 'reale') return <span className="text-green-400">voto {fmt(c.voto, 1)}</span>
   if (c.stato_dato === 'manuale') {
     return <span className="inline-flex items-center gap-1 text-violet-300"><Pencil className="w-3 h-3" aria-hidden />manuale {fmt(c.voto, 1)}</span>
@@ -192,14 +192,21 @@ const TONI = {
   mio: 'bg-grass-500/10 border-grass-500/20 text-grass-300 hover:bg-grass-500/20',
   avv: 'bg-white/[0.04] border-white/10 text-slate-300 hover:bg-white/[0.08]',
   sv:  'bg-red-500/10 border-red-500/20 text-red-300 hover:bg-red-500/20',
+  sub: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20',
 }
 
 /** Giocatore cliccabile: apre l'editing come nella simulazione. */
 function ChipGiocatore({ g, tono, onEdit }) {
-  const titolo = [g.squadra_serie_a, 'clic per modificare il voto nella simulazione'].filter(Boolean).join(' · ')
+  const sub = Boolean(g.subentra)
+  const titolo = [
+    g.squadra_serie_a,
+    sub ? 'panchinaro già sicuro di giocare: subentra a un titolare senza voto' : null,
+    'clic per modificare il voto nella simulazione',
+  ].filter(Boolean).join(' · ')
   return (
     <button type="button" onClick={() => onEdit(g)} title={titolo}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] transition-colors cursor-pointer ${TONI[tono]}`}>
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] transition-colors cursor-pointer ${TONI[sub ? 'sub' : tono]}`}>
+      {sub && <ArrowRightLeft className="w-3 h-3 flex-shrink-0" aria-label="Subentra" />}
       <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
       {g.stato_dato === 'manuale' && (
         <span className="inline-flex items-center gap-0.5 font-mono text-violet-300" title="Voto inserito manualmente">
@@ -228,56 +235,45 @@ function BloccoSenzaVoto({ giocatori, onEdit }) {
 }
 
 /**
- * Prossimi 3 subentranti per ruolo nella situazione aggiornata della simulazione.
- * Evidenziati quelli che entrano già (titolare con S.V.); i panchinari già S.V. sono saltati.
+ * Panchina semplificata: per ruolo, i 3 panchinari successivi all'ultimo giocatore
+ * considerato titolare (il titolare stesso o un panchinaro già sicuro di giocare, che
+ * compare tra i giocatori delle prossime partite).
  */
 function BloccoPanchinari({ panchinari, onEdit }) {
   if (!panchinari?.length) return null
   return (
     <div className="space-y-2">
       <p className="text-[10px] uppercase tracking-widest text-gold-400 flex items-center gap-1.5">
-        <ArrowRightLeft className="w-3 h-3" /> Prossimi subentranti per ruolo (secondo la simulazione)
+        <ArrowRightLeft className="w-3 h-3" /> Prossimi panchinari per ruolo
       </p>
-      {panchinari.map(r => {
-        let n = 0
-        const davaluta = r.a_rischio - r.titolari_sv
-        return (
-          <div key={r.ruolo}>
-            <p className="text-[11px] text-slate-500 flex items-center gap-x-2 flex-wrap">
-              <span>{NOME_RUOLO[r.ruolo]}</span>
-              {r.titolari_sv > 0 && <span className="text-red-400">{r.titolari_sv} titolar{r.titolari_sv === 1 ? 'e' : 'i'} s.v.</span>}
-              {r.entrano > 0 && <span className="text-emerald-400">{r.entrano} già in ingresso</span>}
-              {r.titolari_sv > r.entrano && <span className="text-amber-400">{r.titolari_sv - r.entrano} senza sostituto</span>}
-              {davaluta > 0 && <span className="text-slate-700">{davaluta} da verificare</span>}
-            </p>
-            {r.candidati.length === 0 ? (
-              <p className="text-[11px] text-slate-700">Nessun panchinaro disponibile per il ruolo.</p>
-            ) : r.candidati.map(c => {
-              if (!c.salta) n += 1
-              return (
-                <button key={c.id_giocatore} type="button" onClick={() => onEdit(c)}
-                        title="Clic per modificare il voto nella simulazione"
-                        className={`w-full flex items-center gap-2 text-xs py-1 px-1.5 rounded-md text-left transition-colors cursor-pointer ${
-                          c.salta ? 'opacity-50 hover:opacity-80'
-                          : c.entra ? 'bg-emerald-500/10 ring-1 ring-emerald-500/30 hover:bg-emerald-500/15'
-                          : 'hover:bg-white/[0.04]'}`}>
-                  <span className="text-slate-600 font-mono w-3 flex-shrink-0">{c.salta ? '–' : n}</span>
-                  <RoleBadge ruolo={c.ruolo} />
-                  <Bandiera id={c.id_giocatore} />
-                  <span className={`truncate ${c.salta ? 'text-slate-500 line-through' : 'text-slate-200'}`}>{c.nome}</span>
-                  {c.entra && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-emerald-300 bg-emerald-500/15 ring-1 ring-emerald-500/40 flex-shrink-0"
-                          title="La simulazione lo fa già entrare al posto di un titolare senza voto">
-                      <ArrowRightLeft className="w-3 h-3" aria-hidden />Entra
-                    </span>
-                  )}
-                  <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
-                </button>
-              )
-            })}
-          </div>
-        )
-      })}
+      {panchinari.map(r => (
+        <div key={r.ruolo}>
+          <p className="text-[11px] text-slate-500 flex items-center gap-x-2 flex-wrap">
+            <span>{NOME_RUOLO[r.ruolo]}</span>
+            {r.titolari_sv > 0 && <span className="text-red-400">{r.titolari_sv} titolar{r.titolari_sv === 1 ? 'e' : 'i'} s.v.</span>}
+            {r.sicuri > 0 && <span className="text-emerald-400">{r.sicuri} già sicur{r.sicuri === 1 ? 'o' : 'i'} in campo</span>}
+          </p>
+          {r.candidati.length === 0 ? (
+            <p className="text-[11px] text-slate-700">Nessun altro panchinaro disponibile per il ruolo.</p>
+          ) : r.candidati.map((c, i) => (
+            <button key={c.id_giocatore} type="button" onClick={() => onEdit(c)}
+                    title="Clic per modificare il voto nella simulazione"
+                    className="w-full flex items-center gap-2 text-xs py-1 px-1.5 rounded-md text-left transition-colors cursor-pointer hover:bg-white/[0.04]">
+              <span className="text-slate-600 font-mono w-3 flex-shrink-0">{i + 1}</span>
+              <RoleBadge ruolo={c.ruolo} />
+              <Bandiera id={c.id_giocatore} />
+              <span className="truncate text-slate-200">{c.nome}</span>
+              {c.entra_sim && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-violet-300 bg-violet-500/15 ring-1 ring-violet-500/40 flex-shrink-0"
+                      title="Entra nella simulazione per un S.V. inserito manualmente">
+                  <ArrowRightLeft className="w-3 h-3" aria-hidden />Entra (sim.)
+                </span>
+              )}
+              <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
+            </button>
+          ))}
+        </div>
+      ))}
     </div>
   )
 }
@@ -301,7 +297,7 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
   const avversari = live.avversari ?? []
   const nGiocatori = live.oggi.reduce((n, m) => n + m.giocatori.length, 0)
   const nAvversari = live.oggi.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
-  const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.filter(c => !c.salta).length, 0)
+  const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.length, 0)
   const comp = (live.partite ?? []).map(p => p.competizione)
 
   const sezioneTua = live.senza_voto.length > 0 || live.panchinari.length > 0
@@ -373,7 +369,8 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
         <p className="px-3 py-2 text-[10px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1"><Pencil className="w-3 h-3 text-violet-400" aria-hidden />voto manuale</span>
           <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-sky-400" aria-hidden />6 provvisorio (partita da giocare)</span>
-          <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden />entra già al posto di un titolare s.v.</span>
+          <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden />panchinaro già sicuro di giocare (titolare s.v.)</span>
+          <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-violet-400" aria-hidden />entra solo nella simulazione (s.v. manuale)</span>
           <span>Clic su un giocatore per modificarne il voto: la simulazione si aggiorna.</span>
         </p>
       </div>

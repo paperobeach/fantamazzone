@@ -6,7 +6,7 @@ import {
   simulaGiornata, eliminaSimulazionePartita,
 } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
-import { MatchDetailPanel } from '../components/MatchDetail'
+import { MatchDetailPanel, LegendaEventi } from '../components/MatchDetail'
 import { CAMPI, ThStat, ThVoto, BadgeStatoDato, nomeUtente, useEditGiocatore } from '../components/LiveEdit'
 import { Bandiera } from '../components/Bandiera'
 import { MatchResultRow } from '../components/MatchResult'
@@ -113,7 +113,7 @@ function EditorPartita({ stagione, partita, onChanged, onClose, competizione = '
   const [lato, setLato] = useState('casa')
   const sq = partita[lato]
   return (
-    <div className="flex flex-col h-full bg-violet-400/[0.03]">
+    <div className="flex flex-col flex-1 min-h-0 bg-violet-400/[0.03]">
       <div className="px-3 py-2 flex items-center gap-2 flex-wrap border-b border-white/5">
         <Pencil className="w-3.5 h-3.5 text-violet-400" />
         <span className="text-xs text-slate-400">Editing voti (solo giocatori la cui partita di Serie A non è ancora stata giocata):</span>
@@ -283,9 +283,13 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
                   </p>
                 </>}
             {!isReale && editing && (
-              <div className="absolute inset-0 z-40 bg-pitch-900 border-t border-violet-500/30 shadow-[0_0_24px_rgba(0,0,0,0.5)]">
+              <div className="absolute inset-0 z-40 flex flex-col bg-pitch-900 border-t border-violet-500/30 shadow-[0_0_24px_rgba(0,0,0,0.5)]">
                 <EditorPartita stagione={stagione} partita={partita} onChanged={onChanged}
                   onClose={() => setEdit(false)} competizione={competizione} />
+                {/* La legenda del dettaglio resta visibile anche con l'editing aperto */}
+                <div className="flex-shrink-0 bg-pitch-900">
+                  <LegendaEventi />
+                </div>
               </div>
             )}
           </div>

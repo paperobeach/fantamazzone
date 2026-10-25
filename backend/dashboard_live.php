@@ -31,13 +31,17 @@
 //   senza_voto  titolari senza voto secondo la SIMULAZIONE: SV ufficiale (voto
 //               assente / squadra di Serie A già scesa in campo senza di lui)
 //               o SV inserito a mano nell'editing (voto 0); "manuale" lo distingue
-//   panchinari  per ruolo (con titolari da verificare), i prossimi 3 subentranti
-//               nella situazione aggiornata della simulazione:
-//               - "entra": true per chi la simulazione fa già entrare al posto
-//                 di un titolare senza voto (stessa logica di sim_carica_formazione,
-//                 compresi i limiti di sostituzioni e di riserve d'ufficio)
-//               - "salta": true per i panchinari già senza voto (non possono entrare)
-//               - stato_dato: reale | manuale | provvisorio | senza_voto, voto simulato
+//               Tra i giocatori di "oggi" compaiono anche i panchinari GIÀ SICURI di
+//               giocare ("subentra": true): quelli che entrano perché un titolare
+//               (o un panchinaro precedente) ha già giocato con la sua squadra di
+//               Serie A senza prendere voto (SV ufficiale; gli editing manuali non
+//               contano). Sono calcolati con la stessa logica e gli stessi limiti
+//               di sim_carica_formazione.
+//   panchinari  per ruolo (con titolari da verificare), i 3 panchinari successivi
+//               all'ultimo giocatore del ruolo considerato titolare, cioè il titolare
+//               o l'ultimo panchinaro già sicuro di giocare; i panchinari con SV
+//               ufficiale sono saltati. "entra_sim": true se la simulazione (con gli
+//               editing manuali) lo fa comunque entrare.
 //
 // Ogni giocatore riporta stato_dato / voto / modificabile come in
 // live_simulazione.php (GET): il front end ne permette l'editing con
@@ -285,11 +289,13 @@ function dl_out_giocatore(array $g): array
         "squadra_serie_a" => $g["squadra_serie_a"], "competizioni" => $g["competizioni"] ?? [],
         "stato_dato" => $g["stato_dato"], "voto" => $g["voto"],
         "modificabile" => $g["modificabile"], "sv_manuale" => $g["sv_manuale"],
+        "subentra" => (bool) ($g["subentra"] ?? false),
     ];
 }
 
 /**
- * Panchinari che la simulazione fa già entrare (al posto dei titolari senza voto),
+ * Panchinari che entrano (al posto dei titolari senza voto) nel contesto passato:
+ * con $ctx completo è la simulazione, con gli editing svuotati sono i soli SV ufficiali.
  * con la stessa logica e gli stessi limiti di sim_carica_formazione, per ogni
  * formazione (campionato / Champions) della squadra.
  * @return array id panchinaro => true
@@ -312,13 +318,15 @@ function dl_subentranti(array $tabelle, int $idSquadra, array $ctx, int $stagion
 
 /**
  * Analisi LIVE di una squadra, nella situazione aggiornata della simulazione.
- * @param array $subentranti id panchinaro => true (chi la simulazione fa già entrare)
+ * @param array $sicuri id panchinaro => true: entra per un SV UFFICIALE (senza editing manuali)
+ * @param array $sim    id panchinaro => true: entra nella simulazione (con gli editing manuali)
  * @return array{per_partita:array, senza_voto:array, panchinari:array}
- *   per_partita: n_partita => titolari ancora da giocare/in corso nelle partite di OGGI
+ *   per_partita: n_partita => titolari ancora da giocare/in corso nelle partite di OGGI,
+ *                più i panchinari già sicuri di giocare ("subentra")
  *   senza_voto : titolari senza voto (ufficiale o manuale): saranno sostituiti
- *   panchinari : per ruolo, i prossimi 3 subentranti (chi entra già per primo)
+ *   panchinari : per ruolo, i 3 panchinari successivi all'ultimo giocatore considerato titolare
  */
-function dl_analizza_squadra(array $titolari, array $bench, array $subentranti, string $oggi): array
+function dl_analizza_squadra(array $titolari, array $bench, array $sicuri, array $sim, string $oggi): array
 {
     $perPartita = [];
     $senzaVoto  = [];
@@ -340,32 +348,40 @@ function dl_analizza_squadra(array $titolari, array $bench, array $subentranti, 
         if ($p["data"] === $oggi) $perPartita[$p["n_partita"]][] = $t;
     }
 
+    // Panchinari già sicuri di giocare, con la partita di Serie A di oggi ancora da giocare
+    foreach ($bench as $lista) {
+        foreach ($lista as $b) {
+            if (!isset($sicuri[$b["id_giocatore"]])) continue;
+            $p = $b["_partita"];
+            if ($p === null || $p["data"] !== $oggi || $b["stato_partita"] === "conclusa") continue;
+            $perPartita[$p["n_partita"]][] = $b + ["subentra" => true];
+        }
+    }
+
     $panchinari = [];
     foreach ([1, 2, 3, 4] as $ruolo) {
         if (($aRischio[$ruolo] ?? 0) === 0) continue;
+        $lista = array_values($bench[$ruolo] ?? []);
+
+        // Si riparte dopo l'ultimo panchinaro già sicuro di giocare (o dai titolari se non ce n'è)
+        $ultimo = -1;
+        $nSicuri = 0;
+        foreach ($lista as $i => $b) {
+            if (isset($sicuri[$b["id_giocatore"]])) { $ultimo = $i; $nSicuri++; }
+        }
+
         $candidati = [];
-        $nValidi   = 0;
-        $nEntrano  = 0;
-        foreach ($bench[$ruolo] ?? [] as $b) {
-            $entra = isset($subentranti[$b["id_giocatore"]]);
-            if ($entra) $nEntrano++;
-            if ($nValidi >= 3 && !$entra) break;
-            if ($b["senza_voto"]) {                                // già s.v.: non può entrare
-                $candidati[] = dl_out_giocatore($b) + [
-                    "stato_partita" => $b["stato_partita"], "data" => $b["data"], "ora" => $b["ora"],
-                    "entra" => false, "salta" => true,
-                ];
-                continue;
-            }
+        foreach (array_slice($lista, $ultimo + 1) as $b) {
+            if ($b["senza_voto"] && !$b["sv_manuale"]) continue;   // SV ufficiale: non può entrare
             $candidati[] = dl_out_giocatore($b) + [
                 "stato_partita" => $b["stato_partita"], "data" => $b["data"], "ora" => $b["ora"],
-                "entra" => $entra, "salta" => false,
+                "entra_sim" => isset($sim[$b["id_giocatore"]]),
             ];
-            $nValidi++;
+            if (count($candidati) >= 3) break;
         }
         $panchinari[] = [
             "ruolo" => $ruolo, "a_rischio" => $aRischio[$ruolo],
-            "titolari_sv" => $svPerRuolo[$ruolo] ?? 0, "entrano" => $nEntrano,
+            "titolari_sv" => $svPerRuolo[$ruolo] ?? 0, "sicuri" => $nSicuri,
             "candidati" => $candidati,
         ];
     }
@@ -379,16 +395,25 @@ function dl_analizza_squadra(array $titolari, array $bench, array $subentranti, 
 
 $oggi = date("Y-m-d", $ora);
 
+// Contesto "ufficiale": senza gli editing manuali della simulazione. Serve a stabilire chi è
+// SICURO di giocare (SV ufficiale di una squadra di Serie A già scesa in campo).
+$ctxUff = $ctx;
+$ctxUff["edit"] = [];
+
 // La squadra
 [$titolari, $bench] = dl_carica_squadra($formazioni, $ctx, $perSquadra, $ora);
-$mia = dl_analizza_squadra($titolari, $bench, dl_subentranti($tabMie, $idSquadra, $ctx, $stagione, $giornata, $cfg), $oggi);
+$mia = dl_analizza_squadra($titolari, $bench,
+    dl_subentranti($tabMie, $idSquadra, $ctxUff, $stagione, $giornata, $cfg),
+    dl_subentranti($tabMie, $idSquadra, $ctx, $stagione, $giornata, $cfg), $oggi);
 
 // Le squadre avversarie di giornata (campionato e/o Champions): stessa analisi
 $outAvversari = [];
 $perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
 foreach ($avversari as $idAvv => $a) {
     [$tAvv, $bAvv] = dl_carica_squadra($a["righe"], $ctx, $perSquadra, $ora);
-    $an = dl_analizza_squadra($tAvv, $bAvv, dl_subentranti($a["tab"], $idAvv, $ctx, $stagione, $giornata, $cfg), $oggi);
+    $an = dl_analizza_squadra($tAvv, $bAvv,
+        dl_subentranti($a["tab"], $idAvv, $ctxUff, $stagione, $giornata, $cfg),
+        dl_subentranti($a["tab"], $idAvv, $ctx, $stagione, $giornata, $cfg), $oggi);
     foreach ($an["per_partita"] as $n => $gioc) $perPartitaAvv[$n][$idAvv] = $gioc;
     $outAvversari[] = [
         "id_squadra" => $idAvv, "nome" => $a["nome"], "competizioni" => $a["competizioni"],

@@ -16,6 +16,7 @@ const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Statistiche = lazy(() => import('./pages/Statistiche'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
+const AlboOro     = lazy(() => import('./pages/AlboOro'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
 const Login       = lazy(() => import('./pages/Login'))
@@ -38,6 +39,13 @@ const AiContesto = lazy(() => import('./pages/AiContesto'))
 const AiImmagini = lazy(() => import('./pages/AiImmagini'))
 const Gazzetta = lazy(() => import('./pages/Gazzetta'))
 const GazzettaArticolo = lazy(() => import('./pages/GazzettaArticolo'))
+
+// Home: la dashboard della propria squadra per gli utenti loggati;
+// per i visitatori non autenticati resta la classifica.
+function Home() {
+  const { utente } = useApp()
+  return utente ? <DashboardSquadra /> : <Classifica />
+}
 
 function PageLoader() {
   return (
@@ -104,7 +112,8 @@ function AppShell() {
             <ErrorBoundary key={location.pathname}>
               <Suspense fallback={<PageLoader />}>
                 <Routes>
-                  <Route path="/"              element={<Classifica />} />
+                  <Route path="/"              element={<Home />} />
+                  <Route path="/classifica"    element={<Classifica />} />
                   <Route path="/calendario"   element={<Calendario />} />
                   <Route path="/live"         element={<LiveGiornata />} />
                   <Route path="/squadre"      element={<Squadre />} />
@@ -117,14 +126,14 @@ function AppShell() {
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
+                  <Route path="/albo-oro"     element={<AlboOro />} />
                   <Route path="/gazzetta"     element={<Gazzetta />} />
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={
                     <ProtectedRoute><Formazione /></ProtectedRoute>
                   } />
-                  <Route path="/dashboard-squadra" element={
-                    <ProtectedRoute><DashboardSquadra /></ProtectedRoute>
-                  } />
+                  {/* La dashboard squadra è la home: il vecchio indirizzo resta come redirect */}
+                  <Route path="/dashboard-squadra" element={<Navigate to="/" replace />} />
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={
                     <AdminRoute><Admin /></AdminRoute>

@@ -270,13 +270,15 @@ CREATE TABLE `NEW_ACCESSI` (
 -- piazzamento di rilievo. La squadra e' identificata da NEW_UTENZE.utenza
 -- (stabile tra le stagioni, a differenza dell'id squadra).
 --   competizione: 'CAMP' (campionato) | 'CHAMP' (Champions)
---   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP)
+--   posizione:    1 = vincitore, 2 = secondo posto (CAMP) / finale persa (CHAMP),
+--                 99 = ultimo posto (solo CAMP, maglia nera)
+-- Usata anche dalla pagina "Albo d'oro" (api/albo_oro.php).
 --
 
 CREATE TABLE `NEW_ALBO_ORO` (
   `stagione` int NOT NULL,
   `competizione` varchar(5) NOT NULL COMMENT 'CAMP | CHAMP',
-  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa',
+  `posizione` tinyint NOT NULL COMMENT '1 = vincitore, 2 = secondo posto / finale persa, 99 = ultimo (solo CAMP)',
   `utenza` varchar(50) NOT NULL COMMENT 'NEW_UTENZE.utenza',
   PRIMARY KEY (`stagione`,`competizione`,`posizione`),
   KEY `idx_albo_utenza` (`utenza`)
@@ -465,6 +467,36 @@ CREATE TABLE `NEW_ARTICOLI_PAGINE` (
   PRIMARY KEY (`id`),
   KEY `idx_articolo_ordine` (`id_articolo`,`ordine`),
   CONSTRAINT `fk_pagine_articolo` FOREIGN KEY (`id_articolo`) REFERENCES `NEW_ARTICOLI` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_AI_JOBS`
+--
+
+CREATE TABLE `NEW_AI_JOBS` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `stagione` int NOT NULL,
+  `giornata` int NOT NULL,
+  `formato` varchar(10) NOT NULL DEFAULT 'articolo' COMMENT 'articolo | edizione',
+  `modello` varchar(60) NOT NULL DEFAULT '',
+  `batch_id` varchar(80) NOT NULL DEFAULT '' COMMENT 'id del Message Batch di Anthropic',
+  `stato` varchar(14) NOT NULL DEFAULT 'in_corso' COMMENT 'in_corso | in_salvataggio | completato | errore',
+  `prompt_hash` varchar(64) NOT NULL DEFAULT '',
+  `contesto_giornata` text COMMENT 'Note di giornata inserite da chi genera',
+  `creato_da` varchar(50) NOT NULL DEFAULT '',
+  `token_input_stimati` int DEFAULT NULL,
+  `costo_stimato_usd` decimal(10,6) DEFAULT NULL,
+  `costo_massimo_usd` decimal(10,6) DEFAULT NULL,
+  `id_articolo` int DEFAULT NULL COMMENT 'NEW_ARTICOLI.id della bozza salvata',
+  `errore` text,
+  `data_creazione` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `data_aggiornamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `data_fine` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_stagione_giornata` (`stagione`,`giornata`,`formato`),
+  KEY `idx_stato` (`stato`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -1054,7 +1086,16 @@ CREATE TABLE `NEW_SIMULAZIONE_RISULTATI_CHAMP` (
   `tot_cc` decimal(6,2) NOT NULL DEFAULT '0.00',
   `mod_cc` decimal(5,2) NOT NULL DEFAULT '0.00',
   `calcolato_il` datetime(3) NOT NULL,
-  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione'
+  `simulato_da` varchar(50) DEFAULT NULL COMMENT 'Utente che ha eseguito la simulazione',
+  `supp_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita ha avuto i supplementari',
+  `supp_ftotale` decimal(6,2) NOT NULL DEFAULT '0.00' COMMENT 'Punti dei 3 panchinari dei supplementari (squadra)',
+  `supp_golf` int NOT NULL DEFAULT '0' COMMENT 'Gol segnati ai supplementari',
+  `supp_gols` int NOT NULL DEFAULT '0' COMMENT 'Gol subiti ai supplementari',
+  `rig_giocati` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la partita e'' stata decisa ai calci di rigore',
+  `rig_golf` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati',
+  `rig_gols` int NOT NULL DEFAULT '0' COMMENT 'Rigori realizzati dall''avversaria',
+  `passa` tinyint NOT NULL DEFAULT '0' COMMENT '1 = la squadra vince la sfida (solo turni con supplementari/rigori)',
+  `dett_extra` text COMMENT 'JSON con il dettaglio di supplementari e rigori'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

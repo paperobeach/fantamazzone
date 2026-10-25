@@ -6,7 +6,7 @@ import { useFetch } from '../hooks/useFetch'
 import { getLiveGiocatori, salvaEditLive, eliminaEditLive } from '../api/client'
 import { Spinner, RoleBadge } from './ui'
 import { Bandiera } from './Bandiera'
-import { EVENTI } from './MatchDetail'
+import { EVENTI, LegendaEventi } from './MatchDetail'
 
 // ── Editing dei voti della simulazione ──────────────────────
 // Usato dalla pagina "LIVE Giornata in corso" (tabella per squadra) e dalla
@@ -173,6 +173,8 @@ function FormModale({ g, stagione, onClose, onSaved }) {
           <p className="text-[10px] text-slate-600">Al salvataggio la simulazione della partita viene ricalcolata.</p>
         </div>
       )}
+      {/* Legenda delle icone, sempre visibile nel pannello di editing */}
+      <LegendaEventi />
     </>
   )
 }

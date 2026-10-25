@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ChevronDown, ChevronUp, Trophy, Crown, PlayCircle, Users, ArrowRightLeft, FlaskConical, Pencil, Clock,
+  ChevronDown, ChevronUp, Trophy, Crown, PlayCircle, Users, ArrowRightLeft, FlaskConical, Pencil, Clock, CheckCircle2,
 } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardLive, getLiveDettaglio } from '../../api/client'
@@ -295,8 +295,8 @@ function TitoloSquadra({ nome, competizioni, tua = false }) {
 function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
   const [edit, setEdit] = useState(null)   // { giocatore, idSquadra, competizione }
   const avversari = live.avversari ?? []
-  const nGiocatori = live.oggi.reduce((n, m) => n + m.giocatori.length, 0)
-  const nAvversari = live.oggi.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
+  const nGiocatori = live.serie_a.reduce((n, m) => n + m.giocatori.length, 0)
+  const nAvversari = live.serie_a.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
   const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.length, 0)
   const comp = (live.partite ?? []).map(p => p.competizione)
 
@@ -309,23 +309,30 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
     <div className="rounded-xl border border-white/10 bg-pitch-900/60 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2.5">
         <Users className="w-4 h-4 text-grass-400 flex-shrink-0" />
-        <span className="text-sm text-slate-200">Giocatori nelle prossime partite di oggi</span>
+        <span className="text-sm text-slate-200">Partite di Serie A della giornata: giocatori coinvolti</span>
         <span className="ml-auto text-xs font-mono text-slate-500">{nGiocatori} tuoi · {nAvversari} avversari · {nPanch} panchinari</span>
       </div>
 
       <div className="border-t border-white/5 divide-y divide-white/5">
-        {live.oggi.length === 0 && (
-          <p className="px-3 py-3 text-xs text-slate-600">Nessuna altra partita di Serie A in programma oggi.</p>
+        {live.serie_a.length === 0 && (
+          <p className="px-3 py-3 text-xs text-slate-600">Calendario della Serie A non disponibile.</p>
         )}
-        {live.oggi.map(m => (
-          <div key={m.n_partita} className="px-3 py-2.5">
+        {live.serie_a.map(m => (
+          <div key={m.n_partita} className={`px-3 py-2.5 ${m.stato === 'conclusa' ? 'bg-white/[0.015]' : ''}`}>
             <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
-              <span className={`font-mono ${m.stato === 'in_corso' ? 'text-red-300' : 'text-slate-500'}`}>
-                {m.stato === 'in_corso' ? 'IN CORSO' : quando(m.data, m.ora)}
-              </span>
-              <span className="text-slate-300">{m.casa} – {m.ospite}</span>
+              {m.stato === 'conclusa' ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-slate-400 bg-white/[0.06] ring-1 ring-white/10"
+                      title={`Terminata (${quando(m.data, m.ora)})`}>
+                  <CheckCircle2 className="w-3 h-3" aria-hidden />Terminata
+                </span>
+              ) : (
+                <span className={`font-mono ${m.stato === 'in_corso' ? 'text-red-300' : 'text-slate-500'}`}>
+                  {m.stato === 'in_corso' ? 'IN CORSO' : quando(m.data, m.ora)}
+                </span>
+              )}
+              <span className={m.stato === 'conclusa' ? 'text-slate-500' : 'text-slate-300'}>{m.casa} – {m.ospite}</span>
             </p>
-            {m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
+            {m.stato === 'conclusa' ? null : m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun titolare tuo né degli avversari.</p>
             ) : m.giocatori.length === 0 ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun tuo titolare.</p>

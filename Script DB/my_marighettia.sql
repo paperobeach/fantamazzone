@@ -1122,7 +1122,9 @@ CREATE TABLE `NEW_SIMULAZIONE_VOTI` (
   `totale` decimal(6,2) NOT NULL DEFAULT '0.00',
   `assist` int NOT NULL DEFAULT '0',
   `provvisorio` tinyint NOT NULL DEFAULT '0',
-  `manuale` tinyint NOT NULL DEFAULT '0'
+  `manuale` tinyint NOT NULL DEFAULT '0',
+  `api` tinyint NOT NULL DEFAULT '0' COMMENT '1 = dato delle statistiche API',
+  `parziale` tinyint NOT NULL DEFAULT '0' COMMENT '1 = partita di Serie A ancora in corso (dato parziale)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -1149,7 +1151,9 @@ CREATE TABLE `NEW_SIMULAZIONE_VOTI_CHAMP` (
   `totale` decimal(6,2) NOT NULL DEFAULT '0.00',
   `assist` int NOT NULL DEFAULT '0',
   `provvisorio` tinyint NOT NULL DEFAULT '0',
-  `manuale` tinyint NOT NULL DEFAULT '0'
+  `manuale` tinyint NOT NULL DEFAULT '0',
+  `api` tinyint NOT NULL DEFAULT '0' COMMENT '1 = dato delle statistiche API',
+  `parziale` tinyint NOT NULL DEFAULT '0' COMMENT '1 = partita di Serie A ancora in corso (dato parziale)'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

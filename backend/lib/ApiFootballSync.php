@@ -5,7 +5,7 @@
 // Sincronizzazione delle statistiche dei giocatori a fine partita (provider
 // API-Football; per TheSportsDB vedi TheSportsDbSync.php).
 //
-// REGOLE DEL CRON (una chiamata all'ora, vedi cron_api_football.php)
+// REGOLE DEL CRON (chiamate periodiche, es. ogni 5 minuti: vedi cron_api_football.php)
 //   Ad ogni esecuzione si guardano le partite di NEW_CALENDARIO_SERIE_A già
 //   iniziate (e non oltre "limite_attesa_min"). Per ciascuna si decide, SENZA
 //   contattare l'API, se interrogarla (af_decidi):
@@ -34,6 +34,8 @@ require_once __DIR__ . "/TheSportsDbSync.php";
 
 const AF_STATI_FINALI   = ["FT", "AET", "PEN"];
 const AF_STATI_ANNULLATI = ["PST", "CANC", "ABD", "AWD", "WO"];
+// Partita in corso: le statistiche si salvano come dati PARZIALI a ogni controllo
+const AF_STATI_IN_CORSO  = ["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT"];
 
 function af_fuso(): DateTimeZone
 {
@@ -282,8 +284,71 @@ function af_regole(): array
     return [
         "durata_partita_min" => (int) af_cfg("durata_partita_min", 120),
         "limite_attesa_min"  => (int) af_cfg("limite_attesa_min", 360),
-        "intervallo_min"     => 50,
+        // Pausa minima tra due controlli della stessa partita in corso (minuti): va tenuta
+        // un po' sotto la cadenza del cron (es. cron ogni 5 minuti → 4).
+        "intervallo_min"     => max(0, (int) af_cfg("intervallo_controllo_min", 4)),
     ];
+}
+
+/**
+ * Dopo una sincronizzazione che ha salvato statistiche, ricalcola la SIMULAZIONE della
+ * giornata in corso (come il pulsante "Simula" della pagina Live), così voti e risultati
+ * simulati seguono i dati API (anche parziali) senza interventi manuali.
+ *
+ * Opzione "simulazione_automatica" di config_api_football.php:
+ *   "sempre"    (default) ricalcola la giornata in corso
+ *   "esistente" solo se per la giornata esiste già una simulazione
+ *   "no"        non ricalcola mai
+ * Usa lo stesso blocco applicativo delle scritture della pagina Live. Eventuali errori
+ * vengono riportati negli avvisi senza far fallire la sincronizzazione.
+ */
+function af_aggiorna_simulazione(int $stagione, array &$rep): void
+{
+    global $conn;
+    $modo = strtolower(trim((string) af_cfg("simulazione_automatica", "sempre")));
+    if ($modo === "no" || empty($rep["giornate_aggiornate"])) return;
+
+    try {
+        require_once __DIR__ . "/StatoGiornata.php";
+        require_once __DIR__ . "/SimulazioneGiornata.php";
+
+        $st = sg_stato_corrente($stagione);
+        if (!$st["in_corso"]) { $rep["simulazione"] = ["aggiornata" => false, "motivo" => "nessuna giornata in corso"]; return; }
+        $giornata = (int) $st["giornata"];
+
+        // Le partite sincronizzate appartengono alla giornata in corso?
+        $gsa = sim_giornata_serie_a($stagione, $giornata);
+        if (!isset($rep["giornate_aggiornate"][$gsa])) {
+            $rep["simulazione"] = ["aggiornata" => false, "motivo" => "le partite sincronizzate non sono della giornata in corso"];
+            return;
+        }
+        if ($modo === "esistente") {
+            $e = query_one("SELECT 1 AS x FROM NEW_SIMULAZIONE_RISULTATI WHERE stagione = $stagione AND giornata = $giornata LIMIT 1");
+            if (!$e) { $rep["simulazione"] = ["aggiornata" => false, "motivo" => "nessuna simulazione esistente (simulazione_automatica = esistente)"]; return; }
+        }
+
+        $lock = "fantamazzone_live_" . $stagione;
+        $l = query_one("SELECT GET_LOCK('" . af_esc($lock) . "', 5) AS l");
+        if (!$l || (int) $l["l"] !== 1) {
+            $rep["avvisi"][] = "Simulazione non aggiornata: un'altra operazione sulla simulazione è in corso (verrà aggiornata alla prossima esecuzione)";
+            $rep["simulazione"] = ["aggiornata" => false, "motivo" => "operazione in corso"];
+            return;
+        }
+        try {
+            $res = sim_esegui_giornata($conn, $stagione, $giornata, null, "Sync API (auto)");
+            $rep["simulazione"] = [
+                "aggiornata" => true, "giornata" => $giornata, "partite" => (int) $res["partite_elaborate"],
+                "champions" => (int) ($res["champions_elaborate"] ?? 0), "api" => (int) ($res["api"] ?? 0),
+                "parziali" => (int) ($res["parziali"] ?? 0), "provvisori" => (int) $res["provvisori"], "manuali" => (int) $res["manuali"],
+            ];
+            $rep["messaggio"] .= "; simulazione della giornata $giornata aggiornata";
+        } finally {
+            mysqli_query($conn, "DO RELEASE_LOCK('" . af_esc($lock) . "')");
+        }
+    } catch (Throwable $e) {
+        $rep["avvisi"][] = "Simulazione non aggiornata: " . $e->getMessage();
+        $rep["simulazione"] = ["aggiornata" => false, "motivo" => $e->getMessage()];
+    }
 }
 
 /**
@@ -366,6 +431,7 @@ function af_sync_esegui(int $stagione, array $opz = []): array
         // Fornitore TheSportsDB: stato di ogni partita ed eventuali statistiche
         if (af_provider() === "thesportsdb") {
             tsdb_sync_attive($stagione, $attive, $rep, $adesso);
+            af_aggiorna_simulazione($stagione, $rep);
             return $rep;
         }
 
@@ -467,7 +533,18 @@ function af_sync_esegui(int $stagione, array $opz = []): array
             ];
             $esito = "stato $stato";
 
-            if (in_array($stato, AF_STATI_FINALI, true)) {
+            if (in_array($stato, AF_STATI_IN_CORSO, true)) {
+                // Partita in corso: statistiche PARZIALI dalla stessa chiamata (nessun costo aggiuntivo).
+                // La partita resta "da verificare" (dettaglio_finale = N) finché non è conclusa.
+                $righe = af_righe_statistiche($fx, null, null);
+                if ($righe) {
+                    $s = af_salva_statistiche($stagione, $id, $righe, $adesso);
+                    $campi += ["ultimo_sync" => $adesso, "n_giocatori" => $s["salvate"], "n_non_mappati" => $s["non_mappati"]];
+                    $rep["salvate"] += $s["salvate"];
+                    $rep["giornate_aggiornate"][(int) $m["giornata"]] = true;
+                    $esito = "in corso ($stato): " . $s["salvate"] . " giocatori (dato parziale)" . ($s["non_mappati"] ? ", " . $s["non_mappati"] . " non associati" : "");
+                }
+            } elseif (in_array($stato, AF_STATI_FINALI, true)) {
                 $giocatoriFb = null; $eventiFb = null;
                 if (empty($fx["players"])) {
                     $r2 = $chiama("fixtures/players", ["fixture" => $id]);
@@ -483,6 +560,7 @@ function af_sync_esegui(int $stagione, array $opz = []): array
                     $campi += ["dettaglio_finale" => "Y", "ultimo_sync" => $adesso,
                                "n_giocatori" => $s["salvate"], "n_non_mappati" => $s["non_mappati"]];
                     $rep["salvate"] += $s["salvate"];
+                    $rep["giornate_aggiornate"][(int) $m["giornata"]] = true;
                     $esito = "conclusa: " . $s["salvate"] . " giocatori salvati" . ($s["non_mappati"] ? ", " . $s["non_mappati"] . " non associati" : "");
                 } else {
                     $campi["errore"] = "Partita conclusa ma statistiche giocatori non disponibili";
@@ -494,6 +572,7 @@ function af_sync_esegui(int $stagione, array $opz = []): array
         }
 
         $rep["messaggio"] = count($rep["chiamate"]) . " chiamate API, " . $rep["salvate"] . " righe di statistiche salvate";
+        af_aggiorna_simulazione($stagione, $rep);
         return $rep;
     } finally {
         mysqli_query($conn, "DO RELEASE_LOCK('" . af_esc($lock) . "')");

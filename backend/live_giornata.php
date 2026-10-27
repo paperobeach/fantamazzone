@@ -191,6 +191,18 @@ $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale
 $totC = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
                    FROM NEW_SIMULAZIONE_VOTI_CHAMP WHERE stagione = $stagione AND giornata = $giornata");
 
+// Giocatori con dati delle statistiche API (e di partite ancora in corso): colonne facoltative
+// (migrazione_simulazione_api.sql)
+$apiTot = 0; $apiParz = 0;
+foreach (["NEW_SIMULAZIONE_VOTI", "NEW_SIMULAZIONE_VOTI_CHAMP"] as $tabV) {
+    $rc = @mysqli_query($conn, "SHOW COLUMNS FROM $tabV LIKE 'parziale'");
+    if ($rc && mysqli_num_rows($rc) > 0) {
+        $x = query_one("SELECT COALESCE(SUM(api),0) AS a, COALESCE(SUM(parziale),0) AS pz
+                        FROM $tabV WHERE stagione = $stagione AND giornata = $giornata");
+        $apiTot += (int) ($x["a"] ?? 0); $apiParz += (int) ($x["pz"] ?? 0);
+    }
+}
+
 api_success([
     "stato"                    => $stato,
     "partite"                  => $out,
@@ -198,4 +210,6 @@ api_success([
     "simulazione_calcolata_il" => $calcolatoIl,
     "provvisori"               => (int) ($tot["p"] ?? 0) + (int) ($totC["p"] ?? 0),
     "manuali"                  => (int) ($tot["m"] ?? 0) + (int) ($totC["m"] ?? 0),
+    "api"                      => $apiTot,       // giocatori con dati delle statistiche API
+    "parziali"                 => $apiParz,      // di cui di partite di Serie A ancora in corso
 ]);

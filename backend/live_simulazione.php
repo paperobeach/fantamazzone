@@ -11,7 +11,9 @@
 //      Giocatori in formazione (titolari + panchina) della squadra per
 //      la giornata in corso, con il dato usato dalla simulazione e il
 //      flag "modificabile" (squadra di Serie A non ancora scesa in
-//      campo e nessun voto reale). Con competizione=CHAMP la formazione
+//      campo e nessun voto reale). "stato_dato": reale | manuale | api |
+//      api_parziale (partita di Serie A in corso) | senza_voto | provvisorio.
+//      Con competizione=CHAMP la formazione
 //      è quella effettiva di Champions (distinta se ammessa e salvata).
 //
 // In tutte le POST è accettato "utente" (nome di chi opera), salvato
@@ -34,8 +36,9 @@
 //      di Serie A ha già giocato.
 //
 // POST { stagione, azione: "elimina_edit", id_giocatore }
-//      Rimuove l'editing manuale di un giocatore (si torna al 6
-//      provvisorio) e ricalcola la SOLA partita del giocatore.
+//      Rimuove l'editing manuale di un giocatore (si torna al dato API,
+//      se presente, altrimenti al 6 provvisorio) e ricalcola la SOLA
+//      partita del giocatore.
 //
 // POST { stagione, azione: "elimina_simulazione", id_squadra }
 //      Cancella la simulazione di UNA partita (con "competizione":
@@ -96,13 +99,17 @@ if ($metodo === "GET") {
         $id = (int) $r["id_giocatore"];
         [$modificabile, $motivo] = sim_giocatore_modificabile($ctx, $id);
 
+        // Dato usato dalla simulazione (stessa logica del calcolo)
         $reale = $ctx["voti"][$id] ?? null;
-        $edit  = $ctx["edit"][$id] ?? null;
+        $warn  = [];
+        $stat  = sim_stat_giocatore($ctx, $id, $warn, (string) $r["descrizione"]);
         $stato_dato = $reale !== null ? "reale"
-                    : ($edit !== null && $modificabile ? "manuale"
-                    : ($modificabile ? "provvisorio" : "senza_voto"));
+                    : (!empty($stat["manuale"]) ? "manuale"
+                    : (!empty($stat["api"]) ? (!empty($stat["parziale"]) ? "api_parziale" : "api")
+                    : (!empty($stat["sv"]) ? "senza_voto" : "provvisorio")));
 
-        $dato = $reale ?? ($modificabile ? $edit : null);
+        $dato = $reale ?? (!empty($stat["manuale"]) ? ($ctx["edit"][$id] ?? null)
+                         : (!empty($stat["api"]) ? $stat : null));
         $out[] = [
             "id_giocatore" => $id,
             "giocatore"    => $r["descrizione"],

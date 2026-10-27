@@ -2,12 +2,14 @@
 // ============================================================
 // api/cron_api_football.php
 //
-// Endpoint per il CRON (una chiamata all'ora, anche da un servizio esterno
-// come cron-job.org). Applica le regole di lib/ApiFootballSync.php:
+// Endpoint per il CRON: da chiamare ogni pochi minuti (consigliato ogni 5, da un servizio
+// esterno come cron-job.org limitato ai giorni e alle ore delle partite), oppure ogni ora
+// dal cron di Altervista come riserva. Applica le regole di lib/ApiFootballSync.php:
 //   - se non ci sono partite in corso o appena concluse e non ancora
-//     sincronizzate, NON viene effettuata alcuna chiamata ad API-Football;
-//   - altrimenti si interroga l'API e, a partita conclusa, si salvano le
-//     statistiche dei giocatori in NEW_API_STATISTICHE.
+//     sincronizzate, NON viene effettuata alcuna chiamata al fornitore;
+//   - altrimenti si interroga l'API: durante la partita si salvano statistiche
+//     PARZIALI dei giocatori in NEW_API_STATISTICHE, a partita conclusa quelle
+//     definitive; la simulazione della giornata in corso viene poi ricalcolata.
 //
 // GET/POST: ?token=<cron_token di config_api_football.php>
 //           [&stagione=2026]   (default: ultima stagione del calendario)

@@ -35,7 +35,9 @@ function BadgeStato({ p }) {
     return <span className="inline-flex items-center gap-1 text-green-400 text-xs"><CheckCircle2 className="w-3.5 h-3.5" /> Statistiche salvate</span>
   }
   if (STATI_FINALI.includes(s)) return <span className="text-gold-400 text-xs">Conclusa, statistiche mancanti</span>
-  if (STATI_IN_CORSO.includes(s)) return <span className="text-sky-400 text-xs">In corso ({s})</span>
+  if (STATI_IN_CORSO.includes(s)) {
+    return <span className="text-sky-400 text-xs">In corso ({s}){p.n_giocatori > 0 ? ` · dato parziale: ${p.n_giocatori} giocatori` : ''}</span>
+  }
   if (['PST', 'CANC', 'ABD', 'AWD', 'WO'].includes(s)) return <span className="text-slate-400 text-xs">Non disputata ({s})</span>
   if (s === 'NS') return <span className="text-slate-500 text-xs">Non iniziata</span>
   return <span className="text-slate-600 text-xs">Mai controllata</span>
@@ -49,6 +51,15 @@ function Report({ r }) {
       </Avviso>
 
       {r.avvisi?.map((a, i) => <Avviso key={i} tono="gold">{a}</Avviso>)}
+
+      {r.simulazione && (
+        r.simulazione.aggiornata
+          ? <Avviso tono="green" icona={CheckCircle2}>
+              Simulazione della giornata {r.simulazione.giornata} aggiornata: {r.simulazione.api} giocatori con dati API
+              {r.simulazione.parziali > 0 ? ` (${r.simulazione.parziali} di partite in corso)` : ''}, {r.simulazione.provvisori} con 6 provvisorio, {r.simulazione.manuali} manuali.
+            </Avviso>
+          : <p className="text-xs text-slate-500">Simulazione non aggiornata: {r.simulazione.motivo}</p>
+      )}
 
       {r.partite.length > 0 && (
         <ul className="divide-y divide-white/5 rounded-lg border border-white/5">
@@ -263,13 +274,14 @@ export default function ApiFootballSync() {
               <AlertTriangle className="w-4 h-4 text-slate-400" /> Attivazione del cron
             </h3>
             <ol className="text-sm text-slate-400 space-y-1.5 list-decimal pl-5">
-              <li>Imposta in <span className="font-mono">config_api_football.php</span> un <span className="font-mono">cron_token</span> lungo e casuale.</li>
+              <li>Imposta in <span className="font-mono">config_api_football.php</span> un <span className="font-mono">cron_token</span> lungo e casuale e, con la chiave a pagamento, <span className="font-mono">pausa_tra_chiamate_ms</span> a circa 300.</li>
               <li>
-                Configura un cron <b>orario</b> (es. cron-job.org, ogni ora al minuto 0) sull'indirizzo{' '}
+                Su un servizio di cron esterno (es. cron-job.org) crea una chiamata <b>ogni 5 minuti</b>, limitata ai giorni e alle ore delle partite, all'indirizzo{' '}
                 <span className="font-mono break-all">…/cron_api_football.php?token=IL_TUO_TOKEN</span>
               </li>
-              <li>Con nessuna partita in corso la chiamata non contatta API-Football e risponde subito: puoi lasciarlo attivo sempre.</li>
-              <li>Dopo il salvataggio delle statistiche finali di una partita, questa non viene più interrogata (usa "Rileggi" per forzarla).</li>
+              <li>Imposta <span className="font-mono">intervallo_controllo_min</span> a 4 (un po' meno della cadenza del cron): con partite in corso ogni chiamata aggiorna stato e statistiche <b>parziali</b>.</li>
+              <li>Se nessuna partita è in corso la chiamata risponde subito e non contatta il fornitore. Dopo il salvataggio delle statistiche finali la partita non viene più interrogata (usa "Rileggi" per forzarla).</li>
+              <li>Dopo ogni sincronizzazione che salva dati, la simulazione della giornata in corso viene ricalcolata (opzione <span className="font-mono">simulazione_automatica</span>).</li>
             </ol>
           </div>
         </div>

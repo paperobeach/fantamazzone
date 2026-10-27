@@ -62,7 +62,7 @@ function RigaEdit({ g, stagione, onChanged }) {
               {busy ? <Spinner size="sm" /> : <Save className="w-4 h-4" />}
             </button>
             {g.stato_dato === 'manuale' && (
-              <button onClick={reset} disabled={busy} className="btn-ghost !px-2 !py-1" title="Ripristina il 6 provvisorio">
+              <button onClick={reset} disabled={busy} className="btn-ghost !px-2 !py-1" title="Ripristina il dato automatico (statistiche API oppure 6 provvisorio)">
                 <Undo2 className="w-4 h-4" />
               </button>
             )}

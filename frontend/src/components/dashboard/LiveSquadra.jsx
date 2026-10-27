@@ -175,6 +175,10 @@ function StatoCandidato({ c }) {
   if (c.stato_dato === 'manuale') {
     return <span className="inline-flex items-center gap-1 text-violet-300"><Pencil className="w-3 h-3" aria-hidden />manuale {fmt(c.voto, 1)}</span>
   }
+  if (c.stato_dato === 'api' || c.stato_dato === 'api_parziale') {
+    const parz = c.stato_dato === 'api_parziale'
+    return <span className={`inline-flex items-center gap-1 ${parz ? 'text-amber-300' : 'text-emerald-300'}`}><Clock className="w-3 h-3" aria-hidden />voto {fmt(c.voto, 1)} API{parz ? ' (in corso)' : ''}</span>
+  }
   const quandoGioca = c.stato_partita === 'in_corso' ? 'in campo ora'
     : c.stato_partita === 'da_giocare' ? `gioca ${quando(c.data, c.ora)}`
     : c.stato_partita === 'conclusa' ? 'attesa voto' : 'nessuna partita'
@@ -214,8 +218,6 @@ function ChipGiocatore({ g, tono, onEdit }) {
         </span>
       )}
       {g.sv_manuale && <span className="font-mono text-violet-300" title="S.V. inserito manualmente">S.V.</span>}
-      {g.stato_dato === 'reale' && <span className="font-mono text-green-400" title="Voto reale">{fmt(g.voto, 1)}</span>}
-      {g.stato_dato === 'senza_voto' && !g.sv_manuale && <span className="font-mono text-red-400" title="Senza voto">S.V.</span>}
       {g.competizioni?.includes('CHAMP') && g.competizioni?.includes('CAMP') && (
         <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />
       )}
@@ -258,23 +260,20 @@ function BloccoPanchinari({ panchinari, onEdit }) {
           {r.candidati.length === 0 ? (
             <p className="text-[11px] text-slate-700">Nessun altro panchinaro disponibile per il ruolo.</p>
           ) : r.candidati.map((c, i) => (
-            // Su mobile la riga è su due livelli: nome (a capo se serve) e, sotto, lo stato
             <button key={c.id_giocatore} type="button" onClick={() => onEdit(c)}
                     title="Clic per modificare il voto nella simulazione"
-                    className="w-full flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-2 text-xs py-1 px-1.5 rounded-md text-left transition-colors cursor-pointer hover:bg-white/[0.04]">
-              <span className="flex items-center gap-2 min-w-0 sm:flex-1">
-                <span className="text-slate-600 font-mono w-3 flex-shrink-0">{i + 1}</span>
-                <RoleBadge ruolo={c.ruolo} />
-                <Bandiera id={c.id_giocatore} />
-                <span className="min-w-0 break-words text-slate-200">{c.nome}</span>
-                {c.entra_sim && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-violet-300 bg-violet-500/15 ring-1 ring-violet-500/40 flex-shrink-0"
-                        title="Entra nella simulazione per un S.V. inserito manualmente">
-                    <ArrowRightLeft className="w-3 h-3" aria-hidden />Entra (sim.)
-                  </span>
-                )}
-              </span>
-              <span className="font-mono text-[11px] pl-5 sm:pl-0 sm:flex-shrink-0"><StatoCandidato c={c} /></span>
+                    className="w-full flex items-center gap-2 text-xs py-1 px-1.5 rounded-md text-left transition-colors cursor-pointer hover:bg-white/[0.04]">
+              <span className="text-slate-600 font-mono w-3 flex-shrink-0">{i + 1}</span>
+              <RoleBadge ruolo={c.ruolo} />
+              <Bandiera id={c.id_giocatore} />
+              <span className="truncate text-slate-200">{c.nome}</span>
+              {c.entra_sim && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono uppercase leading-none text-violet-300 bg-violet-500/15 ring-1 ring-violet-500/40 flex-shrink-0"
+                      title="Entra nella simulazione per un S.V. inserito manualmente">
+                  <ArrowRightLeft className="w-3 h-3" aria-hidden />Entra (sim.)
+                </span>
+              )}
+              <span className="ml-auto font-mono text-[11px] flex-shrink-0"><StatoCandidato c={c} /></span>
             </button>
           ))}
         </div>
@@ -337,7 +336,7 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
               )}
               <span className={m.stato === 'conclusa' ? 'text-slate-500' : 'text-slate-300'}>{m.casa} – {m.ospite}</span>
             </p>
-            {m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
+            {m.stato === 'conclusa' ? null : m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun titolare tuo né degli avversari.</p>
             ) : m.giocatori.length === 0 ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun tuo titolare.</p>
@@ -381,6 +380,7 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
         <p className="px-3 py-2 text-[10px] text-slate-600 flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="inline-flex items-center gap-1"><Pencil className="w-3 h-3 text-violet-400" aria-hidden />voto manuale</span>
           <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-sky-400" aria-hidden />6 provvisorio (partita da giocare)</span>
+          <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-emerald-400" aria-hidden />dato API (parziale se la partita è in corso)</span>
           <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden />panchinaro già sicuro di giocare (titolare s.v.)</span>
           <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-violet-400" aria-hidden />entra solo nella simulazione (s.v. manuale)</span>
           <span>Clic su un giocatore per modificarne il voto: la simulazione si aggiorna.</span>

@@ -298,6 +298,7 @@ function tsdb_sync_attive(int $stagione, array $attive, array &$rep, string $ade
                 $campi += ["dettaglio_finale" => "Y", "ultimo_sync" => $adesso,
                            "n_giocatori" => $s["salvate"], "n_non_mappati" => $s["non_mappati"]];
                 $rep["salvate"] += $s["salvate"];
+                $rep["giornate_aggiornate"][(int) $m["giornata"]] = true;
                 $esito = "conclusa: " . $s["salvate"] . " giocatori salvati" . ($s["non_mappati"] ? ", " . $s["non_mappati"] . " non associati" : "");
             } elseif (!$rl["ok"] || !$rt["ok"]) {
                 $campi["errore"] = "Formazioni/cronologia non lette: " . ($rl["ok"] ? $rt["errore"] : $rl["errore"]);

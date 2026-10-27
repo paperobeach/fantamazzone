@@ -103,6 +103,8 @@ export function BadgeStatoDato({ stato }) {
     reale:       ['voto reale', 'text-slate-500', Radio],
     senza_voto:  ['senza voto', 'text-red-400', MinusCircle],
     provvisorio: ['6 provvisorio', 'text-sky-400', Clock],
+    api:         ['dati API', 'text-emerald-400', Radio],
+    api_parziale: ['API parziale', 'text-amber-400', Clock],
     manuale:     ['manuale', 'text-violet-400', Pencil],
   }[stato]
   if (!m) return null
@@ -164,8 +166,8 @@ function FormModale({ g, stagione, onClose, onSaved }) {
               {busy ? <Spinner size="sm" /> : <Save className="w-3.5 h-3.5" />} Salva e ricalcola
             </button>
             {g.stato_dato === 'manuale' && (
-              <button onClick={reset} disabled={busy} className="btn-ghost text-xs !py-1.5" title="Ripristina il 6 provvisorio">
-                <Undo2 className="w-3.5 h-3.5" /> Ripristina 6
+              <button onClick={reset} disabled={busy} className="btn-ghost text-xs !py-1.5" title="Ripristina il dato automatico (statistiche API oppure 6 provvisorio)">
+                <Undo2 className="w-3.5 h-3.5" /> Ripristina automatico
               </button>
             )}
             <button onClick={onClose} className="btn-ghost text-xs !py-1.5 ml-auto">Annulla</button>

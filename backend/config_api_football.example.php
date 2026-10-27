@@ -67,7 +67,31 @@ return [
     // Anno di inizio stagione (2026 = 2026-2027). null = stagione del progetto.
     "tsdb_season" => null,
 
-    // ── Regole del cron (una chiamata all'ora) ───────────────
+    // ── Regole del cron (chiamate periodiche, es. ogni 5 minuti) ─────
+    // Il cron esterno (es. cron-job.org) chiama cron_api_football.php ogni pochi minuti.
+    // Ad ogni chiamata si interroga il fornitore SOLO se c'è una partita in corso o appena
+    // conclusa e non ancora sincronizzata; altrimenti la risposta è immediata.
+
+    // Pausa minima (minuti) tra due controlli della stessa partita in corso. Tenerla
+    // un po' sotto la cadenza del cron: cron ogni 5 minuti → 4; ogni 10 minuti → 9.
+    "intervallo_controllo_min" => 4,
+
+    // Durante la partita le statistiche dei giocatori si salvano come dati PARZIALI a ogni
+    // controllo (API-Football: stessa chiamata, nessun costo aggiuntivo) e alimentano la
+    // simulazione; a partita conclusa diventano definitive.
+
+    // Dopo ogni sincronizzazione che salva dati, la SIMULAZIONE della giornata in corso viene
+    // ricalcolata (come il pulsante "Simula" della pagina Live):
+    //   "sempre"    ricalcola la giornata in corso (default)
+    //   "esistente" solo se per la giornata esiste già una simulazione
+    //   "no"        non ricalcola: la simulazione si aggiorna solo col pulsante "Simula"
+    "simulazione_automatica" => "sempre",
+
+    // Voto base dei giocatori con dati API: false = 6 (il fantavoto vero non è disponibile);
+    // true = rating del fornitore arrotondato a 0,5 (solo se il rating è presente).
+    // In ogni caso si somma il bonus/malus delle statistiche e il voto resta modificabile a mano.
+    "voto_base_da_rating" => false,
+
     // Fine stimata della partita = calcio d'inizio + questa durata (minuti).
     // Dopo la fine stimata, se lo stato API è "partita conclusa" e le
     // statistiche sono state salvate, la partita non viene più interrogata.
@@ -77,12 +101,13 @@ return [
     // conclusa viene abbandonata (es. sospesa): evita chiamate all'infinito.
     "limite_attesa_min" => 360,
 
-    // Tetto di sicurezza delle richieste giornaliere (API-Football gratuito: 100;
-    // TheSportsDB non ha un tetto giornaliero): superato, le chiamate
-    // vengono rifiutate in locale.
-    "quota_giornaliera_max" => 90,
+    // Tetto di sicurezza delle richieste giornaliere. API-Football gratuito: 100; piano a
+    // pagamento (7.500 al giorno): con un cron ogni 5 minuti bastano poche decine di richieste
+    // al giorno, il tetto può restare a 500.
+    "quota_giornaliera_max" => 500,
 
-    // Pausa minima tra due chiamate consecutive (ms). API-Football gratuito: 10 richieste
-    // al minuto → 6500; TheSportsDB gratuito: 30 al minuto → 2200 (a pagamento: 100 → 700).
-    "pausa_tra_chiamate_ms" => 6500,
+    // Pausa minima tra due chiamate consecutive (ms). API-Football gratuito: 10 richieste al
+    // minuto → 6500; API-Football a pagamento → 300 (ogni esecuzione del cron deve finire in
+    // pochi secondi); TheSportsDB gratuito: 30 al minuto → 2200 (a pagamento → 700).
+    "pausa_tra_chiamate_ms" => 300,
 ];

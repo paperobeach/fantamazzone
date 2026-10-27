@@ -41,8 +41,17 @@
 //   3. la squadra di Serie A DEVE ANCORA GIOCARE (nessun voto per la
 //      squadra):
 //        a. se c'è un editing manuale (NEW_SIMULAZIONE_EDIT) →
-//           voto/dati manuali (manuale = 1): PREVALE sul 6 provvisorio;
-//        b. altrimenti 6 PROVVISORIO (provvisorio = 1), nessun bonus.
+//           voto/dati manuali (manuale = 1): PREVALE su dato API e 6;
+//        b. se ci sono statistiche API del giocatore (NEW_API_STATISTICHE,
+//           associate tramite NEW_API_MAPPING_GIOCATORI) e ha giocato →
+//           voto base 6 + bonus/malus delle statistiche (api = 1); se la
+//           partita è ancora in corso il dato è PARZIALE (parziale = 1) e si
+//           aggiorna a ogni sincronizzazione;
+//        c. partita conclusa secondo l'API, giocatore associato ma non sceso
+//           in campo → senza voto → va SOSTITUITO;
+//        d. altrimenti 6 PROVVISORIO (provvisorio = 1), nessun bonus.
+//   Il dato API NON blocca l'editing manuale: l'utente può correggere il voto
+//   (l'API non fornisce il fantavoto) finché non arriva il voto reale.
 //   Se la squadra di Serie A del giocatore non è determinabile si
 //   applica il punto 3 (con un avviso).
 //
@@ -75,6 +84,125 @@ function sim_norm(?string $s): string
     return function_exists('mb_strtoupper') ? mb_strtoupper($s, 'UTF-8') : strtoupper($s);
 }
 
+// La tabella esiste? (verifica in cache: il codice resta valido se le tabelle API non sono state create)
+function sim_tabella_esiste(string $tabella): bool
+{
+    static $cache = [];
+    if (!isset($cache[$tabella])) {
+        global $conn;
+        $r = @mysqli_query($conn, "SHOW TABLES LIKE '" . mysqli_real_escape_string($conn, $tabella) . "'");
+        $cache[$tabella] = $r && mysqli_num_rows($r) > 0;
+    }
+    return $cache[$tabella];
+}
+
+// La tabella dei voti simulati ha le colonne api / parziale? (migrazione_simulazione_api.sql)
+function sim_colonne_api(string $tabVoti): bool
+{
+    static $cache = [];
+    if (!isset($cache[$tabVoti])) {
+        global $conn;
+        $r = @mysqli_query($conn, "SHOW COLUMNS FROM $tabVoti LIKE 'parziale'");
+        $cache[$tabVoti] = $r && mysqli_num_rows($r) > 0;
+    }
+    return $cache[$tabVoti];
+}
+
+// Giornata di Serie A corrispondente a una giornata di fantacampionato
+// (serie_a = fanta + GIORNATA_SERIE_A_INIZIO - 1, come ds_inizio_giornata()).
+function sim_giornata_serie_a(int $stagione, int $giornata): int
+{
+    $par = query_one("SELECT valore FROM NEW_PARAMETRI_STAGIONE
+                      WHERE stagione = $stagione AND codice = 'GIORNATA_SERIE_A_INIZIO'");
+    $v = $par ? trim((string) $par['valore']) : '';
+    $inizio = ($v !== '' && ctype_digit($v) && (int) $v >= 1) ? (int) $v : 1;
+    return $giornata + $inizio - 1;
+}
+
+// Stati API delle partite in corso e concluse (codici brevi di API-Football)
+const SIM_STATI_API_IN_CORSO = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
+const SIM_STATI_API_FINALI   = ['FT', 'AET', 'PEN'];
+
+// Il voto base dei giocatori con dati API è il rating del fornitore (arrotondato a 0,5)
+// invece di 6? Opzione "voto_base_da_rating" di config_api_football.php (default: no).
+function sim_api_voto_da_rating(): bool
+{
+    static $v = null;
+    if ($v === null) {
+        require_once __DIR__ . '/ApiFootballClient.php';
+        $v = (bool) af_cfg('voto_base_da_rating', false);
+    }
+    return $v;
+}
+
+// Voto base di un giocatore con statistiche API: 6 (o il rating, se abilitato).
+// Il fantavoto vero non è disponibile: il bonus/malus delle statistiche si somma nel calcolo.
+function sim_api_voto(array $a): float
+{
+    if (sim_api_voto_da_rating() && isset($a['voto_api']) && $a['voto_api'] !== null && (float) $a['voto_api'] > 0) {
+        return max(4.0, min(9.0, round((float) $a['voto_api'] * 2) / 2));
+    }
+    return SIM_VOTO_PROVVISORIO;
+}
+
+// ------------------------------------------------------------
+// Statistiche API della giornata (se le tabelle NEW_API_* esistono):
+//   stat     id_giocatore => riga di NEW_API_STATISTICHE (+ 'parziale')
+//   mappati  id_giocatore => true (associato a un giocatore del fornitore)
+//   finite   squadre (nome normalizzato) la cui partita è CONCLUSA con statistiche salvate
+//   in_corso squadre la cui partita è IN CORSO con statistiche parziali salvate
+// ------------------------------------------------------------
+function sim_api_dati(int $stagione, int $giornata): array
+{
+    $vuoto = ['stat' => [], 'mappati' => [], 'finite' => [], 'in_corso' => []];
+    foreach (['NEW_API_PARTITE', 'NEW_API_STATISTICHE', 'NEW_API_MAPPING_GIOCATORI'] as $t) {
+        if (!sim_tabella_esiste($t)) return $vuoto;
+    }
+
+    $gsa = sim_giornata_serie_a($stagione, $giornata);
+    $partite = query_all("SELECT p.api_fixture_id, p.api_stato, c.squadra_casa, c.squadra_ospite
+                          FROM NEW_API_PARTITE p
+                          JOIN NEW_CALENDARIO_SERIE_A c ON c.stagione = p.stagione AND c.giornata = p.giornata AND c.n_partita = p.n_partita
+                          WHERE p.stagione = $stagione AND p.giornata = $gsa
+                            AND p.api_fixture_id IS NOT NULL AND p.n_giocatori > 0");
+    if (!$partite) return $vuoto;
+
+    $out = $vuoto;
+    $parziale = [];   // fixture => bool
+    foreach ($partite as $p) {
+        $stato = (string) $p['api_stato'];
+        if (in_array($stato, SIM_STATI_API_FINALI, true)) {
+            $parziale[(int) $p['api_fixture_id']] = false;
+            $out['finite'][sim_norm($p['squadra_casa'])] = true;
+            $out['finite'][sim_norm($p['squadra_ospite'])] = true;
+        } elseif (in_array($stato, SIM_STATI_API_IN_CORSO, true)) {
+            $parziale[(int) $p['api_fixture_id']] = true;
+            $out['in_corso'][sim_norm($p['squadra_casa'])] = true;
+            $out['in_corso'][sim_norm($p['squadra_ospite'])] = true;
+        }
+    }
+    if (!$parziale) return $vuoto;
+
+    $ids = implode(',', array_keys($parziale));
+    foreach (query_all("SELECT m.id_giocatore, s.api_fixture_id, s.presente, s.minuti, s.voto_api,
+                               s.gf, s.gs, s.rp, s.rs, s.rf, s.au, s.amm, s.esp, s.ass
+                        FROM NEW_API_STATISTICHE s
+                        JOIN NEW_API_MAPPING_GIOCATORI m ON m.stagione = s.stagione AND m.api_player_id = s.api_player_id
+                        WHERE s.stagione = $stagione AND s.api_fixture_id IN ($ids) AND m.id_giocatore IS NOT NULL") as $r) {
+        $id = (int) $r['id_giocatore'];
+        $r['parziale'] = $parziale[(int) $r['api_fixture_id']] ?? false;
+        // un giocatore in più partite della giornata (non dovrebbe accadere): prevale chi ha giocato
+        if (!isset($out['stat'][$id]) || ($r['presente'] === 'Y' && $out['stat'][$id]['presente'] !== 'Y')) {
+            $out['stat'][$id] = $r;
+        }
+    }
+    foreach (query_all("SELECT id_giocatore FROM NEW_API_MAPPING_GIOCATORI
+                        WHERE stagione = $stagione AND id_giocatore IS NOT NULL") as $r) {
+        $out['mappati'][(int) $r['id_giocatore']] = true;
+    }
+    return $out;
+}
+
 // ------------------------------------------------------------
 // Contesto di calcolo (letture preliminari, una volta sola)
 // ------------------------------------------------------------
@@ -97,7 +225,7 @@ function sim_squadre_serie_a_giocatori(int $stagione): array
 }
 
 // Contesto: voti Serie A della giornata, squadre già scese in campo,
-// squadra di Serie A di ogni giocatore, editing manuale.
+// squadra di Serie A di ogni giocatore, editing manuale, statistiche API.
 function sim_contesto(int $stagione, int $giornata): array
 {
     $voti = [];
@@ -121,6 +249,7 @@ function sim_contesto(int $stagione, int $giornata): array
         'giocate' => $giocate,
         'squadre' => sim_squadre_serie_a_giocatori($stagione),
         'edit'    => $edit,
+        'api'     => sim_api_dati($stagione, $giornata),
     ];
 }
 
@@ -133,8 +262,10 @@ function sim_squadra_ha_giocato(array $ctx, int $idGiocatore): ?bool
     return isset($ctx['giocate'][sim_norm($squadra)]);
 }
 
-// Il giocatore è editabile? Solo se non ha già il voto reale e la sua
-// squadra di Serie A non è ancora scesa in campo.
+// Il giocatore è editabile? Solo se non ha già il voto reale e per la sua
+// squadra di Serie A non sono ancora stati importati i voti ufficiali.
+// I dati delle statistiche API NON bloccano l'editing (il voto vero non è
+// disponibile via API).
 // Ritorna [bool, motivo|null]
 function sim_giocatore_modificabile(array $ctx, int $idGiocatore): array
 {
@@ -166,7 +297,7 @@ function sim_crea_stat_ufficio(int $idGiocatore, float $voto, int $ammonizioniRe
 {
     return [
         'id_giocatore' => $idGiocatore, 'voto' => $voto, 'sv' => false, 'trovato' => true,
-        'rufficio' => true, 'amm_reg' => $ammonizioniRegistrate, 'provvisorio' => false, 'manuale' => false,
+        'rufficio' => true, 'amm_reg' => $ammonizioniRegistrate, 'provvisorio' => false, 'manuale' => false, 'api' => false, 'parziale' => false,
         'gf' => 0, 'gs' => 0, 'rp' => 0, 'rf' => 0, 'rs' => 0, 'au' => 0, 'amm' => 0, 'esp' => 0, 'ass' => 0,
     ];
 }
@@ -189,7 +320,7 @@ function sim_gol_da_punteggio(float $punteggio, array $fasce): int
 // ------------------------------------------------------------
 function sim_stat_giocatore(array $ctx, int $idGiocatore, array &$warning, string $nome = ''): array
 {
-    $base = ['id_giocatore' => $idGiocatore, 'provvisorio' => false, 'manuale' => false,
+    $base = ['id_giocatore' => $idGiocatore, 'provvisorio' => false, 'manuale' => false, 'api' => false, 'parziale' => false,
              'gf' => 0, 'gs' => 0, 'rp' => 0, 'rf' => 0, 'rs' => 0, 'au' => 0, 'amm' => 0, 'esp' => 0, 'ass' => 0];
 
     // 1. dato reale
@@ -228,7 +359,27 @@ function sim_stat_giocatore(array $ctx, int $idGiocatore, array &$warning, strin
         ]);
     }
 
-    // 3b. 6 provvisorio
+    // 3b. statistiche API: prevalgono sul 6 provvisorio, non sull'editing manuale
+    $api = $ctx['api'] ?? null;
+    if ($api !== null) {
+        $a = $api['stat'][$idGiocatore] ?? null;
+        if ($a !== null && $a['presente'] === 'Y') {
+            return array_merge($base, [
+                'voto' => sim_api_voto($a), 'sv' => false, 'trovato' => true,
+                'api' => true, 'parziale' => (bool) $a['parziale'],
+                'gf' => (int) $a['gf'], 'gs' => (int) $a['gs'], 'rp' => (int) $a['rp'], 'rf' => (int) $a['rf'],
+                'rs' => (int) $a['rs'], 'au' => (int) $a['au'], 'amm' => (int) $a['amm'], 'esp' => (int) $a['esp'],
+                'ass' => (int) $a['ass'],
+            ]);
+        }
+        // 3c. partita conclusa secondo l'API e giocatore associato non sceso in campo → senza voto
+        $sq = $ctx['squadre'][$idGiocatore] ?? null;
+        if ($sq !== null && trim((string) $sq) !== '' && isset($api['finite'][sim_norm($sq)]) && isset($api['mappati'][$idGiocatore])) {
+            return array_merge($base, ['voto' => null, 'sv' => true, 'trovato' => false]);
+        }
+    }
+
+    // 3d. 6 provvisorio
     return array_merge($base, ['voto' => SIM_VOTO_PROVVISORIO, 'sv' => false, 'trovato' => true, 'provvisorio' => true]);
 }
 
@@ -304,7 +455,8 @@ function sim_carica_formazione(array $ctx, int $stagione, int $giornata, int $id
                             $sostituto = $statCandidato;
                             $sostitutiEntrati[] = $idCandidato;
                             $warning[] = "Squadra $idSquadra: {$t['descrizione']} senza voto, sostituito da {$candidato['descrizione']}"
-                                       . ($statCandidato['provvisorio'] ? " (voto provvisorio)" : "");
+                                       . ($statCandidato['provvisorio'] ? " (voto provvisorio)" : "")
+                                       . (!empty($statCandidato['api']) ? (!empty($statCandidato['parziale']) ? " (dato API parziale)" : " (dato API)") : "");
                             if ($ruoloInt === 1) $sostPortiere++; else $sostMovimento++;
                             break;
                         }
@@ -353,6 +505,7 @@ function sim_salva_voti_squadra($conn, int $stagione, int $giornata, int $idSqua
         foreach ($lista as $stat) $statistiche[$stat['id_giocatore']] = $stat;
     }
 
+    $conApi = sim_colonne_api($tabVoti);   // colonne api/parziale presenti (migrazione_simulazione_api.sql)?
     foreach ($risultatoSquadra['giocatori'] as $g) {
         $idGiocatore = (int) $g['id_giocatore'];
         $stat        = $statistiche[$idGiocatore] ?? null;
@@ -369,16 +522,18 @@ function sim_salva_voti_squadra($conn, int $stagione, int $giornata, int $idSqua
         $amm      = (int) ($stat['amm_reg'] ?? $stat['amm']);
         $prov     = !empty($stat['provvisorio']) ? 1 : 0;
         $man      = !empty($stat['manuale']) ? 1 : 0;
+        $apiF     = !empty($stat['api']) ? 1 : 0;
+        $parz     = !empty($stat['parziale']) ? 1 : 0;
 
         $votoS   = sprintf('%.1f', $voto);
         $totaleS = sprintf('%.2f', $totale);
         $ok = mysqli_query($conn, "INSERT INTO $tabVoti
             (stagione, giornata, id_squadra, id_giocatore, voto,
              reti, ammonizioni, espulsioni, autogol, retis,
-             rigores, rigorep, rufficio, giocata, totale, assist, provvisorio, manuale)
+             rigores, rigorep, rufficio, giocata, totale, assist, provvisorio, manuale" . ($conApi ? ", api, parziale" : "") . ")
             VALUES ($stagione, $giornata, $idSquadra, $idGiocatore, $votoS,
                     {$stat['gf']}, $amm, {$stat['esp']}, {$stat['au']}, {$stat['gs']},
-                    $rigores, $rigorep, $rufficio, $giocata, $totaleS, {$stat['ass']}, $prov, $man)");
+                    $rigores, $rigorep, $rufficio, $giocata, $totaleS, {$stat['ass']}, $prov, $man" . ($conApi ? ", $apiF, $parz" : "") . ")");
         if (!$ok) throw new Exception("Scrittura $tabVoti: " . mysqli_error($conn));
     }
 }
@@ -495,7 +650,7 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
             champions_partite_giornata($stagione, $giornata)['partite']
         );
         if (empty($partite) && $soloSquadra === null) {
-            return ['partite_elaborate' => 0, 'partite_saltate' => [], 'warning' => [], 'provvisori' => 0, 'manuali' => 0];
+            return ['partite_elaborate' => 0, 'partite_saltate' => [], 'warning' => [], 'provvisori' => 0, 'manuali' => 0, 'api' => 0, 'parziali' => 0];
         }
     } else {
         $righeCalendario = query_all("SELECT posizione, squadra AS id_squadra
@@ -645,8 +800,10 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
         throw $e;
     }
 
-    $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
-                      FROM {$tab['voti']} WHERE stagione = $stagione AND giornata = $giornata");
+    $conApi = sim_colonne_api($tab['voti']);
+    $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m"
+                     . ($conApi ? ", COALESCE(SUM(api),0) AS a, COALESCE(SUM(parziale),0) AS pz" : "")
+                     . " FROM {$tab['voti']} WHERE stagione = $stagione AND giornata = $giornata");
 
     return [
         'partite_elaborate' => $elaborate,
@@ -654,6 +811,8 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
         'warning'           => $warning,
         'provvisori'        => (int) ($tot['p'] ?? 0),
         'manuali'           => (int) ($tot['m'] ?? 0),
+        'api'               => (int) ($tot['a'] ?? 0),
+        'parziali'          => (int) ($tot['pz'] ?? 0),
     ];
 }
 
@@ -679,6 +838,8 @@ function sim_esegui_giornata($conn, int $stagione, int $giornata, ?int $soloSqua
     $res['warning']             = array_merge($res['warning'], $ch['warning']);
     $res['provvisori']         += $ch['provvisori'];
     $res['manuali']            += $ch['manuali'];
+    $res['api']                += $ch['api'];
+    $res['parziali']           += $ch['parziali'];
     return $res;
 }
 

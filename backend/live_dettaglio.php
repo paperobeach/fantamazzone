@@ -10,7 +10,9 @@
 //   - fonte=reale        legge NEW_VOTI / NEW_RISULTATI
 //   - fonte=simulazione  legge NEW_SIMULAZIONE_VOTI / _RISULTATI e
 //                        aggiunge ai giocatori i flag "provvisorio"
-//                        (6 provvisorio) e "manuale" (editing manuale).
+//                        (6 provvisorio), "manuale" (editing manuale) e
+//                        "api" / "parziale" (statistiche API, anche di
+//                        una partita ancora in corso).
 // Con competizione=CHAMP il dettaglio è quello della partita di Champions
 // della giornata (id_squadra = squadra di casa): reale = NEW_RISULTATI_CHAMP /
 // NEW_VOTI_CHAMP, simulazione = NEW_SIMULAZIONE_*_CHAMP; le formazioni sono
@@ -76,7 +78,11 @@ $extraChamp = $champ
     ? "r.supp_giocati, r.supp_ftotale AS supp_ftotale_casa, r2.supp_ftotale AS supp_ftotale_ospite, r.supp_golf, r.supp_gols,
        r.rig_giocati, r.rig_golf, r.rig_gols, r.passa AS passa_casa, r2.passa AS passa_ospite, r.dett_extra,"
     : "";
-$extra = $fonte === "reale" ? "0 AS provvisorio, 0 AS manuale" : "v.provvisorio, v.manuale";
+// Colonne api/parziale (statistiche API, migrazione_simulazione_api.sql): facoltative
+$rc = $fonte === "reale" ? false : @mysqli_query($conn, "SHOW COLUMNS FROM $tVoti LIKE 'parziale'");
+$conApi = $rc && mysqli_num_rows($rc) > 0;
+$extra = $fonte === "reale" ? "0 AS provvisorio, 0 AS manuale, 0 AS api, 0 AS parziale"
+       : "v.provvisorio, v.manuale" . ($conApi ? ", v.api, v.parziale" : ", 0 AS api, 0 AS parziale");
 
 $r = query_one("SELECT
         r.id_squadra, r.id_squadra_a,
@@ -125,6 +131,8 @@ foreach ($voti_raw as $v) {
     $v["ufficio_fittizio"] = (int) $v["ufficio_fittizio"] === 1;
     $v["provvisorio"]      = (int) $v["provvisorio"] === 1;
     $v["manuale"]          = (int) $v["manuale"] === 1;
+    $v["api"]              = (int) $v["api"] === 1;
+    $v["parziale"]         = (int) $v["parziale"] === 1;
     // Subentrato dalla panchina: maglia > 11, voto valido (giocata = 1),
     // non riserva d'ufficio
     $v["subentrato"]       = (int) ($v["maglia"] ?? 0) > 11
@@ -134,7 +142,8 @@ foreach ($voti_raw as $v) {
     $v["origine"] = $v["riserva_ufficio"] ? "ufficio"
                   : ($v["provvisorio"] ? "provvisorio"
                   : ($v["manuale"] ? "manuale"
-                  : ((int) $v["giocata"] === 1 ? "reale" : "senza_voto")));
+                  : ($v["api"] ? ($v["parziale"] ? "api_parziale" : "api")
+                  : ((int) $v["giocata"] === 1 ? "reale" : "senza_voto"))));
     $per_squadra[(int) $v["id_squadra"]][] = $v;
 }
 

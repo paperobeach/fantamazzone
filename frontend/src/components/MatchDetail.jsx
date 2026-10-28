@@ -75,7 +75,7 @@ export function NomeGiocatore({ g }) {
     // Statistiche scaricate dal fornitore dei dati (voto base 6 + bonus/malus); parziale = partita in corso
     return (
       <span className="inline-flex items-center gap-1.5 flex-wrap"
-            title={g.parziale ? 'Dato parziale: la partita di Serie A è in corso (statistiche API)' : 'Statistiche API: voto base 6 più bonus e malus. Il voto reale sostituirà il dato.'}>
+            title={g.parziale ? 'Dato parziale: la partita di Serie A è in corso (statistiche API)' : 'Statistiche API: voto stimato dal rating più bonus e malus. Il voto reale lo sostituirà.'}>
         {g.parziale ? <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" /> : <Radio className="w-3.5 h-3.5 text-emerald-400 shrink-0" aria-hidden="true" />}
         <NomeBandiera g={g} />
         <span className={`text-[10px] font-mono uppercase tracking-wide ${g.parziale ? 'text-amber-400' : 'text-emerald-400'}`}>{g.parziale ? 'API parziale' : 'dati API'}</span>

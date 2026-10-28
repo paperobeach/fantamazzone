@@ -44,9 +44,11 @@
 //           voto/dati manuali (manuale = 1): PREVALE su dato API e 6;
 //        b. se ci sono statistiche API del giocatore (NEW_API_STATISTICHE,
 //           associate tramite NEW_API_MAPPING_GIOCATORI) e ha giocato →
-//           voto base 6 + bonus/malus delle statistiche (api = 1); se la
-//           partita è ancora in corso il dato è PARZIALE (parziale = 1) e si
-//           aggiorna a ogni sincronizzazione;
+//           voto stimato dal rating API (vedi sim_api_voto) + bonus/malus
+//           delle statistiche (api = 1); se la partita è ancora in corso il
+//           dato è PARZIALE (parziale = 1) e si aggiorna a ogni
+//           sincronizzazione; a partita conclusa chi ha giocato pochi minuti
+//           (soglia sv_minuti_max) è senza voto;
 //        c. partita conclusa secondo l'API, giocatore associato ma non sceso
 //           in campo → senza voto → va SOSTITUITO;
 //        d. altrimenti 6 PROVVISORIO (provvisorio = 1), nessun bonus.
@@ -123,26 +125,89 @@ function sim_giornata_serie_a(int $stagione, int $giornata): int
 const SIM_STATI_API_IN_CORSO = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'];
 const SIM_STATI_API_FINALI   = ['FT', 'AET', 'PEN'];
 
-// Il voto base dei giocatori con dati API è il rating del fornitore (arrotondato a 0,5)
-// invece di 6? Opzione "voto_base_da_rating" di config_api_football.php (default: no).
-function sim_api_voto_da_rating(): bool
+// ------------------------------------------------------------
+// Conversione del rating API in voto base (da usare per i giocatori con statistiche API)
+//
+// La regola deriva dal confronto, su 1.416 giocatori-partita di 5 giornate (Serie A 4-8), fra il
+// "voto" di NEW_VOTI_SERIE_A e il rating di API-Football (NEW_API_STATISTICHE.voto_api):
+//
+//   voto = limita( arrotonda_a_0,5(  2,97 + 0,43 × rating
+//                                  + 0,61 × (gol + rigori segnati) + 0,38 × assist
+//                                  − 0,84 × rigori sbagliati + 0,83 × rigori parati
+//                                  − 0,87 × espulsione ),  4, 9 )
+//
+// Fuori campione (addestrando su 4 giornate e provando sulla quinta): errore medio 0,33 punti,
+// 90% dei voti entro ±0,5, bias nullo (con "sempre 6": 0,47 e 77%). Il bonus/malus delle
+// statistiche si somma poi nel calcolo, come per i voti reali.
+//
+// Soglia "senza voto": a partita conclusa, chi ha giocato al massimo 11 minuti (secondo l'API) è SV,
+// salvo chi ha segnato: 97,9% di concordanza con i voti ufficiali su 1.541 giocatori con minuti.
+//
+// Opzioni di config_api_football.php:
+//   voto_conversione  "formula" (default) | "rating" (rating arrotondato a 0,5) | "sei" (sempre 6)
+//   voto_formula      coefficienti alternativi (facoltativo, chiavi come SIM_API_FORMULA_DEFAULT)
+//   sv_minuti_max     soglia dei minuti per il senza voto (default 11; 0 = disattivata)
+// ------------------------------------------------------------
+const SIM_API_FORMULA_DEFAULT = [
+    'intercetta' => 2.97, 'rating' => 0.43, 'gol' => 0.61, 'assist' => 0.38,
+    'rigore_sbagliato' => -0.84, 'rigore_parato' => 0.83, 'espulsione' => -0.87,
+    'min' => 4.0, 'max' => 9.0, 'passo' => 0.5,
+];
+const SIM_API_SV_MINUTI_DEFAULT = 11;
+
+// Configurazione della conversione (letta una sola volta)
+function sim_api_conversione(): array
 {
-    static $v = null;
-    if ($v === null) {
+    static $c = null;
+    if ($c === null) {
         require_once __DIR__ . '/ApiFootballClient.php';
-        $v = (bool) af_cfg('voto_base_da_rating', false);
+        $modo = af_cfg('voto_conversione', null);
+        if ($modo === null) $modo = af_cfg('voto_base_da_rating', false) ? 'rating' : 'formula';   // vecchia opzione
+        $modo = strtolower(trim((string) $modo));
+        if (!in_array($modo, ['formula', 'rating', 'sei'], true)) $modo = 'formula';
+
+        $f = SIM_API_FORMULA_DEFAULT;
+        $custom = af_cfg('voto_formula', []);
+        if (is_array($custom)) {
+            foreach ($f as $k => $v) {
+                if (isset($custom[$k]) && is_numeric($custom[$k])) $f[$k] = (float) $custom[$k];
+            }
+        }
+        $sv = af_cfg('sv_minuti_max', SIM_API_SV_MINUTI_DEFAULT);
+        $sv = is_numeric($sv) ? max(0, (int) $sv) : SIM_API_SV_MINUTI_DEFAULT;
+        $c = ['modo' => $modo, 'formula' => $f, 'sv_minuti_max' => $sv];
     }
-    return $v;
+    return $c;
 }
 
-// Voto base di un giocatore con statistiche API: 6 (o il rating, se abilitato).
-// Il fantavoto vero non è disponibile: il bonus/malus delle statistiche si somma nel calcolo.
+// Voto base di un giocatore con statistiche API (rating + eventi). Senza rating: 6.
 function sim_api_voto(array $a): float
 {
-    if (sim_api_voto_da_rating() && isset($a['voto_api']) && $a['voto_api'] !== null && (float) $a['voto_api'] > 0) {
-        return max(4.0, min(9.0, round((float) $a['voto_api'] * 2) / 2));
+    $c = sim_api_conversione();
+    $rating = isset($a['voto_api']) && $a['voto_api'] !== null ? (float) $a['voto_api'] : 0.0;
+    if ($c['modo'] === 'sei' || $rating <= 0) return SIM_VOTO_PROVVISORIO;
+
+    $f = $c['formula'];
+    if ($c['modo'] === 'rating') {
+        return max($f['min'], min($f['max'], round($rating * 2) / 2));
     }
-    return SIM_VOTO_PROVVISORIO;
+    $x = $f['intercetta'] + $f['rating'] * $rating
+       + $f['gol'] * ((int) $a['gf'] + (int) $a['rf'])
+       + $f['assist'] * (int) $a['ass']
+       + $f['rigore_sbagliato'] * (int) $a['rs']
+       + $f['rigore_parato'] * (int) $a['rp']
+       + $f['espulsione'] * min(1, (int) $a['esp']);
+    $passo = $f['passo'] > 0 ? $f['passo'] : 0.5;
+    return max($f['min'], min($f['max'], round($x / $passo) * $passo));
+}
+
+// Il giocatore ha giocato troppo poco per avere un voto (senza voto)? Vale solo a partita conclusa.
+// Chi ha segnato (gol o rigore) conserva il voto: nei dati ufficiali non esistono SV con gol.
+function sim_api_e_sv(array $a): bool
+{
+    $soglia = sim_api_conversione()['sv_minuti_max'];
+    if ($soglia <= 0 || (int) $a['minuti'] > $soglia) return false;
+    return ((int) $a['gf'] + (int) $a['rf']) === 0;
 }
 
 // ------------------------------------------------------------
@@ -364,13 +429,24 @@ function sim_stat_giocatore(array $ctx, int $idGiocatore, array &$warning, strin
     if ($api !== null) {
         $a = $api['stat'][$idGiocatore] ?? null;
         if ($a !== null && $a['presente'] === 'Y') {
-            return array_merge($base, [
-                'voto' => sim_api_voto($a), 'sv' => false, 'trovato' => true,
-                'api' => true, 'parziale' => (bool) $a['parziale'],
-                'gf' => (int) $a['gf'], 'gs' => (int) $a['gs'], 'rp' => (int) $a['rp'], 'rf' => (int) $a['rf'],
-                'rs' => (int) $a['rs'], 'au' => (int) $a['au'], 'amm' => (int) $a['amm'], 'esp' => (int) $a['esp'],
-                'ass' => (int) $a['ass'],
-            ]);
+            if (sim_api_e_sv($a)) {
+                // Pochi minuti in campo: a partita CONCLUSA è senza voto (come nei voti ufficiali, restano
+                // solo i malus disciplinari e l'autogol); a partita in corso è ancora valutabile → 6 provvisorio
+                if (empty($a['parziale'])) {
+                    return array_merge($base, [
+                        'voto' => null, 'sv' => true, 'trovato' => true,
+                        'au' => (int) $a['au'], 'amm' => (int) $a['amm'], 'esp' => (int) $a['esp'],
+                    ]);
+                }
+            } else {
+                return array_merge($base, [
+                    'voto' => sim_api_voto($a), 'sv' => false, 'trovato' => true,
+                    'api' => true, 'parziale' => (bool) $a['parziale'],
+                    'gf' => (int) $a['gf'], 'gs' => (int) $a['gs'], 'rp' => (int) $a['rp'], 'rf' => (int) $a['rf'],
+                    'rs' => (int) $a['rs'], 'au' => (int) $a['au'], 'amm' => (int) $a['amm'], 'esp' => (int) $a['esp'],
+                    'ass' => (int) $a['ass'],
+                ]);
+            }
         }
         // 3c. partita conclusa secondo l'API e giocatore associato non sceso in campo → senza voto
         $sq = $ctx['squadre'][$idGiocatore] ?? null;

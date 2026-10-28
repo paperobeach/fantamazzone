@@ -1,0 +1,10 @@
+statistiche live per STAGIONE, GIORNATA, PARTITA
+
+SELECT A.*, B.api_nome, D.squadra_casa, D.squadra_ospite FROM `NEW_API_STATISTICHE` A
+INNER JOIN NEW_API_MAPPING_GIOCATORI B ON A.stagione = B.stagione AND A.api_player_id = B.api_player_id
+INNER JOIN NEW_API_PARTITE C ON A.stagione = C.stagione AND A.api_fixture_id = C.api_fixture_id
+INNER JOIN NEW_CALENDARIO_SERIE_A D ON D.stagione = C.stagione AND D.giornata = C.giornata AND D.n_partita = C.n_partita
+WHERE A.STAGIONE = 2026
+ AND D.giornata = 9
+ AND UPPER(D.squadra_casa) = 'SASSUOLO'
+ and UPPER(D.squadra_ospite) = 'LAZIO';

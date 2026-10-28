@@ -87,10 +87,40 @@ return [
     //   "no"        non ricalcola: la simulazione si aggiorna solo col pulsante "Simula"
     "simulazione_automatica" => "sempre",
 
-    // Voto base dei giocatori con dati API: false = 6 (il fantavoto vero non è disponibile);
-    // true = rating del fornitore arrotondato a 0,5 (solo se il rating è presente).
-    // In ogni caso si somma il bonus/malus delle statistiche e il voto resta modificabile a mano.
-    "voto_base_da_rating" => false,
+    // ── Conversione dei dati API in voto (simulazione) ─────────────
+    // Il fantavoto vero non è disponibile via API: il voto si STIMA dal rating del fornitore.
+    //   "formula"  voto = arrotonda_a_0,5( intercetta + rating·rating + gol·(gol + rigori segnati)
+    //                      + assist·assist + rigore_sbagliato·rigori sbagliati
+    //                      + rigore_parato·rigori parati + espulsione·espulsione ),
+    //              limitato tra min e max (default). Calibrata su 1.416 giocatori-partita:
+    //              errore medio 0,33, 90% dei voti entro ±0,5 (con "sempre 6": 0,47 e 77%).
+    //              I rigori arrivano da API-Football (penalty.scored / missed / saved): i gol su rigore
+    //              contano come gol (goals.total li comprende) e non si sommano due volte.
+    //   "rating"   rating del fornitore arrotondato a 0,5
+    //   "sei"      sempre 6
+    // Al voto si somma poi il bonus/malus delle statistiche; il voto resta modificabile a mano.
+    "voto_conversione" => "formula",
+    // Coefficienti facoltativi (valori predefiniti sotto). I termini dei rigori sbagliati/parati e
+    // dell'espulsione poggiano su pochi casi (4, 3 e 5): per cautela si possono ridurre
+    // (es. rigore_sbagliato -0.5, rigore_parato 0.5, espulsione -0.5).
+    "voto_formula" => [
+        "intercetta"       => 2.97,
+        "rating"           => 0.43,
+        "gol"              => 0.61,
+        "assist"           => 0.38,
+        "rigore_sbagliato" => -0.84,
+        "rigore_parato"    => 0.83,
+        "espulsione"       => -0.87,
+        "min"              => 4.0,
+        "max"              => 9.0,
+        "passo"            => 0.5,
+    ],
+
+    // Senza voto: a partita conclusa chi ha giocato al massimo questi minuti, senza aver
+    // segnato (gol o rigore), non ha il voto e va sostituito. Sui dati reali la regola "≤ 11" è
+    // corretta nel 97,9% dei casi. 0 = regola disattivata (ogni minuto giocato dà il voto).
+    // Durante la partita un giocatore appena entrato resta a 6 provvisorio.
+    "sv_minuti_max" => 11,
 
     // Fine stimata della partita = calcio d'inizio + questa durata (minuti).
     // Dopo la fine stimata, se lo stato API è "partita conclusa" e le

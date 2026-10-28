@@ -196,6 +196,44 @@ function af_righe_statistiche(array $fx, ?array $giocatoriFallback = null, ?arra
             $righe[] = $riga;
         }
     }
+    return af_correggi_gol_subiti($righe);
+}
+
+/**
+ * Corregge i GOL SUBITI dei portieri. Il campo "goals.conceded" di API-Football a volte arriva a 0
+ * anche se la squadra ha incassato (11 portieri su 100 nei dati verificati, 4 gol subiti compresi).
+ * I gol subiti da una squadra si ricavano però dalle statistiche degli altri giocatori:
+ *   subiti = gol su azione e rigori segnati dagli avversari + autogol della propria squadra
+ * (coincide col risultato in tutte le partite verificate e con i gol subiti ufficiali di tutti i 100
+ * portieri). Se per quella squadra ha giocato UN SOLO portiere, il valore è quello ricavato (o il valore
+ * API se maggiore); con due portieri non si può attribuire con certezza e si lascia il dato API.
+ * Funzione PURA: restituisce le righe corrette.
+ */
+function af_correggi_gol_subiti(array $righe): array
+{
+    $squadre = [];   // api_team_id => ['diretti' => gol su azione + rigori, 'au' => autogol]
+    foreach ($righe as $r) {
+        $t = (int) $r["api_team_id"];
+        if (!isset($squadre[$t])) $squadre[$t] = ["diretti" => 0, "au" => 0];
+        $squadre[$t]["diretti"] += (int) $r["gf"] + (int) $r["rf"];
+        $squadre[$t]["au"]      += (int) $r["au"];
+    }
+    if (count($squadre) !== 2) return $righe;   // servono entrambe le squadre per ricavare i gol incassati
+
+    $ids = array_keys($squadre);
+    $subiti = [
+        $ids[0] => $squadre[$ids[1]]["diretti"] + $squadre[$ids[0]]["au"],
+        $ids[1] => $squadre[$ids[0]]["diretti"] + $squadre[$ids[1]]["au"],
+    ];
+    $portieri = [];   // api_team_id => indici delle righe dei portieri scesi in campo
+    foreach ($righe as $i => $r) {
+        if ($r["posizione"] === "Goalkeeper" && $r["presente"] === "Y") $portieri[(int) $r["api_team_id"]][] = $i;
+    }
+    foreach ($portieri as $t => $indici) {
+        if (count($indici) !== 1) continue;
+        $i = $indici[0];
+        $righe[$i]["gs"] = max((int) $righe[$i]["gs"], (int) $subiti[$t]);
+    }
     return $righe;
 }
 

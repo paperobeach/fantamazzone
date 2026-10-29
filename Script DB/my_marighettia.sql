@@ -855,6 +855,87 @@ CREATE TABLE `NEW_KULOVIC` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_MERCATO_SESSIONI`
+--
+
+CREATE TABLE `NEW_MERCATO_SESSIONI` (
+  `stagione`          int         NOT NULL,
+  `finestra`          int         NOT NULL DEFAULT '1',
+  `sessione`          int         NOT NULL,
+  `giornata_apertura` int         NOT NULL COMMENT 'Giornata chiusa la quale la sessione si apre',
+  `stato`             varchar(10) NOT NULL DEFAULT 'APERTA' COMMENT 'APERTA | CHIUSA',
+  `aperta_il`         datetime    NOT NULL,
+  `chiusa_il`         datetime    DEFAULT NULL,
+  `riepilogo_inviato` tinyint     NOT NULL DEFAULT '0',
+  PRIMARY KEY (`stagione`,`finestra`,`sessione`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_MERCATO_CLASSIFICA`
+--
+
+CREATE TABLE `NEW_MERCATO_CLASSIFICA` (
+  `stagione`   int NOT NULL,
+  `finestra`   int NOT NULL DEFAULT '1',
+  `posizione`  int NOT NULL,
+  `id_squadra` int NOT NULL,
+  `punti`      int NOT NULL DEFAULT '0',
+  `golf`       int NOT NULL DEFAULT '0',
+  `gols`       int NOT NULL DEFAULT '0',
+  PRIMARY KEY (`stagione`,`finestra`,`posizione`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_MERCATO_ORDINE`
+--
+
+CREATE TABLE `NEW_MERCATO_ORDINE` (
+  `stagione`         int         NOT NULL,
+  `finestra`         int         NOT NULL DEFAULT '1',
+  `sessione`         int         NOT NULL,
+  `posizione`        int         NOT NULL COMMENT 'Ordine di chiamata (1 = primo a muoversi)',
+  `id_squadra`       int         NOT NULL,
+  `stato`            varchar(10) NOT NULL DEFAULT 'ATTESA' COMMENT 'ATTESA | FATTO | PASSATO',
+  `turno_inizio`     datetime    DEFAULT NULL,
+  `solleciti`        int         NOT NULL DEFAULT '0',
+  `ultimo_sollecito` datetime    DEFAULT NULL,
+  PRIMARY KEY (`stagione`,`finestra`,`sessione`,`posizione`),
+  KEY `idx_mercato_ordine_squadra` (`stagione`,`finestra`,`sessione`,`id_squadra`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_MERCATO_TRANSAZIONI`
+--
+
+CREATE TABLE `NEW_MERCATO_TRANSAZIONI` (
+  `id`                    int         NOT NULL AUTO_INCREMENT,
+  `stagione`              int         NOT NULL,
+  `finestra`              int         NOT NULL DEFAULT '1',
+  `sessione`              int         NOT NULL,
+  `id_squadra`            int         NOT NULL,
+  `tipo`                  varchar(10) NOT NULL DEFAULT 'SCAMBIO' COMMENT 'SCAMBIO | PASSO',
+  `id_giocatore_acquistato` int       DEFAULT NULL,
+  `giocatore_acquistato`  varchar(50) DEFAULT NULL,
+  `ruolo`                 int         DEFAULT NULL,
+  `crediti_acquisto`      int         NOT NULL DEFAULT '0',
+  `id_giocatore_ceduto`   int         DEFAULT NULL,
+  `giocatore_ceduto`      varchar(50) DEFAULT NULL,
+  `crediti_recuperati`    int         NOT NULL DEFAULT '0',
+  `creato_il`             datetime    NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_mercato_trans_sessione` (`stagione`,`finestra`,`sessione`),
+  KEY `idx_mercato_trans_ceduto` (`stagione`,`finestra`,`id_giocatore_ceduto`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_NAZIONI`
 --
 

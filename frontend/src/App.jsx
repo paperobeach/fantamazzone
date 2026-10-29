@@ -17,6 +17,7 @@ const Statistiche = lazy(() => import('./pages/Statistiche'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const AlboOro     = lazy(() => import('./pages/AlboOro'))
+const MercatoRiparazione = lazy(() => import('./pages/MercatoRiparazione'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
 const Login       = lazy(() => import('./pages/Login'))
@@ -127,6 +128,8 @@ function AppShell() {
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
                   <Route path="/albo-oro"     element={<AlboOro />} />
+                  <Route path="/mercato-riparazione" element={<Navigate to="/mercato-riparazione/prima-finestra" replace />} />
+                  <Route path="/mercato-riparazione/prima-finestra" element={<MercatoRiparazione />} />
                   <Route path="/gazzetta"     element={<Gazzetta />} />
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={

@@ -378,6 +378,13 @@ const DEFAULT_PARAMETRI = {
   GOL_DISTACCO_MIN_PUNTI: ['3', 'Punti di scarto minimo in fasce diverse'],
   GOL_SOGLIA_PAREGGIO: ['66', 'Scarto minimo 1 a 0'],
   GOL_SOGLIA_OMAGGIO: ['59', 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario'],
+  // MERCATO_GIORNATA_INIZIO non ha default: vuoto = mercato disattivato
+  MERCATO_PREZZO_PORTIERE: ['5', 'Mercato di riparazione: prezzo portiere (crediti)'],
+  MERCATO_PREZZO_DIFENSORE: ['5', 'Mercato di riparazione: prezzo difensore (crediti)'],
+  MERCATO_PREZZO_CENTROCAMPISTA: ['10', 'Mercato di riparazione: prezzo centrocampista (crediti)'],
+  MERCATO_PREZZO_ATTACCANTE: ['20', 'Mercato di riparazione: prezzo attaccante (crediti)'],
+  MERCATO_TEMPO_LIMITE_ORE: ['24', 'Mercato di riparazione: tempo limite per fantallenatore (ore)'],
+  MERCATO_SOLLECITO_ORE: ['6', 'Mercato di riparazione: intervallo tra solleciti dopo la scadenza (ore)'],
 }
 const DEFAULT_CHAMP_GIORNATE = {
   CHAMP_F1_A_T1: 2, CHAMP_F1_A_T2: 4, CHAMP_F1_A_T3: 6, CHAMP_F1_A_T4: 10, CHAMP_F1_A_T5: 12, CHAMP_F1_A_T6: 14,
@@ -705,6 +712,61 @@ export default function GestisciRegoleCalcolo() {
                             Giornata di Serie A a cui corrisponde la 1ª giornata di fantacampionato (che può iniziare dopo la 1ª di Serie A). In Gestione voti i voti Serie A vengono associati automaticamente alla fantagiornata corrispondente.
                           </p>
                         </div>
+                      </div>
+                    </Sottosezione>
+
+                    <Sottosezione
+                      titolo="Mercato di riparazione (prima finestra)"
+                      descrizione="La prima finestra si sviluppa su 4 sessioni: la prima parte alla chiusura della giornata indicata, ogni sessione termina all'inizio della giornata successiva. Lascia vuota la giornata per disattivare il mercato."
+                    >
+                      <div className="flex flex-wrap gap-6">
+                        <div className="max-w-[16rem]">
+                          <label className="text-xs text-slate-600 mb-1 block">Giornata dopo la quale parte la 1ª sessione</label>
+                          <input
+                            type="number" min="1" max={Math.max(1, numeroGiornate - 4)} step="1"
+                            value={getValoreParametro('MERCATO_GIORNATA_INIZIO', '')}
+                            onChange={e => setValoreParametro('MERCATO_GIORNATA_INIZIO', e.target.value, 'Mercato di riparazione: giornata dopo la quale parte la prima sessione (vuoto = disattivato)')}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">Massimo {Math.max(1, numeroGiornate - 4)} (servono 4 giornate successive).</p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Tempo limite per fantallenatore (ore)</label>
+                          <input
+                            type="number" min="1" step="1"
+                            value={getValoreParametro('MERCATO_TEMPO_LIMITE_ORE', 24)}
+                            onChange={e => setValoreParametro('MERCATO_TEMPO_LIMITE_ORE', e.target.value, DEFAULT_PARAMETRI.MERCATO_TEMPO_LIMITE_ORE[1])}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-600 mb-1 block">Intervallo solleciti dopo la scadenza (ore)</label>
+                          <input
+                            type="number" min="1" step="1"
+                            value={getValoreParametro('MERCATO_SOLLECITO_ORE', 6)}
+                            onChange={e => setValoreParametro('MERCATO_SOLLECITO_ORE', e.target.value, DEFAULT_PARAMETRI.MERCATO_SOLLECITO_ORE[1])}
+                            className="fanta-input w-28"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-5 mb-2">Prezzo fisso di acquisto per ruolo (crediti)</p>
+                      <div className="flex flex-wrap gap-6">
+                        {[
+                          ['MERCATO_PREZZO_PORTIERE', 'Portiere', 5],
+                          ['MERCATO_PREZZO_DIFENSORE', 'Difensore', 5],
+                          ['MERCATO_PREZZO_CENTROCAMPISTA', 'Centrocampista', 10],
+                          ['MERCATO_PREZZO_ATTACCANTE', 'Attaccante', 20],
+                        ].map(([cod, nome, def]) => (
+                          <div key={cod}>
+                            <label className="text-xs text-slate-600 mb-1 block">{nome}</label>
+                            <input
+                              type="number" min="0" step="1"
+                              value={getValoreParametro(cod, def)}
+                              onChange={e => setValoreParametro(cod, e.target.value, DEFAULT_PARAMETRI[cod][1])}
+                              className="fanta-input w-24"
+                            />
+                          </div>
+                        ))}
                       </div>
                     </Sottosezione>
 

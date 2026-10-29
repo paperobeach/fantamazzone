@@ -178,6 +178,15 @@ function parametri_default(): array
         ['codice' => 'FORMAZIONE_CHAMPIONS_DIVERSA', 'etichetta' => 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)', 'valore' => '1'],
         ['codice' => 'BLOCCO_FORMAZIONE_ATTIVO',     'etichetta' => 'Blocco inserimento formazione a 1 minuto dalla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
         ['codice' => 'NASCONDI_FORMAZIONE_CONSENTITO', 'etichetta' => 'Consenti di nascondere la formazione fino alla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
+        // Mercato di riparazione - prima finestra (vedi lib/MercatoRiparazione.php).
+        // MERCATO_GIORNATA_INIZIO vuoto = mercato disattivato.
+        ['codice' => 'MERCATO_GIORNATA_INIZIO',       'etichetta' => 'Mercato di riparazione: giornata dopo la quale parte la prima sessione (vuoto = disattivato)', 'valore' => ''],
+        ['codice' => 'MERCATO_PREZZO_PORTIERE',       'etichetta' => 'Mercato di riparazione: prezzo portiere (crediti)',       'valore' => '5'],
+        ['codice' => 'MERCATO_PREZZO_DIFENSORE',      'etichetta' => 'Mercato di riparazione: prezzo difensore (crediti)',      'valore' => '5'],
+        ['codice' => 'MERCATO_PREZZO_CENTROCAMPISTA', 'etichetta' => 'Mercato di riparazione: prezzo centrocampista (crediti)', 'valore' => '10'],
+        ['codice' => 'MERCATO_PREZZO_ATTACCANTE',     'etichetta' => 'Mercato di riparazione: prezzo attaccante (crediti)',     'valore' => '20'],
+        ['codice' => 'MERCATO_TEMPO_LIMITE_ORE',      'etichetta' => 'Mercato di riparazione: tempo limite per fantallenatore (ore)', 'valore' => '24'],
+        ['codice' => 'MERCATO_SOLLECITO_ORE',         'etichetta' => 'Mercato di riparazione: intervallo tra solleciti dopo la scadenza (ore)', 'valore' => '6'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
             'valore' => json_encode(FASCE_GOL_PUNTEGGIO_DEFAULT, JSON_UNESCAPED_UNICODE)],
         // Casi particolari della conversione punteggio -> gol
@@ -329,12 +338,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if (isset($input['parametri']) && is_array($input['parametri'])) {
         $champ = [];
         $maxGiornate = null;
+        $mercatoG0 = null;
         foreach ($input['parametri'] as $p) {
             $cod = trim((string) ($p['codice'] ?? ''));
             $val = trim((string) ($p['valore'] ?? ''));
             if ($cod === 'NUMERO_GIORNATE' && (!ctype_digit($val) || (int) $val < 1 || (int) $val > 99)) {
                 api_error("Il numero di giornate deve essere un intero tra 1 e 99", 400);
             }
+            if ($cod === 'MERCATO_GIORNATA_INIZIO' && $val !== '' && (!ctype_digit($val) || (int) $val < 1)) {
+                api_error("La giornata di inizio del mercato di riparazione deve essere un intero >= 1 (oppure vuota per disattivarlo)", 400);
+            }
+            if (in_array($cod, ['MERCATO_PREZZO_PORTIERE', 'MERCATO_PREZZO_DIFENSORE', 'MERCATO_PREZZO_CENTROCAMPISTA', 'MERCATO_PREZZO_ATTACCANTE'], true)
+                && !ctype_digit($val)) {
+                api_error("I prezzi del mercato di riparazione devono essere numeri interi >= 0", 400);
+            }
+            if (in_array($cod, ['MERCATO_TEMPO_LIMITE_ORE', 'MERCATO_SOLLECITO_ORE'], true)
+                && (!ctype_digit($val) || (int) $val < 1)) {
+                api_error("Tempo limite e intervallo solleciti del mercato devono essere interi >= 1 (ore)", 400);
+            }
+            if ($cod === 'MERCATO_GIORNATA_INIZIO' && $val !== '') $mercatoG0 = (int) $val;
             if ($cod === 'GIORNATA_SERIE_A_INIZIO' && (!ctype_digit($val) || (int) $val < 1)) {
                 api_error("La giornata di Serie A di partenza deve essere un intero >= 1", 400);
             }
@@ -366,6 +388,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {
                 $maxGiornate = (int) $p['valore'];
             }
+        }
+        // Le 4 sessioni del mercato terminano all'inizio della giornata G0+4: deve esistere
+        if ($mercatoG0 !== null && $maxGiornate !== null && $mercatoG0 + 4 > $maxGiornate) {
+            api_error("Il mercato di riparazione occupa 4 sessioni: la giornata di inizio non puo' superare " . ($maxGiornate - 4) . " (numero giornate $maxGiornate)", 400);
         }
         if (!empty($champ)) {
             $errChamp = champions_valida_giornate($champ, $maxGiornate);

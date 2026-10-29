@@ -37,6 +37,7 @@
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/AggiornamentiGiornata.php";
 require_once __DIR__ . "/../lib/FormazioniChampions.php";
+require_once __DIR__ . "/../lib/MercatoRiparazione.php";
 
 // ------------------------------------------------------------
 // Stato della chiusura di una giornata
@@ -235,6 +236,20 @@ if ($errore !== null) {
         "passi"     => $passi,
         "avvisi"    => $avvisi,
     ]);
+}
+
+// Mercato di riparazione: se la giornata chiusa apre una sessione (prima finestra),
+// la sessione viene aperta e la mail con la prima squadra chiamata parte subito.
+// Un errore qui NON annulla la chiusura (gia' scritta): l'elaborazione si ripete
+// ad ogni accesso al mercato e dal cron.
+$mercato = null;
+try {
+    $mercato = mr_tick($stagione, MR_FINESTRA_1);
+    if (!empty($mercato["aperte"])) {
+        $avvisi[] = "Mercato di riparazione: aperta la sessione " . implode(", ", $mercato["aperte"]) . " (email inviata ai fantallenatori)";
+    }
+} catch (Throwable $e) {
+    $avvisi[] = "Mercato di riparazione: apertura sessione non riuscita (" . $e->getMessage() . "), verrà ritentata automaticamente";
 }
 
 $ultima = $stato["ultima_della_stagione"];

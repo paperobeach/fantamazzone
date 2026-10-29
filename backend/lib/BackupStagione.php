@@ -82,6 +82,11 @@ function bks_tabelle_backup(): array
         "NEW_RIGORISTI_CHAMP"       => "Ordine rigoristi Champions",
         "NEW_FORMAZIONI_NASCOSTE"   => "Formazioni nascoste",
         "NEW_FORMAZIONI_CK"         => "Conferme formazioni",
+        // mercato di riparazione
+        "NEW_MERCATO_SESSIONI"      => "Mercato di riparazione: sessioni",
+        "NEW_MERCATO_CLASSIFICA"    => "Mercato di riparazione: classifica salvata",
+        "NEW_MERCATO_ORDINE"        => "Mercato di riparazione: ordine di chiamata",
+        "NEW_MERCATO_TRANSAZIONI"   => "Mercato di riparazione: transazioni",
         // risultati delle giornate chiuse
         "NEW_VOTI"                  => "Voti dei giocatori",
         "NEW_VOTI_CHAMP"            => "Voti dei giocatori (Champions)",

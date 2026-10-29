@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users, BarChart2,
   Star, Shield, LogOut,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -32,6 +32,12 @@ const NAV_SECTIONS = [
     items: [
       { to: '/champions',          icon: Shield, label: 'Risultati e classifica' },
       { to: '/champions/top-flop', icon: Star,   label: 'Top / Flop 11' },
+    ],
+  },
+  {
+    title: 'Mercato di riparazione',
+    items: [
+      { to: '/mercato-riparazione/prima-finestra', icon: Repeat, label: 'Prima finestra' },
     ],
   },
 ]

@@ -564,3 +564,30 @@ export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP')
 export const getDashboardLive = (stagione, id_squadra) =>
   get('dashboard_live.php', { stagione, id_squadra })
 
+
+// ── Mercato di riparazione (prima finestra) ──────────────────
+// Stato: configurazione, sessioni, ordine di chiamata, squadra di turno, scadenza.
+export const getMercato = (stagione) =>
+  get('mercato.php', { stagione, id_richiedente: idRichiedente() })
+
+// Svincolati (con flag "acquistabile"); ruolo 1..4 facoltativo, q = ricerca per nome
+export const getMercatoSvincolati = (stagione, ruolo, q) =>
+  get('mercato.php', { stagione, modo: 'svincolati', ruolo: ruolo || null, q: q || null })
+
+export const getMercatoRosa = (stagione, id_squadra) =>
+  get('mercato.php', { stagione, modo: 'rosa', id_squadra })
+
+// Transazioni salvate (tutte, oppure di una sessione)
+export const getMercatoStorico = (stagione, sessione) =>
+  get('mercato.php', { stagione, modo: 'storico', sessione: sessione || null })
+
+// Acquisto di uno svincolato cedendo un giocatore della propria rosa (stesso ruolo)
+export const mercatoAcquista = (stagione, id_squadra, id_giocatore_acquistato, id_giocatore_ceduto) =>
+  post('mercato.php', { stagione, azione: 'acquista', id_squadra, id_giocatore_acquistato, id_giocatore_ceduto })
+
+export const mercatoPassa = (stagione, id_squadra) =>
+  post('mercato.php', { stagione, azione: 'passa', id_squadra })
+
+// Solo amministratore: salta la squadra di turno
+export const mercatoSalta = (stagione, id_squadra) =>
+  post('mercato.php', { stagione, azione: 'salta', id_squadra, id_richiedente: idRichiedente() })

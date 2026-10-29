@@ -21,6 +21,8 @@
 --   NUMERO_GIORNATE                 numero di giornate della stagione
 --                                   (riservato per un'eventuale futura
 --                                   integrazione con la creazione calendario)
+--   MERCATO_*                       parametri del Mercato di riparazione (vedi
+--                                   Script DB/NEW_MERCATO_RIPARAZIONE.sql)
 --   FASCE_GOL_PUNTEGGIO             JSON con le fasce [{da,a,gol}, ...]
 --                                   usate per derivare i gol fatti di
 --                                   una squadra (NEW_RISULTATI.golf) dal

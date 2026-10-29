@@ -13,11 +13,11 @@ const Calendario  = lazy(() => import('./pages/Calendario'))
 const LiveGiornata = lazy(() => import('./pages/LiveGiornata'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
-const Statistiche = lazy(() => import('./pages/Statistiche'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const AlboOro     = lazy(() => import('./pages/AlboOro'))
 const MercatoRiparazione = lazy(() => import('./pages/MercatoRiparazione'))
+const Svincolati = lazy(() => import('./pages/Svincolati'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
 const Login       = lazy(() => import('./pages/Login'))
@@ -123,13 +123,18 @@ function AppShell() {
                       consultabili direttamente da "Calendario". Redirect
                       mantenuto per eventuali link/segnalibri esistenti. */}
                   <Route path="/incontri"     element={<Navigate to="/calendario" replace />} />
-                  <Route path="/statistiche"  element={<Statistiche />} />
+                  {/* Pagina "Statistiche" rimossa dal menu: redirect per eventuali segnalibri */}
+                  <Route path="/statistiche"  element={<Navigate to="/" replace />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
                   <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
                   <Route path="/albo-oro"     element={<AlboOro />} />
-                  <Route path="/mercato-riparazione" element={<Navigate to="/mercato-riparazione/prima-finestra" replace />} />
-                  <Route path="/mercato-riparazione/prima-finestra" element={<MercatoRiparazione />} />
+                  <Route path="/mercato"               element={<Navigate to="/mercato/prima-finestra" replace />} />
+                  <Route path="/mercato/prima-finestra" element={<MercatoRiparazione />} />
+                  <Route path="/mercato/svincolati"    element={<Svincolati />} />
+                  {/* Vecchi indirizzi del "Mercato di riparazione": redirect per link/segnalibri esistenti */}
+                  <Route path="/mercato-riparazione"   element={<Navigate to="/mercato/prima-finestra" replace />} />
+                  <Route path="/mercato-riparazione/prima-finestra" element={<Navigate to="/mercato/prima-finestra" replace />} />
                   <Route path="/gazzetta"     element={<Gazzetta />} />
                   <Route path="/gazzetta/:id" element={<GazzettaArticolo />} />
                   <Route path="/formazione"   element={

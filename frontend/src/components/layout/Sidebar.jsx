@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
 import {
-  Trophy, Calendar, Users, BarChart2,
-  Star, Shield, LogOut,
+  Trophy, Calendar, Users,
+  Star, Shield, LogOut, UserPlus,
   ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat
 } from 'lucide-react'
 
@@ -14,7 +14,6 @@ const NAV_SECTIONS = [
     items: [
       { to: '/squadre',      icon: Users,     label: 'Squadre'       },
       { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
-      { to: '/statistiche',  icon: BarChart2, label: 'Statistiche'   },
       { to: '/gazzetta',     icon: Newspaper, label: 'La Gazzetta'   },
       { to: '/albo-oro',     icon: Award,     label: "Albo d'oro"   },
     ],
@@ -35,9 +34,10 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    title: 'Mercato di riparazione',
+    title: 'Mercato',
     items: [
-      { to: '/mercato-riparazione/prima-finestra', icon: Repeat, label: 'Prima finestra' },
+      { to: '/mercato/prima-finestra', icon: Repeat,   label: 'Prima finestra riparazione' },
+      { to: '/mercato/svincolati',     icon: UserPlus, label: 'Svincolati' },
     ],
   },
 ]

@@ -185,6 +185,7 @@ function parametri_default(): array
         ['codice' => 'MERCATO_PREZZO_DIFENSORE',      'etichetta' => 'Mercato di riparazione: prezzo difensore (crediti)',      'valore' => '5'],
         ['codice' => 'MERCATO_PREZZO_CENTROCAMPISTA', 'etichetta' => 'Mercato di riparazione: prezzo centrocampista (crediti)', 'valore' => '10'],
         ['codice' => 'MERCATO_PREZZO_ATTACCANTE',     'etichetta' => 'Mercato di riparazione: prezzo attaccante (crediti)',     'valore' => '20'],
+        ['codice' => 'MERCATO_BUDGET_CREDITI',        'etichetta' => 'Mercato: budget crediti di ogni squadra (rosa + mercato)', 'valore' => '470'],
         ['codice' => 'MERCATO_TEMPO_LIMITE_ORE',      'etichetta' => 'Mercato di riparazione: tempo limite per fantallenatore (ore)', 'valore' => '24'],
         ['codice' => 'MERCATO_SOLLECITO_ORE',         'etichetta' => 'Mercato di riparazione: intervallo tra solleciti dopo la scadenza (ore)', 'valore' => '6'],
         ['codice' => 'FASCE_GOL_PUNTEGGIO',          'etichetta' => 'Fasce gol fatti da punteggio totale',
@@ -351,6 +352,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if (in_array($cod, ['MERCATO_PREZZO_PORTIERE', 'MERCATO_PREZZO_DIFENSORE', 'MERCATO_PREZZO_CENTROCAMPISTA', 'MERCATO_PREZZO_ATTACCANTE'], true)
                 && !ctype_digit($val)) {
                 api_error("I prezzi del mercato di riparazione devono essere numeri interi >= 0", 400);
+            }
+            if ($cod === 'MERCATO_BUDGET_CREDITI' && (!ctype_digit($val) || (int) $val < 1)) {
+                api_error("Il budget di mercato deve essere un intero >= 1 (crediti)", 400);
             }
             if (in_array($cod, ['MERCATO_TEMPO_LIMITE_ORE', 'MERCATO_SOLLECITO_ORE'], true)
                 && (!ctype_digit($val) || (int) $val < 1)) {

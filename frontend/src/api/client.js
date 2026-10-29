@@ -565,7 +565,7 @@ export const getDashboardLive = (stagione, id_squadra) =>
   get('dashboard_live.php', { stagione, id_squadra })
 
 
-// ── Mercato di riparazione (prima finestra) ──────────────────
+// ── Mercato (prima finestra di riparazione, svincolati) ──────────────────
 // Stato: configurazione, sessioni, ordine di chiamata, squadra di turno, scadenza.
 export const getMercato = (stagione) =>
   get('mercato.php', { stagione, id_richiedente: idRichiedente() })
@@ -573,6 +573,11 @@ export const getMercato = (stagione) =>
 // Svincolati (con flag "acquistabile"); ruolo 1..4 facoltativo, q = ricerca per nome
 export const getMercatoSvincolati = (stagione, ruolo, q) =>
   get('mercato.php', { stagione, modo: 'svincolati', ruolo: ruolo || null, q: q || null })
+
+// Analisi degli svincolati (pagina "Mercato > Svincolati"): statistiche, indice di valore,
+// prezzo e, per l'utente loggato, budget residuo e sostenibilità dell'acquisto
+export const getMercatoAnalisiSvincolati = (stagione) =>
+  get('mercato.php', { stagione, modo: 'analisi_svincolati', id_richiedente: idRichiedente() })
 
 export const getMercatoRosa = (stagione, id_squadra) =>
   get('mercato.php', { stagione, modo: 'rosa', id_squadra })

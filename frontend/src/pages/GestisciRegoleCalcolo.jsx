@@ -383,6 +383,7 @@ const DEFAULT_PARAMETRI = {
   MERCATO_PREZZO_DIFENSORE: ['5', 'Mercato di riparazione: prezzo difensore (crediti)'],
   MERCATO_PREZZO_CENTROCAMPISTA: ['10', 'Mercato di riparazione: prezzo centrocampista (crediti)'],
   MERCATO_PREZZO_ATTACCANTE: ['20', 'Mercato di riparazione: prezzo attaccante (crediti)'],
+  MERCATO_BUDGET_CREDITI: ['470', 'Mercato: budget crediti di ogni squadra (rosa + mercato)'],
   MERCATO_TEMPO_LIMITE_ORE: ['24', 'Mercato di riparazione: tempo limite per fantallenatore (ore)'],
   MERCATO_SOLLECITO_ORE: ['6', 'Mercato di riparazione: intervallo tra solleciti dopo la scadenza (ore)'],
 }
@@ -729,6 +730,16 @@ export default function GestisciRegoleCalcolo() {
                             className="fanta-input w-28"
                           />
                           <p className="text-[11px] text-slate-700 mt-1">Massimo {Math.max(1, numeroGiornate - 4)} (servono 4 giornate successive).</p>
+                        </div>
+                        <div className="max-w-[16rem]">
+                          <label className="text-xs text-slate-600 mb-1 block">Budget di mercato per squadra (crediti)</label>
+                          <input
+                            type="number" min="1" step="1"
+                            value={getValoreParametro('MERCATO_BUDGET_CREDITI', 470)}
+                            onChange={e => setValoreParametro('MERCATO_BUDGET_CREDITI', e.target.value, DEFAULT_PARAMETRI.MERCATO_BUDGET_CREDITI[1])}
+                            className="fanta-input w-28"
+                          />
+                          <p className="text-[11px] text-slate-700 mt-1">Il residuo di ogni squadra è il budget meno i crediti spesi per la rosa (pagina Mercato &gt; Svincolati).</p>
                         </div>
                         <div>
                           <label className="text-xs text-slate-600 mb-1 block">Tempo limite per fantallenatore (ore)</label>

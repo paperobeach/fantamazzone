@@ -20,6 +20,10 @@
 //    pagato vengono recuperati), oppure passare.
 //  - Non si puo' acquistare un giocatore ceduto da un'altra squadra nella
 //    stessa sessione, ne' un giocatore precedentemente ceduto nella finestra.
+//  - Budget (parametro MERCATO_BUDGET_CREDITI, default 470): crediti totali di
+//    ogni squadra. Il budget a disposizione e' il residuo di quanto non speso
+//    per la rosa (somma di NEW_GIOCATORI.crediti, che comprende anche il saldo
+//    degli scambi di mercato). Usato dalla pagina "Svincolati" (mr_analisi_svincolati).
 //  - Ogni operazione e' salvata in NEW_MERCATO_TRANSAZIONI.
 //  - Tempo limite per fantallenatore (MERCATO_TEMPO_LIMITE_ORE): scaduto,
 //    si inviano solleciti ogni MERCATO_SOLLECITO_ORE (la squadra NON viene
@@ -46,6 +50,8 @@ const MR_SESSIONI_FINESTRA_1 = 4;
 const MR_PARAM_GIORNATA   = "MERCATO_GIORNATA_INIZIO";
 const MR_PARAM_TEMPO      = "MERCATO_TEMPO_LIMITE_ORE";
 const MR_PARAM_SOLLECITO  = "MERCATO_SOLLECITO_ORE";
+const MR_PARAM_BUDGET     = "MERCATO_BUDGET_CREDITI";   // budget crediti di ogni squadra (rosa + mercato)
+const MR_BUDGET_DEFAULT   = 470;
 const MR_PARAM_PREZZI     = [
     1 => "MERCATO_PREZZO_PORTIERE",
     2 => "MERCATO_PREZZO_DIFENSORE",
@@ -84,7 +90,9 @@ function mr_config(int $stagione): array
     }
     $t = mr_param($stagione, MR_PARAM_TEMPO);
     $s = mr_param($stagione, MR_PARAM_SOLLECITO);
+    $b = mr_param($stagione, MR_PARAM_BUDGET);
     return [
+        "budget"          => ($b !== null && ctype_digit($b)) ? (int) $b : MR_BUDGET_DEFAULT,
         "giornata_inizio" => ($g !== null && ctype_digit($g) && (int) $g >= 1) ? (int) $g : null,
         "prezzi"          => $prezzi,
         "tempo_limite_ore" => ($t !== null && ctype_digit($t) && (int) $t >= 1) ? (int) $t : 24,
@@ -544,6 +552,7 @@ function mr_stato(int $stagione, int $finestra, ?int $idRichiedente): array
         "ultima_stagione" => $ultima,
         "giornata_inizio" => $cfg["giornata_inizio"],
         "prezzi" => $cfg["prezzi"],
+        "budget" => $cfg["budget"],
         "tempo_limite_ore" => $cfg["tempo_limite_ore"],
         "sessioni_totali" => MR_SESSIONI_FINESTRA_1,
         "sessione_corrente" => null, "ordine" => [], "turno" => null,
@@ -635,4 +644,229 @@ function mr_storico(int $stagione, int $finestra, ?int $sessione): array
                       FROM NEW_MERCATO_TRANSAZIONI t
                       LEFT JOIN NEW_SQUADRE s ON s.id = t.id_squadra AND s.stagione = t.stagione
                       WHERE $w ORDER BY t.id DESC");
+}
+
+
+// ------------------------------------------------------------
+// Budget di mercato
+// ------------------------------------------------------------
+/**
+ * Budget di una squadra: totale (parametro), speso per la rosa, saldo degli scambi
+ * di mercato, residuo e, per ruolo, il massimo recuperabile cedendo un giocatore
+ * (i crediti con cui e' stato pagato tornano disponibili).
+ */
+function mr_budget_squadra(int $stagione, int $finestra, int $idSquadra): array
+{
+    $cfg = mr_config($stagione);
+    $r = query_one("SELECT COALESCE(SUM(crediti), 0) AS speso, COUNT(*) AS n
+                    FROM NEW_GIOCATORI WHERE stagione = $stagione AND squadra = $idSquadra");
+    $speso = (int) ($r["speso"] ?? 0);
+    $t = query_one("SELECT COALESCE(SUM(crediti_acquisto - crediti_recuperati), 0) AS saldo
+                    FROM NEW_MERCATO_TRANSAZIONI
+                    WHERE stagione = $stagione AND finestra = $finestra
+                      AND id_squadra = $idSquadra AND tipo = 'SCAMBIO'");
+    $saldoMercato = (int) ($t["saldo"] ?? 0);
+    $maxCedibile = [1 => 0, 2 => 0, 3 => 0, 4 => 0];
+    foreach (query_all("SELECT ruolo, MAX(crediti) AS m FROM NEW_GIOCATORI
+                        WHERE stagione = $stagione AND squadra = $idSquadra GROUP BY ruolo") as $m) {
+        $maxCedibile[(int) $m["ruolo"]] = (int) $m["m"];
+    }
+    return [
+        "id_squadra"      => $idSquadra,
+        "nome"            => mr_nome_squadra($stagione, $idSquadra),
+        "totale"          => $cfg["budget"],
+        "speso"           => $speso,
+        "speso_iniziale"  => $speso - $saldoMercato,
+        "saldo_mercato"   => $saldoMercato,
+        "residuo"         => $cfg["budget"] - $speso,
+        "max_cedibile"    => $maxCedibile,
+    ];
+}
+
+// ------------------------------------------------------------
+// Analisi svincolati (pagina "Mercato > Svincolati")
+// ------------------------------------------------------------
+/** Squadra di Serie A di ogni giocatore: staging asta, poi l'ultima squadra nei voti (trasferimenti). */
+function mr_squadre_serie_a(int $stagione): array
+{
+    $mappa = [];
+    foreach (query_all("SELECT id_giocatore, squadra_serie_a AS squadra
+                        FROM NEW_GIOCATORI_BASE_ASTA WHERE stagione = $stagione") as $r) {
+        $mappa[(int) $r["id_giocatore"]] = trim((string) $r["squadra"]);
+    }
+    foreach (query_all("SELECT id_giocatore, squadra FROM NEW_VOTI_SERIE_A
+                        WHERE stagione = $stagione ORDER BY giornata") as $r) {
+        $mappa[(int) $r["id_giocatore"]] = trim((string) $r["squadra"]);
+    }
+    return $mappa;
+}
+
+/** Maiuscolo (con fallback se mbstring non e' disponibile), per confrontare nomi di squadre. */
+function mr_maiuscolo(?string $s): string
+{
+    $s = trim((string) $s);
+    return function_exists("mb_strtoupper") ? mb_strtoupper($s, "UTF-8") : strtoupper($s);
+}
+
+/** Prossimo incontro di ogni squadra di Serie A (chiave: nome maiuscolo) per la prossima fantagiornata. */
+function mr_prossimi_incontri(int $stagione, int $giornataFanta): array
+{
+    [$gSerieA] = ds_inizio_giornata($stagione, $giornataFanta);
+    $out = [];
+    foreach (query_all("SELECT data_partita, ora_partita, squadra_casa, squadra_ospite
+                        FROM NEW_CALENDARIO_SERIE_A WHERE stagione = $stagione AND giornata = $gSerieA") as $p) {
+        $base = ["data" => $p["data_partita"], "giornata_serie_a" => $gSerieA];
+        $out[mr_maiuscolo($p["squadra_casa"])]   = $base + ["avversaria" => $p["squadra_ospite"], "casa" => true];
+        $out[mr_maiuscolo($p["squadra_ospite"])] = $base + ["avversaria" => $p["squadra_casa"],  "casa" => false];
+    }
+    return $out;
+}
+
+/**
+ * Elenco completo degli svincolati con i dati per valutarne la bonta':
+ * rendimento nelle giornate chiuse (da NEW_VOTI_SERIE_A, voti ufficiali Serie A),
+ * forma recente, affidabilita', indice di valore, posizione nel ruolo, prezzo di
+ * acquisto e sostenibilita' rispetto al budget residuo della squadra richiedente.
+ *
+ * Indice di valore = media del fantavoto "corretta" verso la media del ruolo:
+ *   (somma fantavoti + K * media ruolo) / (presenze + K), K = 3.
+ * Chi ha poche presenze viene quindi riportato verso la media: una sola partita
+ * da 9 non supera chi rende 7 con continuita'.
+ */
+function mr_analisi_svincolati(int $stagione, int $finestra, ?int $idRichiedente): array
+{
+    $K = 3.0;
+    $cfg = mr_config($stagione);
+
+    // Bonus/malus della stagione (stessi del calcolo ufficiale dei punteggi)
+    $bonus = []; $bonusOk = true;
+    try {
+        require_once __DIR__ . "/CalcolatoreVoti.php";
+        require_once __DIR__ . "/RegoleCalcolo.php";
+        global $conn;
+        $bonus = caricaConfigurazioneCalcolo($conn, $stagione)["bonus"];
+    } catch (Throwable $e) {
+        $bonusOk = false;   // regole non configurate: si usa il solo voto base
+    }
+
+    // Giornate considerate: solo quelle chiuse (stagione corrente); storiche: tutte
+    $chiuse = [];
+    foreach (query_all("SELECT giornata FROM NEW_CALENDARIO_CK WHERE stagione = $stagione AND ck_giocata = 'S'") as $r) {
+        $chiuse[(int) $r["giornata"]] = true;
+    }
+    $ultimaChiusa = $chiuse ? max(array_keys($chiuse)) : 0;
+
+    // Svincolati
+    $svinc = [];
+    foreach (query_all("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI
+                        WHERE stagione = $stagione ORDER BY ruolo, descrizione") as $r) {
+        $svinc[(int) $r["id"]] = $r;
+    }
+    $ceduti = [];
+    foreach (query_all("SELECT id_giocatore_ceduto FROM NEW_MERCATO_TRANSAZIONI
+                        WHERE stagione = $stagione AND finestra = $finestra AND tipo = 'SCAMBIO'") as $r) {
+        $ceduti[(int) $r["id_giocatore_ceduto"]] = true;
+    }
+
+    // Voti Serie A: un passaggio su tutti i giocatori (serve anche la media del ruolo)
+    $statiRuolo = [1 => [0.0, 0], 2 => [0.0, 0], 3 => [0.0, 0], 4 => [0.0, 0]];  // [somma fantavoti, presenze]
+    $lettera = ["P" => 1, "D" => 2, "C" => 3, "A" => 4];
+    $perGiocatore = [];
+    foreach (query_all("SELECT id_giocatore, giornata, ruolo, voto, sv, gf, gs, rp, rs, rf, au, amm, esp, ass
+                        FROM NEW_VOTI_SERIE_A WHERE stagione = $stagione ORDER BY giornata") as $v) {
+        $g = (int) $v["giornata"];
+        if ($chiuse && !isset($chiuse[$g])) continue;
+        $id = (int) $v["id_giocatore"];
+        $isSv = $v["sv"] === "Y" || $v["voto"] === null;
+        $fv = null;
+        if (!$isSv) {
+            $fv = CalcolatoreVoti::puntiGiocatore([
+                "voto" => (float) $v["voto"], "sv" => false,
+                "gf" => (int) $v["gf"], "gs" => (int) $v["gs"], "rp" => (int) $v["rp"], "rf" => (int) $v["rf"],
+                "rs" => (int) $v["rs"], "au" => (int) $v["au"], "amm" => (int) $v["amm"], "esp" => (int) $v["esp"],
+                "ass" => (int) $v["ass"],
+            ], $bonus);
+            $rl = $lettera[strtoupper(trim((string) $v["ruolo"]))] ?? null;
+            if ($rl !== null) { $statiRuolo[$rl][0] += $fv; $statiRuolo[$rl][1]++; }
+        }
+        if (!isset($svinc[$id])) continue;
+        $perGiocatore[$id][] = ["g" => $g, "sv" => $isSv, "voto" => $isSv ? null : (float) $v["voto"], "fv" => $fv, "v" => $v];
+    }
+    $mediaRuolo = [];
+    foreach ($statiRuolo as $r => [$somma, $n]) $mediaRuolo[$r] = $n > 0 ? $somma / $n : 6.0;
+
+    $serieA  = mr_squadre_serie_a($stagione);
+    $prossimaFanta = $ultimaChiusa + 1;
+    $incontri = mr_prossimi_incontri($stagione, max(1, $prossimaFanta));
+
+    $budget = $idRichiedente ? mr_budget_squadra($stagione, $finestra, $idRichiedente) : null;
+
+    $out = [];
+    foreach ($svinc as $id => $r) {
+        $ruolo = (int) $r["ruolo"];
+        $righe = $perGiocatore[$id] ?? [];
+        $conVoto = array_values(array_filter($righe, fn($x) => !$x["sv"]));
+        $n = count($conVoto);
+        $sommaVoto = array_sum(array_map(fn($x) => $x["voto"], $conVoto));
+        $sommaFv   = array_sum(array_map(fn($x) => $x["fv"], $conVoto));
+        $tot = fn(string $k) => array_sum(array_map(fn($x) => (int) $x["v"][$k], $righe));
+
+        $ultimi = array_slice($conVoto, -5);
+        $forma = $ultimi ? array_sum(array_map(fn($x) => $x["fv"], $ultimi)) / count($ultimi) : null;
+        $sa = $serieA[$id] ?? "";
+        $inc = $sa !== "" ? ($incontri[mr_maiuscolo($sa)] ?? null) : null;
+
+        $prezzo = (int) $cfg["prezzi"][$ruolo];
+        $nettoMin = $budget ? $prezzo - $budget["max_cedibile"][$ruolo] : null;   // costo netto cedendo il giocatore piu' pagato del ruolo
+        $out[] = [
+            "id"            => $id,
+            "descrizione"   => $r["descrizione"],
+            "ruolo"         => $ruolo,
+            "nazione"       => $r["nazione"],
+            "serie_a"       => $sa !== "" ? $sa : null,
+            "acquistabile"  => !isset($ceduti[$id]),
+            "presenze"      => $n,
+            "senza_voto"    => count($righe) - $n,
+            "media_voto"    => $n ? round($sommaVoto / $n, 2) : null,
+            "fantamedia"    => $n ? round($sommaFv / $n, 2) : null,
+            "forma"         => $forma !== null ? round($forma, 2) : null,
+            "ultimi"        => array_map(fn($x) => ["giornata" => $x["g"], "voto" => $x["voto"], "fantavoto" => $x["fv"]], $ultimi),
+            "gol"           => $tot("gf"),
+            "assist"        => $tot("ass"),
+            "ammonizioni"   => $tot("amm"),
+            "espulsioni"    => $tot("esp"),
+            "gol_subiti"    => $tot("gs"),
+            "rigori_parati" => $tot("rp"),
+            "rigori_segnati" => $tot("rf"),
+            "rigori_sbagliati" => $tot("rs"),
+            "autogol"       => $tot("au"),
+            "ultima_presenza" => $conVoto ? end($conVoto)["g"] : null,
+            "indice"        => round(($sommaFv + $K * $mediaRuolo[$ruolo]) / ($n + $K), 2),
+            "prossima"      => $inc,
+            "prezzo"        => $prezzo,
+            "costo_netto_min" => $nettoMin,
+            "alla_portata"  => $budget ? ($nettoMin <= $budget["residuo"]) : null,
+            "senza_cessione" => $budget ? ($prezzo <= $budget["residuo"]) : null,
+            "pos_ruolo"     => null,
+        ];
+    }
+
+    // Posizione nel ruolo (per indice di valore) tra gli svincolati
+    foreach ([1, 2, 3, 4] as $rl) {
+        $idx = array_keys(array_filter($out, fn($x) => $x["ruolo"] === $rl));
+        usort($idx, fn($a, $b) => $out[$b]["indice"] <=> $out[$a]["indice"] ?: $out[$b]["presenze"] <=> $out[$a]["presenze"]);
+        foreach ($idx as $pos => $i) $out[$i]["pos_ruolo"] = $pos + 1;
+    }
+
+    return [
+        "stagione"        => $stagione,
+        "budget"          => $budget,
+        "budget_totale"   => $cfg["budget"],
+        "prezzi"          => $cfg["prezzi"],
+        "ultima_giornata" => $ultimaChiusa,
+        "media_ruolo"     => array_map(fn($x) => round($x, 2), $mediaRuolo),
+        "bonus_applicati" => $bonusOk,
+        "squadre_serie_a" => array_values(array_unique(array_filter(array_column($out, "serie_a")))),
+        "giocatori"       => $out,
+    ];
 }

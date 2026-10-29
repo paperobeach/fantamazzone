@@ -189,8 +189,8 @@ export default function MercatoRiparazione() {
   return (
     <>
       <PageHeader
-        label="Mercato di riparazione"
-        title="Prima finestra"
+        label="Mercato"
+        title="Prima finestra riparazione"
         subtitle={m.attivo ? `4 sessioni — dopo la giornata ${m.giornata_inizio}` : 'Mercato non attivo per questa stagione'}
       />
 

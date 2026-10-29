@@ -16,6 +16,8 @@
 --   MERCATO_PREZZO_DIFENSORE      prezzo fisso difensore (default 5)
 --   MERCATO_PREZZO_CENTROCAMPISTA prezzo fisso centrocampista (default 10)
 --   MERCATO_PREZZO_ATTACCANTE     prezzo fisso attaccante (default 20)
+--   MERCATO_BUDGET_CREDITI        budget crediti di ogni squadra: il residuo (budget meno crediti
+--                                 spesi per la rosa) e' mostrato in Mercato > Svincolati (default 470)
 --   MERCATO_TEMPO_LIMITE_ORE      ore a disposizione di ogni fantallenatore (default 24)
 --   MERCATO_SOLLECITO_ORE         intervallo tra solleciti dopo la scadenza (default 6)
 -- ============================================================

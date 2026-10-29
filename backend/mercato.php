@@ -8,6 +8,10 @@
 //          (la GET esegue anche mr_tick: apre/chiude sessioni, solleciti)
 // GET  ?stagione=2026&modo=svincolati[&ruolo=2][&q=rossi]
 //        → svincolati con flag "acquistabile" (false se ceduti nella finestra)
+// GET  ?stagione=2026&modo=analisi_svincolati[&id_richiedente=3]
+//        → pagina "Mercato > Svincolati": tutti gli svincolati con statistiche
+//          (fantamedia, forma, presenze, gol, assist...), indice di valore,
+//          prezzo e, se indicato id_richiedente, budget residuo e sostenibilita'.
 // GET  ?stagione=2026&modo=rosa&id_squadra=3
 //        → rosa della squadra (id, descrizione, ruolo, nazione, crediti)
 // GET  ?stagione=2026&modo=storico[&sessione=2]
@@ -68,6 +72,9 @@ switch ($modo) {
     case "svincolati":
         $ruolo = param_int("ruolo", false);
         api_success(mr_svincolati($stagione, $finestra, $ruolo ?: null, trim((string) (param_str("q", false) ?? ""))));
+    case "analisi_svincolati":
+        $rich = param_int("id_richiedente", false);
+        api_success(mr_analisi_svincolati($stagione, $finestra, $rich ?: null));
     case "rosa":
         $id = param_int("id_squadra");
         api_success(query_all("SELECT id, descrizione, ruolo, nazione, crediti FROM NEW_GIOCATORI

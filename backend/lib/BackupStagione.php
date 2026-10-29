@@ -87,6 +87,9 @@ function bks_tabelle_backup(): array
         "NEW_MERCATO_CLASSIFICA"    => "Mercato di riparazione: classifica salvata",
         "NEW_MERCATO_ORDINE"        => "Mercato di riparazione: ordine di chiamata",
         "NEW_MERCATO_TRANSAZIONI"   => "Mercato di riparazione: transazioni",
+        "NEW_MERCATO2_FINESTRA"     => "Mercato di riparazione, seconda finestra: stato",
+        "NEW_MERCATO2_ORDINE"       => "Mercato di riparazione, seconda finestra: ordine di chiamata",
+        "NEW_MERCATO2_TRANSAZIONI"  => "Mercato di riparazione, seconda finestra: aste",
         // risultati delle giornate chiuse
         "NEW_VOTI"                  => "Voti dei giocatori",
         "NEW_VOTI_CHAMP"            => "Voti dei giocatori (Champions)",

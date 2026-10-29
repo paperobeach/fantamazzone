@@ -17,6 +17,7 @@ const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const AlboOro     = lazy(() => import('./pages/AlboOro'))
 const MercatoRiparazione = lazy(() => import('./pages/MercatoRiparazione'))
+const MercatoSecondaFinestra = lazy(() => import('./pages/MercatoSecondaFinestra'))
 const Svincolati = lazy(() => import('./pages/Svincolati'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
@@ -131,6 +132,7 @@ function AppShell() {
                   <Route path="/albo-oro"     element={<AlboOro />} />
                   <Route path="/mercato"               element={<Navigate to="/mercato/prima-finestra" replace />} />
                   <Route path="/mercato/prima-finestra" element={<MercatoRiparazione />} />
+                  <Route path="/mercato/seconda-finestra" element={<MercatoSecondaFinestra />} />
                   <Route path="/mercato/svincolati"    element={<Svincolati />} />
                   {/* Vecchi indirizzi del "Mercato di riparazione": redirect per link/segnalibri esistenti */}
                   <Route path="/mercato-riparazione"   element={<Navigate to="/mercato/prima-finestra" replace />} />

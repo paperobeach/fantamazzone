@@ -37,6 +37,7 @@ const NAV_SECTIONS = [
     title: 'Mercato',
     items: [
       { to: '/mercato/prima-finestra', icon: Repeat,   label: 'Prima finestra riparazione' },
+      { to: '/mercato/seconda-finestra', icon: Repeat,  label: 'Seconda finestra riparazione' },
       { to: '/mercato/svincolati',     icon: UserPlus, label: 'Svincolati' },
     ],
   },

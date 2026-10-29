@@ -597,3 +597,26 @@ export const mercatoPassa = (stagione, id_squadra) =>
 // Solo amministratore: salta la squadra di turno
 export const mercatoSalta = (stagione, id_squadra) =>
   post('mercato.php', { stagione, azione: 'salta', id_squadra, id_richiedente: idRichiedente() })
+
+// ── Mercato: seconda finestra di riparazione (ad asta, in presenza) ──────
+export const getMercato2 = (stagione) =>
+  get('mercato_seconda_finestra.php', { stagione, id_richiedente: idRichiedente() })
+
+export const getMercato2Svincolati = (stagione) =>
+  get('mercato_seconda_finestra.php', { stagione, modo: 'svincolati' })
+
+export const getMercato2Storico = (stagione) =>
+  get('mercato_seconda_finestra.php', { stagione, modo: 'storico' })
+
+const post2 = (stagione, body) =>
+  post('mercato_seconda_finestra.php', { stagione, id_richiedente: idRichiedente(), ...body })
+
+// Solo amministratore
+export const mercato2Avvia = (stagione) => post2(stagione, { azione: 'avvia' })
+export const mercato2Azzera = (stagione) => post2(stagione, { azione: 'azzera' })
+export const mercato2AnnullaUltima = (stagione) => post2(stagione, { azione: 'annulla_ultima' })
+
+// Squadra di turno o amministratore
+export const mercato2Aggiudica = (stagione, id_giocatore, id_squadra_aggiudicataria, prezzo) =>
+  post2(stagione, { azione: 'aggiudica', id_giocatore, id_squadra_aggiudicataria, prezzo })
+export const mercato2Passa = (stagione) => post2(stagione, { azione: 'passa' })

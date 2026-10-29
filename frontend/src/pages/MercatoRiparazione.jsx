@@ -39,6 +39,14 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
   const candidati = acq ? (rosa ?? []).filter(g => g.ruolo === acq.ruolo) : []
   const saldo = acq && ced ? prezzo - ced.crediti : null
 
+  // Budget vincolante: dopo l'operazione i crediti della rosa non possono superare il budget
+  const bud = mercato.budget_squadra
+  const residuo = bud?.residuo ?? null
+  const residuoDopo = residuo !== null && saldo !== null ? residuo - saldo : null
+  const sforaConCessione = (g) => residuo !== null && mercato.prezzi[g.ruolo] - (bud.max_cedibile?.[g.ruolo] ?? 0) > residuo   // nemmeno cedendo il più pagato del ruolo
+  const sforaCon = (c) => residuo !== null && prezzo - c.crediti > residuo
+  const budgetKo = residuoDopo !== null && residuoDopo < 0
+
   const esegui = async (fn) => {
     setBusy(true); setErr(null)
     try { await fn(); setAcq(null); setCed(null); onDone() }
@@ -59,6 +67,15 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
         </button>
       </div>
 
+      {bud && (
+        <div className={`rounded-lg border p-3 text-sm flex flex-wrap gap-x-6 gap-y-1 items-center ${residuo >= 0 ? 'border-white/10 bg-pitch-800' : 'border-red-500/30 bg-red-500/5'}`}>
+          <span className="text-slate-400">Budget: <b className="text-white">{bud.totale} cr.</b></span>
+          <span className="text-slate-400">Speso per la rosa: <b className="text-white">{bud.speso} cr.</b></span>
+          <span className="text-slate-400">Residuo: <b className={residuo >= 0 ? 'text-grass-400' : 'text-red-400'}>{residuo} cr.</b></span>
+          <span className="text-[11px] text-slate-600 basis-full">L'operazione è consentita solo se, dopo lo scambio, il residuo resta ≥ 0.</span>
+        </div>
+      )}
+
       {/* 1. Svincolato */}
       <div>
         <p className="text-xs text-mono tracking-widest uppercase text-slate-600 mb-2">1 · Giocatore da acquistare (svincolati)</p>
@@ -75,17 +92,19 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
           {(svinc ?? []).slice(0, 200).map(g => (
             <button
               key={g.id}
-              disabled={!g.acquistabile}
+              disabled={!g.acquistabile || sforaConCessione(g)}
               onClick={() => { setAcq(g); setCed(null) }}
               className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors
                 ${acq?.id === g.id ? 'bg-grass-500/10 text-grass-400' : 'text-slate-300 hover:bg-white/[0.03]'}
-                ${!g.acquistabile ? 'opacity-40 cursor-not-allowed' : ''}`}
+                ${!g.acquistabile || sforaConCessione(g) ? 'opacity-40 cursor-not-allowed' : ''}`}
             >
               <RoleBadge ruolo={g.ruolo} />
               <span className="flex-1 truncate">{g.descrizione}</span>
               {!g.acquistabile
                 ? <span className="text-[10px] text-slate-600">ceduto: non acquistabile</span>
-                : <span className="text-xs text-mono text-slate-500">{mercato.prezzi[g.ruolo]} cr.</span>}
+                : sforaConCessione(g)
+                  ? <span className="text-[10px] text-red-400">oltre budget ({mercato.prezzi[g.ruolo]} cr.)</span>
+                  : <span className="text-xs text-mono text-slate-500">{mercato.prezzi[g.ruolo]} cr.</span>}
             </button>
           ))}
         </div>
@@ -102,13 +121,17 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
             {candidati.map(g => (
               <button
                 key={g.id}
+                disabled={sforaCon(g)}
                 onClick={() => setCed(g)}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-left text-sm transition-colors
-                  ${ced?.id === g.id ? 'bg-gold-500/10 text-gold-400' : 'text-slate-300 hover:bg-white/[0.03]'}`}
+                  ${ced?.id === g.id ? 'bg-gold-500/10 text-gold-400' : 'text-slate-300 hover:bg-white/[0.03]'}
+                  ${sforaCon(g) ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <RoleBadge ruolo={g.ruolo} />
                 <span className="flex-1 truncate">{g.descrizione}</span>
-                <span className="text-xs text-mono text-slate-500">recuperi {g.crediti} cr.</span>
+                {sforaCon(g)
+                  ? <span className="text-[10px] text-red-400">recuperi {g.crediti} cr.: budget insufficiente</span>
+                  : <span className="text-xs text-mono text-slate-500">recuperi {g.crediti} cr.</span>}
               </button>
             ))}
           </div>
@@ -122,9 +145,11 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
           <p className="text-slate-300">Cedi <b className="text-white">{ced.descrizione}</b> e recuperi <b>{ced.crediti} cr.</b></p>
           <p className="text-xs text-slate-500">
             Saldo crediti: {saldo > 0 ? `−${saldo}` : saldo < 0 ? `+${-saldo}` : '0'}
+            {residuoDopo !== null && <> · Residuo dopo l'operazione: <b className={budgetKo ? 'text-red-400' : 'text-grass-400'}>{residuoDopo} cr.</b></>}
           </p>
+          {budgetKo && <p className="text-xs text-red-400">Budget insufficiente: scegli un giocatore da cedere pagato di più.</p>}
           <button
-            disabled={busy}
+            disabled={busy || budgetKo}
             onClick={() => esegui(() => mercatoAcquista(stagione, idSquadra, acq.id, ced.id))}
             className="btn-primary mt-2 disabled:opacity-40"
           >
@@ -281,7 +306,7 @@ export default function MercatoRiparazione() {
               </div>
               <p className="text-[11px] text-slate-700">
                 Prezzi fissi: portiere {m.prezzi[1]} · difensore {m.prezzi[2]} · centrocampista {m.prezzi[3]} · attaccante {m.prezzi[4]} crediti.
-                I crediti pagati per il giocatore ceduto vengono recuperati. Non sono acquistabili i giocatori ceduti nel mercato.
+                I crediti pagati per il giocatore ceduto vengono recuperati; il budget di {m.budget} crediti non può essere superato. Non sono acquistabili i giocatori ceduti nel mercato.
               </p>
             </>
           )}

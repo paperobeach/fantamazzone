@@ -386,8 +386,9 @@ export const aiArticoli = (stagione, body) =>
 //                 squadra_cuore, tormentoni, rivalita, note} | 'elimina' {utenza_profilo}
 //        episodi: 'elenco' → { episodi[] } | 'salva' {id?, data_episodio, titolo, descrizione, tag,
 //                 utenze (CSV), attivo} | 'elimina' {id}
-//        fisso:   'elenco' → { blocchi[], max_caratteri_contesto, max_caratteri_stile, stile_default }
-//                 | 'salva' {id?, tipo_blocco: 'contesto'|'stile', titolo, testo, ordine, attivo}
+//        fisso:   'elenco' → { blocchi[], max_caratteri_contesto, max_caratteri_stile,
+//                 max_caratteri_struttura, stile_default }
+//                 | 'salva' {id?, tipo_blocco: 'contesto'|'stile'|'struttura', titolo, testo, ordine, attivo}
 //                 | 'elimina' {id}
 export const aiContesto = (stagione, body) =>
   post('admin/ai_contesto.php', { stagione, ...body })

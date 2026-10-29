@@ -134,7 +134,9 @@ function Dettaglio({ g, loggato, budget }) {
     ['Entrato senza voto', g.senza_voto],
   ]
   return (
-    <div className="px-4 py-3 bg-pitch-950/60 grid sm:grid-cols-3 gap-4 text-sm">
+    // Il dettaglio resta ancorato a sinistra e largo come lo schermo (sotto lg la tabella scorre
+    // in orizzontale): così non si estende oltre l'area visibile.
+    <div className="sticky left-0 w-[calc(100vw-2.5rem)] lg:w-auto px-4 py-3 bg-pitch-950/60 grid md:grid-cols-3 gap-4 text-sm">
       <div>
         <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600 mb-1.5">Ultime presenze (fantavoto)</p>
         {g.ultimi.length ? (
@@ -152,9 +154,12 @@ function Dettaglio({ g, loggato, budget }) {
       </div>
       <div>
         <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600 mb-1.5">Statistiche complete</p>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
           {righe.map(([k, v]) => (
-            <div key={k} className="flex justify-between"><dt className="text-slate-500">{k}</dt><dd className="text-mono text-slate-300">{v}</dd></div>
+            <div key={k} className="flex items-baseline gap-1.5">
+              <dt className="text-slate-500">{k}</dt>
+              <dd className="text-mono text-slate-200 font-medium">{v}</dd>
+            </div>
           ))}
         </dl>
       </div>
@@ -387,7 +392,7 @@ export default function Svincolati() {
           <b className="text-slate-500"> Fanta</b> è la media del fantavoto; l'<b className="text-slate-500">Indice</b> la corregge in base alle presenze,
           avvicinandola alla media del ruolo ({['', 'P', 'D', 'C', 'A'].slice(1).map((r, i) => `${r} ${f2(data.media_ruolo[i + 1])}`).join(' · ')}) per chi ha giocato poco.
           <b className="text-slate-500"> Forma</b> riporta il fantavoto delle ultime 5 presenze.
-          Prezzi fissi: P {data.prezzi[1]} · D {data.prezzi[2]} · C {data.prezzi[3]} · A {data.prezzi[4]} crediti; i crediti del giocatore ceduto vengono recuperati.
+          Prezzi fissi: P {data.prezzi[1]} · D {data.prezzi[2]} · C {data.prezzi[3]} · A {data.prezzi[4]} crediti; i crediti del giocatore ceduto vengono recuperati. Il budget è vincolante: non si può operare se lo scambio lo supera.
         </p>
       </div>
     </div>

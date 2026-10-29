@@ -23,7 +23,9 @@
 //  - Budget (parametro MERCATO_BUDGET_CREDITI, default 470): crediti totali di
 //    ogni squadra. Il budget a disposizione e' il residuo di quanto non speso
 //    per la rosa (somma di NEW_GIOCATORI.crediti, che comprende anche il saldo
-//    degli scambi di mercato). Usato dalla pagina "Svincolati" (mr_analisi_svincolati).
+//    degli scambi di mercato). VINCOLANTE in mr_acquista: l'operazione e' rifiutata
+//    se, dopo lo scambio, i crediti della rosa supererebbero il budget.
+//    Mostrato anche nella pagina "Svincolati" (mr_analisi_svincolati).
 //  - Ogni operazione e' salvata in NEW_MERCATO_TRANSAZIONI.
 //  - Tempo limite per fantallenatore (MERCATO_TEMPO_LIMITE_ORE): scaduto,
 //    si inviano solleciti ogni MERCATO_SOLLECITO_ORE (la squadra NON viene
@@ -451,6 +453,15 @@ function mr_acquista(int $stagione, int $finestra, int $idSquadra, int $idAcq, i
 
         $prezzo = (int) $cfg["prezzi"][$ruolo];
         $recuperati = (int) $ced["crediti"];
+
+        // Budget vincolante: dopo l'operazione i crediti spesi per la rosa non devono superare il budget
+        $bud = mr_budget_squadra($stagione, $finestra, $idSquadra);
+        $residuoDopo = $bud["residuo"] + $recuperati - $prezzo;
+        if ($residuoDopo < 0) {
+            throw new MercatoErrore("Budget insufficiente: acquisto a $prezzo crediti, cedendo {$ced['descrizione']} ne recuperi $recuperati, "
+                . "ma il tuo residuo e' " . $bud["residuo"] . " su " . $bud["totale"] . " (mancano " . (-$residuoDopo) . " crediti). "
+                . "Scegli un giocatore da cedere pagato di piu'.", 400);
+        }
         $nomeAcq = mr_esc((string) $acq["descrizione"]);
         $nazAcq  = mr_esc((string) $acq["nazione"]);
         $nomeCed = mr_esc((string) $ced["descrizione"]);
@@ -554,6 +565,7 @@ function mr_stato(int $stagione, int $finestra, ?int $idRichiedente): array
         "prezzi" => $cfg["prezzi"],
         "budget" => $cfg["budget"],
         "tempo_limite_ore" => $cfg["tempo_limite_ore"],
+        "budget_squadra" => $idRichiedente !== null ? mr_budget_squadra($stagione, $finestra, $idRichiedente) : null,
         "sessioni_totali" => MR_SESSIONI_FINESTRA_1,
         "sessione_corrente" => null, "ordine" => [], "turno" => null,
         "tuo_turno" => false, "sessioni" => [], "classifica" => [],

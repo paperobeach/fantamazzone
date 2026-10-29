@@ -4,8 +4,8 @@
 //
 // FASE 3 - Gestione del contesto usato dagli articoli AI: profili dei
 // fantallenatori (NEW_PROFILI_FANTALLENATORE, chiave = nome utenza), episodi
-// storici della lega (NEW_EPISODI_LEGA) e contesto fisso / stile di scrittura
-// (NEW_CONTESTO_FISSO).
+// storici della lega (NEW_EPISODI_LEGA) e contesto fisso / stile di scrittura /
+// struttura degli articoli (NEW_CONTESTO_FISSO).
 //
 // Solo POST. Body: { stagione, utenza, password, tipo, azione, ... }
 // ACCESSO: utenza con NEW_UTENZE.abilita_ai = 'Y', password verificata
@@ -29,12 +29,16 @@
 //        episodio generico), attivo ('Y'/'N')
 //   azione "elimina"  Body: id
 //
-// tipo = "fisso"   (contesto fisso e stile: blocchi inseriti nel prompt di sistema)
-//   azione "elenco"   → { blocchi[], max_caratteri_contesto, max_caratteri_stile, stile_default }
-//   azione "salva"    Body: id (assente/0 = nuovo), tipo_blocco ('contesto'|'stile'),
+// tipo = "fisso"   (contesto fisso, stile e struttura: blocchi inseriti nel prompt di sistema)
+//   azione "elenco"   → { blocchi[], max_caratteri_contesto, max_caratteri_stile,
+//                         max_caratteri_struttura, stile_default }
+//   azione "salva"    Body: id (assente/0 = nuovo), tipo_blocco ('contesto'|'stile'|'struttura'),
 //        titolo, testo, ordine, attivo ('Y'/'N'). Il totale dei blocchi ATTIVI
 //        dello stesso tipo non può superare il tetto di caratteri.
 //        Se nessun blocco 'stile' è attivo si usa lo stile predefinito.
+//        I blocchi 'struttura' sono le indicazioni su come devono essere fatti gli
+//        articoli (es. una rubrica da presentare sempre); se non ce ne sono attivi
+//        gli articoli seguono la struttura di base.
 //   azione "elimina"  Body: id
 // ============================================================
 
@@ -80,6 +84,7 @@ if ($tipo === "fisso") {
     }
     $capContesto = (int) art_cfg("max_caratteri_contesto_fisso", 12000);
     $capStile    = 4000;
+    $capStruttura = (int) art_cfg("max_caratteri_struttura", 4000);
 
     $leggiBlocco = function (int $id): ?array {
         $r = query_one("SELECT id, tipo, titolo, testo, ordine, attivo, data_aggiornamento
@@ -97,6 +102,7 @@ if ($tipo === "fisso") {
             "blocchi"                => $righe,
             "max_caratteri_contesto" => $capContesto,
             "max_caratteri_stile"    => $capStile,
+            "max_caratteri_struttura" => $capStruttura,
             "stile_default"          => art_stile_default(),
         ]);
     }
@@ -111,7 +117,7 @@ if ($tipo === "fisso") {
     // salva (nuovo se id assente/0)
     $id        = (int) ($input["id"] ?? 0);
     $tipoBl    = strtolower(trim((string) ($input["tipo_blocco"] ?? "contesto")));
-    if (!in_array($tipoBl, ["contesto", "stile"], true)) api_error("Il campo 'tipo_blocco' deve essere 'contesto' o 'stile'", 400);
+    if (!in_array($tipoBl, ["contesto", "stile", "struttura"], true)) api_error("Il campo 'tipo_blocco' deve essere 'contesto', 'stile' o 'struttura'", 400);
     $titolo    = aiadmin_testo($input, "titolo", 100, true);
     $testo     = aiadmin_testo($input, "testo", 6000, true);
     $ordine    = max(0, min(9999, (int) ($input["ordine"] ?? 0)));
@@ -124,7 +130,7 @@ if ($tipo === "fisso") {
                             FROM NEW_CONTESTO_FISSO
                             WHERE tipo = '$tipoBl' AND attivo = 'Y' AND id <> $id");
         $totale = (int) $altri["c"] + mb_strlen($titolo) + mb_strlen($testo) + 6;
-        $cap = $tipoBl === "stile" ? $capStile : $capContesto;
+        $cap = $tipoBl === "stile" ? $capStile : ($tipoBl === "struttura" ? $capStruttura : $capContesto);
         if ($totale > $cap) {
             api_error("Troppo testo attivo ($totale caratteri su un massimo di $cap per i blocchi di tipo '$tipoBl'): accorcia o disattiva qualche blocco. Ogni carattere finisce nel prompt di ogni articolo e ne aumenta il costo.", 400);
         }

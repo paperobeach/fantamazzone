@@ -73,6 +73,12 @@ return [
         // Profili ed episodi → Contesto fisso). Ogni carattere finisce nel prompt
         // di ogni articolo: più è lungo, più costa.
         "max_caratteri_contesto_fisso" => 12000,
+        // Tetto di caratteri dei blocchi di "struttura" attivi (indicazioni su come devono
+        // essere fatti gli articoli: rubriche fisse, ordine delle sezioni...) e margine di
+        // token di output aggiunto al limite quando ce n'è almeno uno attivo, perché le
+        // rubriche richieste allungano il testo (default 4000 caratteri e 300 token).
+        "max_caratteri_struttura" => 4000,
+        "token_struttura"         => 300,
 
         // ── Immagini negli articoli ───────────────────────────────
         // Quante immagini della libreria proporre all'AI (le più pertinenti e le

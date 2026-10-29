@@ -13,8 +13,9 @@ import { Save, Trash2, Plus, ArrowLeft, CheckCircle2, AlertTriangle } from 'luci
 // personali: carattere, manie e rivalità di ogni fantallenatore (agganciati
 // al NOME UTENZA, che resta uguale tra le stagioni) ed episodi storici
 // della lega da richiamare quando c'entrano con la giornata e, nella scheda
-// "Contesto fisso", le informazioni stabili sulla lega e lo stile di scrittura
-// (sempre presenti nel prompt di ogni articolo).
+// "Contesto fisso", le informazioni stabili sulla lega, lo stile di scrittura e
+// le indicazioni di struttura degli articoli (rubriche da presentare sempre,
+// ordine delle sezioni...): sempre presenti nel prompt di ogni articolo.
 //
 // Accesso: solo utenze con NEW_UTENZE.abilita_ai = 'Y'; utenza e password
 // si inseriscono una volta e restano in memoria finché la pagina è aperta.
@@ -29,6 +30,22 @@ const EPISODIO_VUOTO = {
 }
 
 const FISSO_VUOTO = { id: 0, tipo_blocco: 'contesto', titolo: '', testo: '', ordine: 0, attivo: 'Y' }
+
+// Tipi di blocco del contesto fisso, nell'ordine in cui vengono mostrati
+const TIPI_FISSO = ['contesto', 'stile', 'struttura']
+const TITOLI_FISSO = {
+  contesto:  'Contesto fisso della lega',
+  stile:     'Stile di scrittura',
+  struttura: 'Struttura degli articoli',
+}
+const ETICHETTE_TESTO_FISSO = {
+  contesto:  "Testo (fatti stabili sulla lega: l'AI li usa solo quando c'entrano)",
+  stile:     "Come deve scrivere l'AI (tono, ritmo, trucchi, cose da evitare)",
+  struttura: "Come deve essere fatto l'articolo (rubriche da presentare sempre, ordine delle sezioni, taglio)",
+}
+const ESEMPIO_STRUTTURA =
+  "es. Rubrica «IL BOMBER DELLA PANCHINA»: in ogni articolo, subito prima delle pagelle, " +
+  "indica il giocatore rimasto in panchina con il voto più alto e di quale fantallenatore è."
 
 // Stima grossolana: circa 3,2 caratteri per token (italiano)
 const stimaToken = (caratteri) => Math.ceil(caratteri / 3.2)
@@ -373,8 +390,9 @@ export default function AiContesto() {
             <div className="space-y-5">
               <div className="flex items-start justify-between gap-4">
                 <p className="text-xs text-slate-500">
-                  Informazioni sempre valide sulla lega (storia, regole, personaggi, glossario, tormentoni collettivi)
-                  e lo stile di scrittura. Finiscono nel prompt di OGNI articolo, accanto a profili ed episodi:
+                  Informazioni sempre valide sulla lega (storia, regole, personaggi, glossario, tormentoni collettivi),
+                  lo stile di scrittura e la struttura degli articoli (rubriche da presentare sempre, ordine delle sezioni).
+                  Finiscono nel prompt di OGNI articolo, accanto a profili ed episodi:
                   più sono lunghe, più costa ogni generazione.
                 </p>
                 {fisso && (
@@ -385,16 +403,18 @@ export default function AiContesto() {
               </div>
               {fissoErrore && <Avviso tono="red">{fissoErrore}</Avviso>}
 
-              {fisso && ['contesto', 'stile'].map(t => {
+              {fisso && TIPI_FISSO.map(t => {
                 const lista = fisso.blocchi.filter(b => b.tipo === t)
                 const attivi = lista.filter(b => b.attivo === 'Y')
                 const car = attivi.reduce((n, b) => n + pesoBlocco(b), 0)
-                const cap = t === 'stile' ? fisso.max_caratteri_stile : fisso.max_caratteri_contesto
+                const cap = t === 'stile' ? fisso.max_caratteri_stile
+                          : t === 'struttura' ? (fisso.max_caratteri_struttura ?? 4000)
+                          : fisso.max_caratteri_contesto
                 return (
                   <div key={t} className="space-y-2">
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
                       <h4 className="text-sm font-semibold text-slate-200">
-                        {t === 'contesto' ? 'Contesto fisso della lega' : 'Stile di scrittura'}
+                        {TITOLI_FISSO[t]}
                       </h4>
                       <span className={`text-xs ${car > cap ? 'text-red-400' : 'text-slate-500'}`}>
                         {car} / {cap} caratteri attivi · circa {stimaToken(car)} token a ogni articolo
@@ -410,6 +430,21 @@ export default function AiContesto() {
                           <summary className="cursor-pointer text-slate-500 hover:text-slate-300 select-none">Vedi lo stile predefinito</summary>
                           <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-500">{fisso.stile_default}</pre>
                         </details>
+                      </div>
+                    )}
+                    {t === 'struttura' && attivi.length === 0 && (
+                      <div className="card p-4 text-xs text-slate-400 space-y-2">
+                        <p>
+                          Nessuna indicazione di struttura attiva: gli articoli seguono la struttura di base
+                          (titolo, sommario, corpo con intertitoli e pagelle finali; nell'edizione sfogliabile una pagina per
+                          ogni partita e il commento generale). Qui puoi aggiungere rubriche da presentare sempre,
+                          cambiare l'ordine delle sezioni o dare un taglio particolare.
+                        </p>
+                        <p className="text-slate-500">
+                          Nell'edizione sfogliabile le rubriche non legate a una singola partita vengono scritte nella pagina
+                          di commento generale. Le indicazioni valgono per ogni giornata: per un'informazione solo di una
+                          giornata usa le note di giornata nella pagina di generazione.
+                        </p>
                       </div>
                     )}
                     {lista.length === 0 && t === 'contesto' && (
@@ -452,20 +487,26 @@ export default function AiContesto() {
                     <select id="f-tipo" value={formF.tipo_blocco} onChange={e => setFormF(f => ({ ...f, tipo_blocco: e.target.value }))} className="fanta-input cursor-pointer">
                       <option value="contesto">Contesto della lega</option>
                       <option value="stile">Stile di scrittura</option>
+                      <option value="struttura">Struttura degli articoli</option>
                     </select>
                   </div>
                 </div>
                 <div>
                   <label htmlFor="f-testo" className="text-xs text-slate-600 mb-1 block">
-                    {formF.tipo_blocco === 'stile'
-                      ? 'Come deve scrivere l\'AI (tono, ritmo, trucchi, cose da evitare)'
-                      : 'Testo (fatti stabili sulla lega: l\'AI li usa solo quando c\'entrano)'}
+                    {ETICHETTE_TESTO_FISSO[formF.tipo_blocco] ?? ETICHETTE_TESTO_FISSO.contesto}
                   </label>
                   <textarea id="f-testo" rows={10} maxLength={6000} value={formF.testo}
+                    placeholder={formF.tipo_blocco === 'struttura' ? ESEMPIO_STRUTTURA : undefined}
                     onChange={e => setFormF(f => ({ ...f, testo: e.target.value }))} className="fanta-input leading-relaxed" />
                   <p className="text-[11px] text-slate-600 mt-1">
                     {formF.testo.length} / 6000 caratteri (circa {stimaToken(formF.testo.length)} token a ogni articolo se attivo)
                   </p>
+                  {formF.tipo_blocco === 'struttura' && (
+                    <p className="text-[11px] text-slate-600 mt-1">
+                      Descrivi ogni rubrica con nome, contenuto e posizione. Sono obbligatorie: l'AI le scrive in ogni articolo,
+                      usando solo i dati della giornata. Nell'edizione sfogliabile finiscono nella pagina di commento generale.
+                    </p>
+                  )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                   <div>

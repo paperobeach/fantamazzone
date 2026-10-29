@@ -27,8 +27,8 @@ import {
 // una pagina per partita e commento generale). In entrambi i casi si possono
 // aggiungere NOTE DI GIORNATA (fatti che l'AI non ha nei dati: la formazione
 // dimenticata, il sorpasso in classifica...), inserite nel prompt. Contesto
-// fisso, stile e immagini si gestiscono dalle pagine "Profili ed episodi" e
-// "Immagini".
+// fisso, stile, struttura degli articoli (rubriche da presentare sempre...) e
+// immagini si gestiscono dalle pagine "Profili ed episodi" e "Immagini".
 //
 // Due modalità di generazione:
 //   - "differita" (consigliata): l'ordine parte con una richiesta breve alle
@@ -288,6 +288,9 @@ export default function AiArticolo() {
             <li>
               Contesto fisso: {anteprima.riepilogo.contesto_fisso_blocchi} blocchi ({anteprima.riepilogo.contesto_fisso_caratteri} caratteri)
               {anteprima.riepilogo.stile_personalizzato ? ', stile personalizzato' : ', stile predefinito'}
+              {anteprima.riepilogo.struttura_blocchi > 0
+                ? <>, struttura personalizzata ({anteprima.riepilogo.struttura_blocchi} {anteprima.riepilogo.struttura_blocchi === 1 ? 'blocco' : 'blocchi'}, {anteprima.riepilogo.struttura_caratteri} caratteri)</>
+                : ', struttura di base'}
               {anteprima.riepilogo.contesto_giornata_caratteri > 0 && <> · note di giornata: {anteprima.riepilogo.contesto_giornata_caratteri} caratteri</>}.
             </li>
             <li>

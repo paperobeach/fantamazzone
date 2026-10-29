@@ -19,7 +19,7 @@
 //   art_episodi($conn, $utenze, $max)   episodi storici pertinenti
 //   art_costruisci($conn, $s, $g, $opz) prompt completo + riepilogo (formato
 //                                       'articolo' o 'edizione', note di giornata)
-//   art_contesto_fisso($conn)           blocchi di contesto fisso e di stile
+//   art_contesto_fisso($conn)           blocchi di contesto fisso, di stile e di struttura
 //   art_catalogo_immagini(...)          immagini proposte all'AI
 //   art_pagine_attese(...)              pagine di un'edizione sfogliabile
 //   art_hash($prompt)                   impronta del prompt
@@ -374,16 +374,19 @@ function art_episodi($conn, array $utenzeInGioco, int $max): array
 
 /**
  * Blocchi ATTIVI di NEW_CONTESTO_FISSO, in ordine, divisi per tipo:
- *   ["contesto" => [{id,titolo,testo}...], "stile" => [...]]
+ *   ["contesto" => [{id,titolo,testo}...], "stile" => [...], "struttura" => [...]]
+ * "struttura" = indicazioni della redazione su come devono essere fatti gli
+ * articoli (rubriche da presentare sempre, ordine delle sezioni, taglio...).
  * Vuoti se la tabella non esiste ancora.
  */
 function art_contesto_fisso($conn): array
 {
-    $out = ["contesto" => [], "stile" => []];
+    $out = ["contesto" => [], "stile" => [], "struttura" => []];
     if (!art_tabella_presente($conn, "NEW_CONTESTO_FISSO")) return $out;
     foreach (query_all("SELECT id, tipo, titolo, testo FROM NEW_CONTESTO_FISSO
                         WHERE attivo = 'Y' ORDER BY ordine, id") as $r) {
-        $out[$r["tipo"] === "stile" ? "stile" : "contesto"][] = $r;
+        $k = in_array($r["tipo"], ["stile", "struttura"], true) ? $r["tipo"] : "contesto";
+        $out[$k][] = $r;
     }
     return $out;
 }
@@ -569,6 +572,7 @@ function art_pagine_attese(array $dati, array $marcatoriSquadra, bool $conChampi
 /**
  * Prompt di sistema. Opzioni ($o):
  *   formato ('articolo'|'edizione'), stile, contesto (testo, può essere vuoto),
+ *   struttura (indicazioni di struttura, testo, può essere vuoto),
  *   con_immagini (bool), parole_pagina, parole_commento, max_inline
  */
 function art_system_prompt(int $paroleTarget, array $o): string
@@ -585,6 +589,14 @@ function art_system_prompt(int $paroleTarget, array $o): string
         $t .= "CONTESTO FISSO DELLA LEGA\nInformazioni stabili sulla lega, sempre valide: usale come sfondo, senza elencarle e solo quando c'entrano con i fatti.\n"
             . $o["contesto"] . "\n\n";
     }
+    $conStruttura = trim((string) ($o["struttura"] ?? "")) !== "";
+    if ($conStruttura) {
+        $t .= "INDICAZIONI DI STRUTTURA\n";
+        $t .= $edizione
+            ? "Indicazioni della redazione su come deve essere fatta l'edizione (rubriche e sezioni da presentare, ordine, taglio). Rispettale ogni volta. Le rubriche e le sezioni che non riguardano una singola partita vanno scritte dentro la pagina COMMENTO, come intertitoli in MAIUSCOLO, prima delle PAGELLE salvo diversa indicazione; le indicazioni sul taglio delle pagine di partita valgono per tutte le pagine di partita. Non creare pagine «@@» oltre a quelle elencate.\n"
+            : "Indicazioni della redazione su come deve essere fatto l'articolo (rubriche e sezioni da presentare, ordine, taglio). Rispettale ogni volta: le rubriche richieste vanno scritte nel corpo dell'articolo, ciascuna con il suo intertitolo in MAIUSCOLO.\n";
+        $t .= $o["struttura"] . "\n\n";
+    }
 
     $t .= "REGOLE\n";
     $regole = [];
@@ -599,6 +611,9 @@ function art_system_prompt(int $paroleTarget, array $o): string
     } else {
         $regole[] = "Lunghezza: circa " . $paroleTarget . " parole.";
         $regole[] = "Struttura: titolo, sommario di una o due righe, corpo dell'articolo con qualche intertitolo breve, e una sezione finale «PAGELLE» con un voto in decimi e un commento di una riga per ogni fantallenatore che ha giocato.";
+    }
+    if ($conStruttura) {
+        $regole[] = "Le INDICAZIONI DI STRUTTURA sono obbligatorie e, per ordine e presenza delle sezioni, prevalgono sulla struttura di base qui sopra; non prevalgono però sul FORMATO DI OUTPUT né sulle regole sui dati. Ogni rubrica richiesta va scritta tutte le volte, in forma concisa e in aggiunta alla lunghezza indicata; se i dati non bastano a riempirla, falla con ciò che c'è, senza inventare nulla.";
     }
     if ($conImg) {
         $regole[] = "Nel messaggio c'è un CATALOGO IMMAGINI: scegli le immagini SOLO tra quelle elencate (usa l'id tra parentesi quadre), in base a descrizione, tag, tono e persone indicate, e solo se c'entrano davvero con ciò che racconti. Ogni immagine al massimo una volta; se nessuna è adatta scrivi nessuna. Non dare per vero nulla che non sia nella descrizione.";
@@ -690,6 +705,10 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
     $fisso = art_contesto_fisso($conn);
     $contestoFisso = art_testo_blocchi($fisso["contesto"], (int) art_cfg("max_caratteri_contesto_fisso", 12000));
     $stile = $fisso["stile"] ? art_testo_blocchi($fisso["stile"], 4000) : art_stile_default();
+    // Indicazioni di struttura (rubriche fisse, ordine delle sezioni...): vuote se nessun blocco è attivo
+    $struttura = $fisso["struttura"] ? art_testo_blocchi($fisso["struttura"], (int) art_cfg("max_caratteri_struttura", 4000)) : "";
+    // Margine di token per le rubriche richieste: senza, il testo rischia di essere troncato
+    $tokStruttura = $struttura !== "" ? max(0, (int) art_cfg("token_struttura", 300)) : 0;
 
     // Catalogo immagini
     $catalogo = art_catalogo_immagini($conn, $partecipanti, (int) art_cfg("max_immagini_catalogo", 60));
@@ -710,19 +729,21 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         $maxToken = (int) art_cfg("token_base_edizione", 450)
                   + $nPartite * (int) art_cfg("token_per_pagina", 300)
                   + (int) art_cfg("token_commento", 450)
-                  + count($partecipanti) * (int) art_cfg("token_per_pagella", 45);
+                  + count($partecipanti) * (int) art_cfg("token_per_pagella", 45)
+                  + $tokStruttura;
         $maxToken = min($maxToken, (int) art_cfg("max_token_edizione", 8000));
         $tokTipico = (int) art_cfg("token_output_tipico_edizione", 0);
         if ($tokTipico <= 0) $tokTipico = (int) round($maxToken * 0.75);
+        else $tokTipico += (int) round($tokStruttura * 0.75);
     } else {
-        $maxToken = (int) art_cfg("max_token", 1800);
-        $tokTipico = (int) art_cfg("token_output_tipico", 1100);
+        $maxToken = (int) art_cfg("max_token", 1800) + $tokStruttura;
+        $tokTipico = (int) art_cfg("token_output_tipico", 1100) + (int) round($tokStruttura * 0.75);
     }
     $maxInline = (int) art_cfg("max_immagini_inline", 2);
 
     $system = art_system_prompt($parole, [
         "formato" => $formato, "stile" => $stile, "contesto" => $contestoFisso,
-        "con_immagini" => $conImmagini, "parole_pagina" => $parolePagina,
+        "struttura" => $struttura, "con_immagini" => $conImmagini, "parole_pagina" => $parolePagina,
         "parole_commento" => $paroleCommento, "max_inline" => $maxInline,
     ]);
 
@@ -753,6 +774,8 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         "system"            => $system,
         "messages"          => [["role" => "user", "content" => $testo]],
         "max_token"         => $maxToken,
+        "struttura"         => $struttura !== "",
+        "token_struttura"   => $tokStruttura,
         "n_partecipanti"    => count($partecipanti),
         "token_tipico"      => $tokTipico,
         "parole_target"     => $formato === "edizione" ? $parolePagina : $parole,
@@ -773,6 +796,8 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
             "contesto_fisso_blocchi"    => count($fisso["contesto"]),
             "contesto_fisso_caratteri"  => mb_strlen($contestoFisso),
             "stile_personalizzato"      => count($fisso["stile"]) > 0,
+            "struttura_blocchi"         => count($fisso["struttura"]),
+            "struttura_caratteri"       => mb_strlen($struttura),
             "contesto_giornata_caratteri" => mb_strlen($contestoGiornata),
             "immagini_catalogo"         => count($catalogo["ids"]),
             "immagini_attive"           => $catalogo["attive"],
@@ -825,7 +850,9 @@ function art_piano_chiamate(array $prompt): array
     $perChiamata = max(1, (int) art_cfg("pagine_per_chiamata", 3));
     $tokPagina   = (int) art_cfg("token_per_pagina", 300);
     $tokBase     = (int) art_cfg("token_base_edizione", 450);
-    $tokCommento = (int) art_cfg("token_commento", 450) + (int) ($prompt["n_partecipanti"] ?? 0) * (int) art_cfg("token_per_pagella", 45);
+    // Le rubriche richieste dalla struttura vanno nella pagina COMMENTO: il margine di token è suo
+    $tokCommento = (int) art_cfg("token_commento", 450) + (int) ($prompt["n_partecipanti"] ?? 0) * (int) art_cfg("token_per_pagella", 45)
+                 + (int) ($prompt["token_struttura"] ?? 0);
 
     $fasi = [];
     foreach (array_chunk($partite, $perChiamata) as $i => $gruppo) {
@@ -846,8 +873,12 @@ function art_piano_chiamate(array $prompt): array
     return $fasi;
 }
 
-/** Istruzione aggiunta al messaggio per una fase. */
-function art_istruzione_fase(array $fase, bool $conImmagini, string $giaScritto): string
+/**
+ * Istruzione aggiunta al messaggio per una fase. Con $conStruttura (ci sono
+ * indicazioni di struttura attive) precisa dove vanno scritte le rubriche
+ * fisse: solo nella pagina COMMENTO, così non si ripetono a ogni fase.
+ */
+function art_istruzione_fase(array $fase, bool $conImmagini, string $giaScritto, bool $conStruttura = false): string
 {
     if (!empty($fase["commento"])) {
         $quali = "SOLO la pagina «@@ COMMENTO» (commento generale e sezione PAGELLE), che inizia direttamente con la riga «@@ COMMENTO»";
@@ -859,6 +890,11 @@ function art_istruzione_fase(array $fase, bool $conImmagini, string $giaScritto)
     }
     $t  = "\n\nISTRUZIONE PER QUESTA RICHIESTA\nL'edizione viene scritta in più richieste successive. In questa scrivi $quali. ";
     $t .= "Non scrivere le altre pagine: saranno richieste a parte. Rispetta il formato di output e le regole già indicate.";
+    if ($conStruttura) {
+        $t .= !empty($fase["commento"])
+            ? " In questa pagina inserisci anche le rubriche e le sezioni richieste dalle INDICAZIONI DI STRUTTURA che non riguardano una singola partita."
+            : " Non scrivere qui le rubriche o le sezioni fisse del commento generale: vanno solo nella pagina COMMENTO. Applica alle pagine di partita solo le indicazioni di struttura che le riguardano.";
+    }
     if ($giaScritto !== "") {
         $t .= "\n\nPAGINE GIÀ SCRITTE (per coerenza di tono: non ripetere battute, paragoni, aneddoti"
             . ($conImmagini ? " né immagini" : "") . " già usati, e non riscriverle):\n" . $giaScritto;
@@ -888,7 +924,7 @@ function art_genera_a_fasi(string $modello, array $prompt, array $fasi, ?int $ti
 
     foreach ($fasi as $i => $fase) {
         $msg = $base;
-        if (empty($fase["unica"])) $msg .= art_istruzione_fase($fase, $conImmagini, $testo);
+        if (empty($fase["unica"])) $msg .= art_istruzione_fase($fase, $conImmagini, $testo, !empty($prompt["struttura"]));
         $messaggi = [["role" => "user", "content" => $msg]];
 
         $gen = null;

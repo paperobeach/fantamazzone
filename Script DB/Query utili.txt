@@ -1,4 +1,4 @@
-statistiche live per STAGIONE, GIORNATA, PARTITA
+---statistiche live per STAGIONE, GIORNATA, PARTITA
 
 SELECT A.*, B.api_nome, D.squadra_casa, D.squadra_ospite FROM `NEW_API_STATISTICHE` A
 INNER JOIN NEW_API_MAPPING_GIOCATORI B ON A.stagione = B.stagione AND A.api_player_id = B.api_player_id

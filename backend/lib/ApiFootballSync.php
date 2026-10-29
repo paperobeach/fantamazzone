@@ -126,15 +126,22 @@ function af_posizione_estesa(?string $p): string
  *   presente = minuti > 0
  *   voto_api = rating di API-Football: NON è il fantavoto
  *
- * @param array $s    primo elemento di "statistics" del giocatore
+ * I rigori (segnati / sbagliati) arrivano da "statistics.penalty", ma API-Football a volte lascia quel
+ * blocco vuoto (missed = null, scored = 0) anche se negli eventi il rigore c'è ("Goal" / "Missed Penalty"
+ * e "Goal" / "Penalty"). Per questo si prende il valore MAGGIORE tra statistiche ed eventi.
+ *
+ * @param array $s        primo elemento di "statistics" del giocatore
  * @param int   $autogol  autogol del giocatore ricavati dagli eventi
+ * @param int   $rigSegEv rigori segnati dal giocatore ricavati dagli eventi
+ * @param int   $rigSbaEv rigori sbagliati dal giocatore ricavati dagli eventi
  */
-function af_converti_giocatore(array $s, int $autogol = 0): array
+function af_converti_giocatore(array $s, int $autogol = 0, int $rigSegEv = 0, int $rigSbaEv = 0): array
 {
     $g = $s["games"] ?? [];
     $minuti = (int) ($g["minutes"] ?? 0);
     $tot    = (int) ($s["goals"]["total"] ?? 0);
-    $rigSeg = (int) ($s["penalty"]["scored"] ?? 0);
+    $rigSeg = max((int) ($s["penalty"]["scored"] ?? 0), $rigSegEv);
+    $rigSba = max((int) ($s["penalty"]["missed"] ?? 0), $rigSbaEv);
     $portiere = strtoupper((string) ($g["position"] ?? "")) === "G";
     $giallo = (int) ($s["cards"]["yellow"] ?? 0);
     $rosso  = (int) ($s["cards"]["red"] ?? 0);
@@ -150,7 +157,8 @@ function af_converti_giocatore(array $s, int $autogol = 0): array
         "gf"        => max(0, $tot - $rigSeg),
         "gs"        => $portiere ? (int) ($s["goals"]["conceded"] ?? 0) : 0,
         "rp"        => (int) ($s["penalty"]["saved"] ?? 0),
-        "rs"        => (int) ($s["penalty"]["missed"] ?? 0),
+        "parate"    => (int) ($s["goals"]["saves"] ?? 0),   // parate totali (serve a limitare i rigori parati ricavati dagli eventi)
+        "rs"        => $rigSba,
         "rf"        => $rigSeg,
         "au"        => $autogol,
         "amm"       => $amm,
@@ -173,10 +181,29 @@ function af_righe_statistiche(array $fx, ?array $giocatoriFallback = null, ?arra
     $eventi  = (isset($fx["events"]) && is_array($fx["events"])) ? $fx["events"] : ($eventiFallback ?? []);
 
     $autogol = [];
+    $rigSegEv = [];   // rigori segnati per giocatore (da eventi)
+    $rigSbaEv = [];   // rigori sbagliati per giocatore (da eventi)
+    $rigParCand = []; // api_team_id del tiratore => rigori sbagliati dichiarati "saved" negli eventi
     foreach ($eventi as $e) {
-        if (($e["type"] ?? "") === "Goal" && ($e["detail"] ?? "") === "Own Goal" && !empty($e["player"]["id"])) {
-            $id = (int) $e["player"]["id"];
+        if (($e["type"] ?? "") !== "Goal" || empty($e["player"]["id"])) continue;
+        $id = (int) $e["player"]["id"];
+        $detail = (string) ($e["detail"] ?? "");
+        if ($detail === "Own Goal") {
             $autogol[$id] = ($autogol[$id] ?? 0) + 1;
+            continue;
+        }
+        // I rigori della serie finale (dopo i supplementari) non contano come rigori di gioco
+        if (stripos((string) ($e["comments"] ?? ""), "shootout") !== false) continue;
+        if ($detail === "Penalty")             $rigSegEv[$id] = ($rigSegEv[$id] ?? 0) + 1;
+        elseif ($detail === "Missed Penalty") {
+            $rigSbaEv[$id] = ($rigSbaEv[$id] ?? 0) + 1;
+            // Rigore PARATO solo se i commenti lo dichiarano esplicitamente ("saved"): con commenti
+            // vuoti o diversi non si può distinguere da un rigore fuori/sul palo
+            $com = (string) ($e["comments"] ?? "");
+            if (!empty($e["team"]["id"]) && preg_match('/saved|parat/i', $com) === 1) {
+                $tiratore = (int) $e["team"]["id"];
+                $rigParCand[$tiratore] = ($rigParCand[$tiratore] ?? 0) + 1;
+            }
         }
     }
 
@@ -187,7 +214,7 @@ function af_righe_statistiche(array $fx, ?array $giocatoriFallback = null, ?arra
             $id = (int) ($p["player"]["id"] ?? 0);
             $s  = $p["statistics"][0] ?? null;
             if ($id <= 0 || !is_array($s)) continue;
-            $riga = af_converti_giocatore($s, $autogol[$id] ?? 0);
+            $riga = af_converti_giocatore($s, $autogol[$id] ?? 0, $rigSegEv[$id] ?? 0, $rigSbaEv[$id] ?? 0);
             $riga["api_player_id"] = $id;
             $riga["api_team_id"]   = $teamId;
             $riga["nome"]          = (string) ($p["player"]["name"] ?? "");
@@ -196,7 +223,37 @@ function af_righe_statistiche(array $fx, ?array $giocatoriFallback = null, ?arra
             $righe[] = $riga;
         }
     }
-    return af_correggi_gol_subiti($righe);
+    return af_correggi_gol_subiti(af_attribuisci_rigori_parati($righe, $rigParCand));
+}
+
+/**
+ * Rigori PARATI ricavati dagli eventi. Gli eventi "Missed Penalty" non dicono chi ha parato, quindi
+ * l'attribuzione si fa solo per i rigori i cui commenti dichiarano esplicitamente "saved" e solo quando
+ * la squadra avversaria al tiratore ha mandato in campo UN SOLO portiere (con due portieri non si può
+ * stabilire a chi vada). Il numero è limitato alle parate
+ * totali del portiere ("goals.saves"): un rigore parato è sempre anche una parata, uno fuori o sul
+ * palo no. Si prende il valore maggiore tra il dato API ("penalty.saved") e quello ricavato.
+ * Funzione PURA: restituisce le righe corrette.
+ *
+ * @param array<int,array> $righe
+ * @param array<int,int>   $candidati  api_team_id del tiratore => rigori sbagliati dichiarati "saved" negli eventi
+ */
+function af_attribuisci_rigori_parati(array $righe, array $candidati): array
+{
+    if (!$candidati) return $righe;
+    $portieri = [];   // api_team_id => indici delle righe dei portieri scesi in campo
+    foreach ($righe as $i => $r) {
+        if ($r["posizione"] === "Goalkeeper" && $r["presente"] === "Y") $portieri[(int) $r["api_team_id"]][] = $i;
+    }
+    foreach ($candidati as $tiratore => $n) {
+        $difensori = array_keys(array_filter($portieri, fn($_, $t) => (int) $t !== (int) $tiratore, ARRAY_FILTER_USE_BOTH));
+        if (count($difensori) !== 1) continue;
+        $indici = $portieri[$difensori[0]];
+        if (count($indici) !== 1) continue;
+        $i = $indici[0];
+        $righe[$i]["rp"] = max((int) $righe[$i]["rp"], min((int) $n, (int) $righe[$i]["parate"]));
+    }
+    return $righe;
 }
 
 /**

@@ -98,6 +98,12 @@ export const getAlboOro = () => get('albo_oro.php')
 
 export const getCalendario = (stagione) => get('calendario.php', { stagione })
 
+// Incidenza della fortuna del calendario (punti reali vs punti attesi
+// su tutte le permutazioni del calendario; simulazioni = n. calendari
+// casuali del Monte Carlo, opzionale)
+export const getFortunaCalendario = (stagione, simulazioni = null) =>
+  get('fortuna_calendario.php', { stagione, ...(simulazioni ? { simulazioni } : {}) })
+
 // Giornata di riferimento per l'inserimento delle formazioni: la prima
 // giornata successiva all'ultima giornata già chiusa della stagione.
 export const getGiornataCorrente = (stagione) => get('giornata_corrente.php', { stagione })

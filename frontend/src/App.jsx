@@ -10,6 +10,7 @@ import { lazy, Suspense, useState } from 'react'
 
 const Classifica  = lazy(() => import('./pages/Classifica'))
 const Calendario  = lazy(() => import('./pages/Calendario'))
+const FortunaCalendario = lazy(() => import('./pages/FortunaCalendario'))
 const LiveGiornata = lazy(() => import('./pages/LiveGiornata'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
@@ -117,6 +118,7 @@ function AppShell() {
                   <Route path="/"              element={<Home />} />
                   <Route path="/classifica"    element={<Classifica />} />
                   <Route path="/calendario"   element={<Calendario />} />
+                  <Route path="/fortuna-calendario" element={<FortunaCalendario />} />
                   <Route path="/live"         element={<LiveGiornata />} />
                   <Route path="/squadre"      element={<Squadre />} />
                   <Route path="/squadre/:id"  element={<SquadraDetail />} />

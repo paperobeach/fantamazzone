@@ -58,6 +58,7 @@ $database = "my_tuonome";       // database Altervista = my_ + nome sito
 | `api/sistema.php?stagione=` | stagione | Parametri configurazione |
 | `api/generale.php?stagione=` | stagione | Classifica generale |
 | `api/calendario.php?stagione=` | stagione | Calendario + risultati |
+| `api/fortuna_calendario.php?stagione=` | stagione, [simulazioni=200-10000] | Fortuna del calendario (punti reali vs attesi, Monte Carlo) |
 | `api/squadre.php?stagione=` | stagione | Tutte le squadre |
 | `api/squadre.php?stagione=&id=` | stagione, id | Squadra + rosa |
 | `api/dettaglio_partita.php?stagione=&giornata=` | stagione, giornata, [id_squadra] | Dettaglio partite (voti giocatori, modificatori) |

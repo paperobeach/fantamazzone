@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import {
   Trophy, Calendar, Users,
   Star, Shield, LogOut, UserPlus,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -24,6 +24,7 @@ const NAV_SECTIONS = [
       { to: '/calendario',   icon: Calendar,  label: 'Calendario'    },
       { to: '/classifica',   icon: Trophy,    label: 'Classifica'    },
       { to: '/top-flop',     icon: Star,      label: 'Top / Flop 11' },
+      { to: '/fortuna-calendario', icon: Shuffle, label: 'Fortuna del calendario' },
     ],
   },
   {

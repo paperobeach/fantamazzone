@@ -79,7 +79,7 @@ export function RosterRow({
         <IncontroSerieA player={player} />
       </div>
 
-      {!readOnly && (
+      {!readOnly && (onMoveOther || onMoveUp || onMoveDown) && (
         <div className="flex items-center flex-shrink-0">
           {onMoveOther && (
             <button
@@ -91,6 +91,7 @@ export function RosterRow({
               <MoveOtherIcon className="w-3.5 h-3.5" />
             </button>
           )}
+          {onMoveUp && onMoveDown && (
           <div className="flex flex-col -my-1">
             <button
               type="button"
@@ -111,6 +112,7 @@ export function RosterRow({
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
           </div>
+          )}
         </div>
       )}
     </div>
@@ -214,10 +216,10 @@ export function FormationBuilder({
 
     // Rimuove il giocatore in arrivo da panchina e tribuna (da qualunque
     // delle due provenisse) e, se lo slot era occupato, rimanda
-    // l'occupante precedente in panchina.
+    // l'occupante precedente in coda alla panchina.
     let nextPanchina = panchinaIds.filter(id => id !== playerId)
     const nextTribuna = tribunaIds.filter(id => id !== playerId)
-    if (outgoingId) nextPanchina = [outgoingId, ...nextPanchina]
+    if (outgoingId) nextPanchina = [...nextPanchina, outgoingId]
 
     commit(nextSlots, nextPanchina, nextTribuna)
     setSelectedId(null)
@@ -229,7 +231,7 @@ export function FormationBuilder({
     if (!playerId) return
     const nextSlots = [...slotPlayers]
     nextSlots[slotIndex] = null
-    commit(nextSlots, [playerId, ...panchinaIds], tribunaIds)
+    commit(nextSlots, [...panchinaIds, playerId], tribunaIds)
     setSelectedId(null)
   }
 
@@ -264,13 +266,11 @@ export function FormationBuilder({
       return
     }
 
-    // Se il giocatore selezionato e quello appena cliccato si trovano
-    // nello stesso elenco (entrambi in panchina, o entrambi in tribuna),
-    // un secondo click li scambia di posizione invece di limitarsi a
-    // spostare la selezione: è il modo per scambiare due giocatori in
-    // panchina (o in tribuna) con un semplice click, senza drag&drop.
+    // Entrambi in panchina: il giocatore selezionato viene posizionato
+    // subito sotto quello appena cliccato. Entrambi in tribuna: un secondo
+    // click li scambia di posizione. Senza drag&drop.
     if (panchinaIds.includes(selectedId) && panchinaIds.includes(id)) {
-      swapInList(panchinaIds, selectedId, id, arr => onChange?.(titolariIds, arr, tribunaIds))
+      placeBelowInList(panchinaIds, selectedId, id, arr => onChange?.(titolariIds, arr, tribunaIds))
       setSelectedId(null)
       return
     }
@@ -297,8 +297,17 @@ export function FormationBuilder({
     apply(arr)
   }
 
+  // Sposta `movingId` subito sotto `targetId` nello stesso elenco e ne
+  // notifica il nuovo ordine tramite `apply`.
+  function placeBelowInList(list, movingId, targetId, apply) {
+    if (!list.includes(movingId) || !list.includes(targetId)) return
+    const arr = list.filter(id => id !== movingId)
+    arr.splice(arr.indexOf(targetId) + 1, 0, movingId)
+    apply(arr)
+  }
+
   // ── Sposta un giocatore (da campo, panchina o tribuna) nell'elenco
-  //    "panchina" o "tribuna", in testa all'elenco di destinazione ──
+  //    "panchina" (in coda) o "tribuna" (in testa) ──
   function moveToList(playerId, target) {
     if (readOnly) return
     const player = byId[playerId]
@@ -315,7 +324,7 @@ export function FormationBuilder({
     const restPanchina = panchinaIds.filter(id => id !== playerId)
     const restTribuna = tribunaIds.filter(id => id !== playerId)
 
-    const nextPanchina = target === 'panchina' ? [playerId, ...restPanchina] : restPanchina
+    const nextPanchina = target === 'panchina' ? [...restPanchina, playerId] : restPanchina
     const nextTribuna  = target === 'tribuna'  ? [playerId, ...restTribuna]  : restTribuna
 
     commit(nextSlots, nextPanchina, nextTribuna)
@@ -356,8 +365,8 @@ export function FormationBuilder({
     setSelectedId(null)
     setDropdownSlot(null)
     if (eccedenti.length > 0) {
-      // I giocatori in eccesso tornano in cima alla panchina.
-      onChange?.(kept, [...eccedenti, ...panchinaIds], tribunaIds)
+      // I giocatori in eccesso tornano in coda alla panchina.
+      onChange?.(kept, [...panchinaIds, ...eccedenti], tribunaIds)
     }
     onModuloChange?.(newModulo)
   }
@@ -497,7 +506,7 @@ export function FormationBuilder({
           <div className="mt-2 h-[34px] overflow-hidden">
             {selectedId ? (
               <p className="text-[11px] leading-tight text-grass-400">
-                Giocatore selezionato: {byId[selectedId]?.descrizione}. Tocca uno slot per posizionarlo, o un altro giocatore per scambiarli.
+                Giocatore selezionato: {byId[selectedId]?.descrizione}. Tocca uno slot per posizionarlo{panchinaIds.includes(selectedId) ? ', o un giocatore in panchina per metterlo subito sotto di lui.' : ', o un altro giocatore per scambiarli.'}
               </p>
             ) : !moduloAttesoOk ? (
               <p className="text-[11px] leading-tight text-gold-400">
@@ -555,8 +564,6 @@ export function FormationBuilder({
                 }}
                 onDragEnd={() => { setDraggedBenchIdx(null); setDraggingId(null) }}
                 onClick={() => handleListClick(p.id)}
-                onMoveUp={() => movePanchina(idx, idx - 1)}
-                onMoveDown={() => movePanchina(idx, idx + 1)}
                 onMoveOther={() => moveToList(p.id, 'tribuna')}
                 moveOtherIcon={ArrowRight}
                 moveOtherTitle="Sposta in tribuna"
@@ -567,7 +574,7 @@ export function FormationBuilder({
             Trascina un giocatore in campo, selezionalo con un click, oppure clicca direttamente
             su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo (anche dalla tribuna).
             Trascina un giocatore su un altro per riordinare la panchina, o sulla tribuna per escluderlo.
-            Puoi anche selezionarne uno con un click e poi cliccarne un altro in panchina per scambiarli.
+            Puoi anche selezionarne uno con un click e poi cliccarne un altro in panchina: il primo verrà posizionato subito sotto il secondo.
           </p>
         </div>
 

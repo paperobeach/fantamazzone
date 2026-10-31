@@ -1,15 +1,30 @@
 <?php
 // ============================================================
 // api/dashboard_ruoli.php
-// GET ?stagione=2026&id_squadra=3&ruolo=1..4&competizione=CAMP|CHAMP
+// GET ?stagione=2026&id_squadra=3&ruolo=1..4&competizione=CAMP|CHAMP&vista=SCHIERATI|ROSA
 //
 // Area "Statistiche" della Dashboard squadra, sezione "Analisi per ruolo",
 // per UN reparto (1 = portieri, 2 = difensori, 3 = centrocampisti,
 // 4 = attaccanti) e UNA competizione (campionato = default, Champions).
 //
-// Fonte: NEW_VOTI / NEW_VOTI_CHAMP (righe con giocata = 1: i giocatori che
-// hanno concorso al punteggio della giornata, sostituti entrati inclusi) e
-// NEW_RISULTATI / NEW_RISULTATI_CHAMP per i modificatori di squadra.
+// VISTA (parametro `vista`, default SCHIERATI)
+//   SCHIERATI  fonte: NEW_VOTI / NEW_VOTI_CHAMP (righe con giocata = 1: i
+//              giocatori che hanno concorso al punteggio della giornata,
+//              sostituti entrati inclusi) e NEW_RISULTATI / NEW_RISULTATI_CHAMP
+//              per i modificatori di squadra.
+//   ROSA       tutti i giocatori della rosa nella giornata, schierati o no
+//              (panchina, sostituiti, tribuna) purché con un voto reale; un
+//              giocatore conta solo nelle giornate in cui era nella rosa
+//              della squadra (storico: NEW_ROSA_STORICO, lib/RosaStorico.php;
+//              un ceduto resta nella squadra precedente). Voti da
+//              NEW_VOTI_SERIE_A, fantavoto con le regole bonus/malus della
+//              stagione (lib/StatisticheRosa.php). Il modificatore di reparto
+//              dipende dallo schieramento e in questa vista non è calcolato
+//              (modificatore = null). Le giornate considerate sono quelle
+//              giocate dalla squadra nella competizione.
+//   Con `vista` = ROSA, se mancano i voti Serie A o le regole di calcolo
+//   della stagione la risposta contiene `non_disponibile` (messaggio).
+//   Nella vista ROSA il campo `schierati` indica i giocatori CON VOTO.
 //
 // Definizioni (le stesse della UI):
 //   voto NETTO  = voto base del giocatore, senza bonus/malus (NEW_VOTI.voto)
@@ -36,6 +51,7 @@ require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/ChampionsCalendario.php";
 require_once __DIR__ . "/lib/DashboardSquadra.php";
+require_once __DIR__ . "/lib/StatisticheRosa.php";
 
 $stagione  = param_int("stagione");
 $idSquadra = param_int("id_squadra");
@@ -44,11 +60,15 @@ $comp      = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP
 if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Competizione non valida (CAMP o CHAMP)", 400);
 if ($ruolo < 1 || $ruolo > 4) api_error("Ruolo non valido (1 = P, 2 = D, 3 = C, 4 = A)", 400);
 $champ = $comp === "CHAMP";
+$vista = strtoupper(trim((string) (param_str("vista", false) ?: "SCHIERATI")));
+if (!in_array($vista, ["SCHIERATI", "ROSA"], true)) api_error("Vista non valida (SCHIERATI o ROSA)", 400);
+$rosa = $vista === "ROSA";
 
 $tabVoti  = $champ ? "NEW_VOTI_CHAMP" : "NEW_VOTI";
 $tabRis   = $champ ? "NEW_RISULTATI_CHAMP" : "NEW_RISULTATI";
 $colSqRis = $champ ? "squadra" : "id_squadra";
-$colMod   = [2 => "modificatore", 3 => "mod_cc", 4 => "mod_att"][$ruolo] ?? null;
+// Il modificatore dipende dallo schieramento: non ha senso sulla rosa intera
+$colMod   = $rosa ? null : ([2 => "modificatore", 3 => "mod_cc", 4 => "mod_att"][$ruolo] ?? null);
 
 // ── Giornate pubbliche ───────────────────────────────────────
 
@@ -122,12 +142,24 @@ if ($colMod !== null) {
 
 // ── Voti del reparto ─────────────────────────────────────────
 
-$righe = query_all("SELECT v.giornata, v.id_giocatore, v.voto, v.totale, v.reti, v.retis,
-                           g.descrizione AS nome, g.ruolo AS ruolo_g
-                    FROM $tabVoti v
-                    LEFT JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
-                    WHERE v.stagione = $stagione AND v.id_squadra = $idSquadra AND v.giocata = 1
-                    ORDER BY v.giornata");
+if ($rosa) {
+    try {
+        $righe = sr_voti_rosa($stagione, $idSquadra, $champ, array_keys($partitaPer));
+    } catch (StatisticheRosaNonDisponibili $e) {
+        api_success([
+            "stagione" => $stagione, "competizione" => $comp, "ruolo" => $ruolo, "vista" => $vista,
+            "partite" => 0, "non_disponibile" => $e->getMessage(),
+        ]);
+    }
+    usort($righe, fn($a, $b) => $a["giornata"] <=> $b["giornata"]);
+} else {
+    $righe = query_all("SELECT v.giornata, v.id_giocatore, v.voto, v.totale, v.reti, v.retis,
+                               g.descrizione AS nome, g.ruolo AS ruolo_g
+                        FROM $tabVoti v
+                        LEFT JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = v.id_giocatore AND g.stagione = v.stagione
+                        WHERE v.stagione = $stagione AND v.id_squadra = $idSquadra AND v.giocata = 1
+                        ORDER BY v.giornata");
+}
 
 $portiere = $ruolo === 1;
 $perGiornata = [];   // giornata => [giocatori del reparto]
@@ -230,7 +262,7 @@ foreach ($giocatori as $gp) {
 }
 usort($elencoGiocatori, fn($a, $b) => [$b["presenze"], $b["gol"]] <=> [$a["presenze"], $a["gol"]]);
 
-// ── Numero di giocatori schierati ────────────────────────────
+// ── Numero di giocatori schierati (vista ROSA: con voto) ─────
 
 ksort($perN);
 $distribuzioneN = [];
@@ -267,6 +299,7 @@ api_success([
     "stagione"     => $stagione,
     "competizione" => $comp,
     "ruolo"        => $ruolo,
+    "vista"        => $vista,
     "partite"      => $partiteN,
     "riepilogo"    => [
         "media_netto"    => dr_media($mediePartitaNetto),

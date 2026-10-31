@@ -16,6 +16,11 @@ const REPARTI = [
   { value: '4', label: 'Attaccanti' },
 ]
 
+const VISTE = [
+  { value: 'SCHIERATI', label: 'Schierati' },
+  { value: 'ROSA', label: 'Tutta la rosa' },
+]
+
 const TOOLTIP_STYLE = { background: '#0f1f2e', border: '1px solid #ffffff1a', borderRadius: 8, fontSize: 12 }
 const ASSE = { stroke: '#64748b', tick: { fontSize: 11 } }
 
@@ -88,8 +93,10 @@ function LineaVoti({ giornate }) {
 
 // ── Matrice giocatore × giornata ─────────────────────────────
 
-function MatriceGiocatori({ giornate, giocatori, portiere }) {
-  if (!giocatori?.length) return <Vuoto>Nessun giocatore del reparto ha concorso al punteggio.</Vuoto>
+function MatriceGiocatori({ giornate, giocatori, portiere, rosa }) {
+  if (!giocatori?.length) {
+    return <Vuoto>{rosa ? 'Nessun giocatore del reparto ha preso voto.' : 'Nessun giocatore del reparto ha concorso al punteggio.'}</Vuoto>
+  }
   const tinta = portiere ? 'bg-red-500/25 text-red-300' : 'bg-green-500/25 text-green-300'
   return (
     <div className="overflow-x-auto">
@@ -133,13 +140,17 @@ function MatriceGiocatori({ giornate, giocatori, portiere }) {
 
 // ── Reparto ──────────────────────────────────────────────────
 
-function Reparto({ r, ruolo }) {
+function Reparto({ r, ruolo, vista }) {
+  const rosa = vista === 'ROSA'
+  // Nella vista rosa "schierati" = giocatori con voto (chiunque in rosa abbia preso voto)
+  const nSchierati = rosa ? 'Con voto' : 'Schierati'
   const portiere = ruolo === 1
   const nomeGol = portiere ? 'Gol subiti' : 'Gol fatti'
   const nomeReparto = REPARTI.find(x => x.value === String(ruolo))?.label.toLowerCase()
   const m = r.modificatore
   const rs = r.riepilogo
 
+  if (r.non_disponibile) return <EmptyState label={r.non_disponibile} />
   if (r.partite === 0) {
     return <EmptyState label={`Nessun dato sui ${nomeReparto} per questa competizione.`} />
   }
@@ -161,7 +172,7 @@ function Reparto({ r, ruolo }) {
         {portiere
           ? <Indicatore label="Clean sheet del portiere"
                         value={r.distribuzione_gol.find(x => x.valore === 0)?.n ?? 0} sub="partite senza gol subiti" />
-          : <Indicatore label="Schierati (media)" value={fmt(rs.media_schierati, 1)} sub="giocatori a partita" />}
+          : <Indicatore label={`${nSchierati} (media)`} value={fmt(rs.media_schierati, 1)} sub="giocatori a partita" />}
       </div>
 
       {/* Gol per giornata */}
@@ -177,7 +188,7 @@ function Reparto({ r, ruolo }) {
       {/* Matrice */}
       <Section title={`${nomeGol} per giocatore e per giornata`} icon={Grid3x3}
                right={portiere ? 'gol subiti dal portiere' : 'gol segnati'}>
-        <MatriceGiocatori giornate={r.giornate} giocatori={r.giocatori} portiere={portiere} />
+        <MatriceGiocatori giornate={r.giornate} giocatori={r.giocatori} portiere={portiere} rosa={rosa} />
       </Section>
 
       {/* Voti */}
@@ -196,14 +207,15 @@ function Reparto({ r, ruolo }) {
 
       {/* Numero di giocatori schierati (solo reparti di movimento) */}
       {!portiere && (
-        <Section title="Giocatori schierati e media voto" icon={Users} right="partite per numero di giocatori">
+        <Section title={rosa ? 'Giocatori con voto e media voto' : 'Giocatori schierati e media voto'} icon={Users}
+                 right="partite per numero di giocatori">
           <div className="grid grid-cols-1 lg:grid-cols-2">
             <Istogramma data={distN} colore="#38bdf8" />
             <div className="overflow-x-auto p-4">
               <table className="fanta-table">
                 <thead>
                   <tr>
-                    <th className="text-center">Schierati</th>
+                    <th className="text-center">{nSchierati}</th>
                     <th className="text-center">Partite</th>
                     <th className="text-center">Voto netto</th>
                     <th className="text-center">Voto lordo</th>
@@ -225,8 +237,8 @@ function Reparto({ r, ruolo }) {
         </Section>
       )}
 
-      {/* Modificatore (solo reparti di movimento) */}
-      {!portiere && (
+      {/* Modificatore (solo reparti di movimento; dipende dallo schieramento: non nella vista rosa) */}
+      {!portiere && !rosa && (
         m ? (
           <>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -262,8 +274,10 @@ function Reparto({ r, ruolo }) {
       <p className="text-[11px] text-slate-600 leading-relaxed">
         Voto netto = voto base senza bonus/malus; voto lordo = fantavoto con bonus/malus. La media del reparto è la media
         delle medie di partita. {portiere && 'I gol subiti sono quelli del portiere (malus “gol subito”), non il punteggio fanta della partita. '}
-        {!portiere && 'Il modificatore è visto dalla tua squadra: positivo = favorevole. '}
-        Conta chi ha concorso al punteggio, riserve d'ufficio comprese.
+        {!portiere && !rosa && 'Il modificatore è visto dalla tua squadra: positivo = favorevole. '}
+        {rosa
+          ? 'Conta ogni giocatore della rosa che ha preso voto nella giornata, anche se non schierato o sostituito: un giocatore compare solo nelle giornate in cui faceva parte della tua rosa. Il voto lordo dei non schierati è calcolato con le regole bonus/malus della stagione; il modificatore, che dipende dallo schieramento, non è mostrato.'
+          : 'Conta chi ha concorso al punteggio, riserve d\'ufficio comprese.'}
       </p>
     </div>
   )
@@ -273,20 +287,31 @@ function Reparto({ r, ruolo }) {
 
 export default function AreaRuoli({ stagione, idSquadra, competizione }) {
   const [reparto, setReparto] = useState('1')
+  const [vista, setVista] = useState('SCHIERATI')
   const { data: r, loading, error, refetch } = useFetch(
-    () => getDashboardRuoli(stagione, idSquadra, Number(reparto), competizione),
-    [stagione, idSquadra, reparto, competizione]
+    () => getDashboardRuoli(stagione, idSquadra, Number(reparto), competizione, vista),
+    [stagione, idSquadra, reparto, competizione, vista]
   )
 
   return (
     <div className="space-y-6">
-      <div className="overflow-x-auto">
-        <TabBar tabs={REPARTI} active={reparto} onChange={setReparto} />
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="overflow-x-auto">
+          <TabBar tabs={REPARTI} active={reparto} onChange={setReparto} />
+        </div>
+        <div className="overflow-x-auto lg:ml-auto">
+          <TabBar tabs={VISTE} active={vista} onChange={setVista} />
+        </div>
       </div>
+      <p className="text-xs text-slate-500 -mt-3">
+        {vista === 'ROSA'
+          ? 'Tutti i giocatori della rosa, schierati o no (panchina, sostituiti, tribuna).'
+          : 'Solo i giocatori che hanno concorso al punteggio della giornata.'}
+      </p>
       {loading || (!r && !error) ? <LoadingState label="Analisi del reparto..." />
         : error ? <ErrorState message={error} onRetry={refetch} />
-        : r.ruolo !== Number(reparto) ? <LoadingState label="Analisi del reparto..." />
-        : <Reparto r={r} ruolo={Number(reparto)} />}
+        : r.ruolo !== Number(reparto) || r.vista !== vista ? <LoadingState label="Analisi del reparto..." />
+        : <Reparto r={r} ruolo={Number(reparto)} vista={vista} />}
     </div>
   )
 }

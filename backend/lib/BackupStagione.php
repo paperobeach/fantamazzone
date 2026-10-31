@@ -68,6 +68,7 @@ function bks_tabelle_backup(): array
         "NEW_GIOCATORI"             => "Rose (giocatori in squadra)",
         "NEW_GIOCATORI_BASE_ASTA"   => "Rose (base asta)",
         "NEW_GIOCATORI_SVINCOLATI"  => "Giocatori svincolati",
+        "NEW_ROSA_STORICO"          => "Storico delle rose (periodi in rosa)",
         // import Serie A
         "NEW_CALENDARIO_SERIE_A"    => "Calendario Serie A importato",
         "NEW_VOTI_SERIE_A"          => "Voti Serie A importati",

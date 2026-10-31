@@ -44,6 +44,7 @@
 
 require_once __DIR__ . "/DashboardSquadra.php";
 require_once __DIR__ . "/StatoGiornata.php";
+require_once __DIR__ . "/RosaStorico.php";
 require_once __DIR__ . "/../mailer.php";
 
 const MR_FINESTRA_1       = 1;
@@ -496,6 +497,10 @@ function mr_acquista(int $stagione, int $finestra, int $idSquadra, int $idAcq, i
         // Il giocatore ceduto esce dalle formazioni (campionato e Champions) delle giornate non ancora chiuse
         $ult = query_one("SELECT COALESCE(MAX(giornata), 0) AS g FROM NEW_CALENDARIO_CK WHERE stagione = $stagione AND ck_giocata = 'S'");
         $gUlt = (int) $ult["g"];
+        // Storico rosa: il ceduto resta nella rosa di $idSquadra fino a $gUlt, l'acquistato
+        // vi entra dalla giornata successiva (le rose cambiano solo durante il mercato)
+        rs_registra_cessione($stagione, $idSquadra, $idCed, $gUlt);
+        rs_registra_acquisto($stagione, $idSquadra, $idAcq, $gUlt);
         foreach (["NEW_FORMAZIONI", "NEW_FORMAZIONI_CHAMP"] as $tab) {
             mysqli_query($conn, "DELETE FROM $tab WHERE STAGIONE = $stagione AND ID_SQUADRA = $idSquadra
                                  AND ID_GIOCATORE = $idCed AND GIORNATA > $gUlt");

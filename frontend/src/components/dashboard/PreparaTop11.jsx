@@ -28,10 +28,19 @@ function costruisciTop11(rosa, modulo, metrica, minPres) {
   return { titolari, mancanti, somma }
 }
 
-export default function PreparaTop11({ rosa, competizione }) {
+export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisponibile = null }) {
   const [metrica, setMetrica] = useState('media_netto')
   const [modulo, setModulo] = useState('4-3-3')
   const [minPres, setMinPres] = useState(1)
+  const [vista, setVista] = useState('SCHIERATI')
+
+  // Base dati: SCHIERATI = solo le giornate in cui il giocatore ha concorso al punteggio;
+  // ROSA = tutte le giornate in cui era in rosa con un voto, schierato o no
+  const usaRosa = vista === 'ROSA' && !rosaNonDisponibile
+  const rosa = useMemo(
+    () => usaRosa ? rosaBase.map(g => (g.tutta_rosa ? { ...g, ...g.tutta_rosa } : g)) : rosaBase,
+    [rosaBase, usaRosa]
+  )
 
   const champ = competizione === 'CHAMP'
   const migliore = useMemo(() => {
@@ -54,7 +63,14 @@ export default function PreparaTop11({ rosa, competizione }) {
   return (
     <div className="space-y-6">
       {/* Controlli */}
-      <div className="card p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <label className="space-y-1.5">
+          <span className="text-[10px] uppercase tracking-widest text-slate-500">Giocatori considerati</span>
+          <Select value={vista} onChange={setVista} options={[
+            { value: 'SCHIERATI', label: 'Solo schierati' },
+            { value: 'ROSA', label: 'Tutta la rosa' },
+          ]} />
+        </label>
         <label className="space-y-1.5">
           <span className="text-[10px] uppercase tracking-widest text-slate-500">Voto</span>
           <Select value={metrica} onChange={setMetrica} options={[
@@ -77,6 +93,14 @@ export default function PreparaTop11({ rosa, competizione }) {
         </label>
       </div>
 
+      <p className="text-xs text-slate-500 -mt-3">
+        {vista === 'ROSA' && rosaNonDisponibile
+          ? `${rosaNonDisponibile} Vengono mostrati i soli schierati.`
+          : usaRosa
+            ? 'Conta ogni giocatore della rosa che ha preso voto, anche se non schierato o sostituito, nelle giornate in cui era nella tua rosa.'
+            : 'Conta solo le giornate in cui il giocatore ha concorso al punteggio.'}
+      </p>
+
       {migliore && migliore.modulo !== modulo && (
         <button onClick={() => setModulo(migliore.modulo)}
                 className="w-full text-left rounded-xl border border-gold-500/30 bg-gold-500/10 px-4 py-3 text-sm text-gold-300 flex items-center gap-2 hover:bg-gold-500/15 transition-colors">
@@ -88,7 +112,11 @@ export default function PreparaTop11({ rosa, competizione }) {
 
       {rosa.every(g => g.presenze === 0) ? (
         <Section title="Top 11 di squadra" icon={Star}>
-          <Vuoto>{champ ? 'Nessuna presenza in Champions ancora registrata.' : 'Nessuna giornata ancora giocata.'}</Vuoto>
+          <Vuoto>
+            {usaRosa
+              ? 'Nessun giocatore della rosa ha ancora preso voto.'
+              : champ ? 'Nessuna presenza in Champions ancora registrata.' : 'Nessuna giornata ancora giocata.'}
+          </Vuoto>
         </Section>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

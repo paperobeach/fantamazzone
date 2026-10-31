@@ -28,6 +28,8 @@
 //   art_spesa_mese_usd($conn)           spesa AI del mese corrente (articoli + immagini)
 // ============================================================
 
+require_once __DIR__ . "/RosaStorico.php";   // anagrafica storica (giocatori ceduti)
+
 /** Parametro della sezione "articolo" di config_ai.php (con valore di default). */
 function art_cfg(string $chiave, $default)
 {
@@ -248,7 +250,7 @@ function art_dati_giornata(int $stagione, int $giornata): array
                               v.voto, v.totale, v.giocata, v.rufficio,
                               v.reti, v.assist, v.espulsioni, v.autogol, v.rigorep, v.rigores
                        FROM NEW_VOTI v
-                       LEFT JOIN NEW_GIOCATORI g ON g.id = v.id_giocatore AND g.stagione = v.stagione
+                       LEFT JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = v.id_giocatore AND g.stagione = v.stagione
                        WHERE v.stagione = $stagione AND v.giornata = $giornata");
     $ruoli = [1 => "P", 2 => "D", 3 => "C", 4 => "A"];
     $conVoto = [];

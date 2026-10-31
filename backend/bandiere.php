@@ -12,16 +12,19 @@
 // La nazionalità arriva da NEW_GIOCATORI_BASE_ASTA.nazione (staging
 // dell'asta); in mancanza, da NEW_GIOCATORI.nazione. La nazione viene
 // poi tradotta nel file bandiera tramite NEW_NAZIONI.
+// L'anagrafica comprende anche i giocatori ceduti (svincolati), che nello storico
+// delle squadre precedenti devono mantenere la bandiera (lib/RosaStorico.php).
 // Un giocatore la cui nazione non è in NEW_NAZIONI resta senza bandiera.
 //
 // Risposta: { "123": "Italian.jpg", "456": "Brazilian.jpg", ... }
 // ============================================================
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/lib/RosaStorico.php";
 
 $stagione = param_int("stagione");
 
 $righe = query_all("SELECT g.id, n.bandiera
-                    FROM NEW_GIOCATORI g
+                    FROM " . rs_sql_anagrafica($stagione) . " g
                     LEFT JOIN NEW_GIOCATORI_BASE_ASTA b
                            ON b.id_giocatore = g.id AND b.stagione = g.stagione
                     JOIN NEW_NAZIONI n

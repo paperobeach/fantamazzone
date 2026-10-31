@@ -250,6 +250,9 @@ function m2_aggiudica(int $stagione, int $idRich, int $idGiocatore, int $idAgg, 
             throw new MercatoErrore("Operazione non riuscita: impossibile inserire il giocatore in rosa", 500);
         }
 
+        // Storico rosa: il giocatore entra nella rosa dalla giornata successiva all'ultima chiusa
+        rs_registra_acquisto($stagione, $idAgg, $idGiocatore, rs_ultima_giornata_chiusa($stagione));
+
         $pos = (int) $turno["posizione"]; $giro = (int) $fin["giro"];
         mysqli_query($conn, "INSERT INTO NEW_MERCATO2_TRANSAZIONI
             (stagione, giro, posizione, id_squadra_chiamante, tipo, id_squadra_aggiudicataria, id_giocatore, giocatore, ruolo, nazione, crediti, creato_il, creato_da)
@@ -296,6 +299,7 @@ function m2_annulla_ultima(int $stagione, int $idRich): array
             $id = (int) $t["id_giocatore"]; $sq = (int) $t["id_squadra_aggiudicataria"];
             mysqli_query($conn, "DELETE FROM NEW_GIOCATORI WHERE stagione = $stagione AND id = $id AND squadra = $sq");
             if (mysqli_affected_rows($conn) < 1) throw new MercatoErrore("Il giocatore non e' piu' nella rosa della squadra aggiudicataria: annullamento impossibile", 409);
+            rs_annulla_acquisto($stagione, $sq, $id);   // storico rosa
             $gia = query_one("SELECT COUNT(*) AS n FROM NEW_GIOCATORI_SVINCOLATI WHERE stagione = $stagione AND id = $id");
             if ((int) $gia["n"] === 0) {
                 mysqli_query($conn, "INSERT INTO NEW_GIOCATORI_SVINCOLATI (id, stagione, descrizione, ruolo, nazione)

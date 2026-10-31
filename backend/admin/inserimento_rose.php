@@ -24,6 +24,7 @@
 // migrazione di NEW_GIOCATORI a InnoDB.
 // ============================================================
 require_once __DIR__ . "/../connect.php";
+require_once __DIR__ . "/../lib/RosaStorico.php";
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     api_error("Metodo non consentito. Usare POST.", 405);
@@ -343,6 +344,7 @@ try {
     // NOTA: la tabella NEW_GIOCATORI usa il campo "squadra" per
     // rappresentare l'id squadra in lega (vedi api/squadre.php).
     mysqli_query($conn, "DELETE FROM NEW_GIOCATORI WHERE stagione = $stagione");
+    rs_azzera_stagione($stagione);   // le rose vengono reinserite da zero: lo storico dei periodi non è più valido
 
     $caricati = 0;
     foreach ($data as $r) {

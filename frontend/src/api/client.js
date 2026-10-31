@@ -558,8 +558,9 @@ export const adminImportaCalendarioSerieA = (stagione, file) => {
 
 // Area "Statistiche" della dashboard: analisi di un reparto.
 // ruolo: 1 = portieri, 2 = difensori, 3 = centrocampisti, 4 = attaccanti.
-export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'CAMP') =>
-  get('dashboard_ruoli.php', { stagione, id_squadra, ruolo, competizione })
+// vista: 'SCHIERATI' (solo chi ha concorso al punteggio) | 'ROSA' (tutta la rosa, schierata o no).
+export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'CAMP', vista = 'SCHIERATI') =>
+  get('dashboard_ruoli.php', { stagione, id_squadra, ruolo, competizione, vista })
 
 // Area "Prepara la prossima partita": avversario, Top 11, Serie A.
 export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP') =>

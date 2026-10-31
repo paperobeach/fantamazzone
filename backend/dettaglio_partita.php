@@ -37,6 +37,7 @@ require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniBlocco.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/PanchinaDettaglio.php";
+require_once __DIR__ . "/lib/RosaStorico.php";
 
 $stagione    = param_int("stagione");
 $giornata    = param_int("giornata");
@@ -66,7 +67,7 @@ function dp_solo_formazione(int $stagione, int $giornata, int $id_casa, int $id_
             f.ID_SQUADRA AS id_squadra, f.ID_GIOCATORE AS id_giocatore,
             g.descrizione AS giocatore, g.ruolo, f.MAGLIA AS maglia
         FROM $tForm f
-        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+        JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
         WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata
           AND f.ID_SQUADRA IN ($id_casa, $id_ospite)
         ORDER BY f.ID_SQUADRA, f.MAGLIA");
@@ -207,7 +208,7 @@ $ids_str = implode(",", array_unique($ids));
 //  - storica / ammonito senza voto: id_giocatore = ID del calciatore
 //    reale (titolare) → nome e ruolo da NEW_GIOCATORI;
 //  - ID fittizio NEGATIVO (-(ruolo*1000000 + idSquadra*100 + n)): non
-//    esiste in NEW_GIOCATORI (LEFT JOIN) → nome "Riserva d'ufficio" e
+//    esiste in anagrafica (LEFT JOIN su rs_sql_anagrafica: rosa + ceduti) → nome "Riserva d'ufficio" e
 //    ruolo ricavato dall'ID stesso.
 $tVoti = $champ ? "NEW_VOTI_CHAMP" : "NEW_VOTI";
 $tForm = $champ
@@ -225,7 +226,7 @@ $voti_raw = query_all("SELECT
         v.reti, v.ammonizioni, v.espulsioni, v.autogol,
         v.retis, v.rigores, v.rigorep, v.assist
     FROM $tVoti v
-    LEFT JOIN NEW_GIOCATORI g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
+    LEFT JOIN " . rs_sql_anagrafica($stagione) . " g  ON g.id = v.id_giocatore AND g.stagione = v.stagione
     LEFT JOIN $tForm f ON f.ID_GIOCATORE = v.id_giocatore
                            AND f.ID_SQUADRA  = v.id_squadra
                            AND f.STAGIONE    = v.stagione

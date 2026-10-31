@@ -64,6 +64,7 @@ require_once __DIR__ . "/mailer.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/AvversarieSerieA.php";
 require_once __DIR__ . "/lib/FormazioniBlocco.php";
+require_once __DIR__ . "/lib/RosaStorico.php";
 
 $stagione = param_int("stagione");
 
@@ -244,7 +245,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 g.ruolo,
                 f.MAGLIA       AS maglia
             FROM $tabella f
-            JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+            JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
             WHERE f.STAGIONE    = $stagione
               AND f.ID_SQUADRA  = $id_squadra
               AND f.GIORNATA    = $giornata

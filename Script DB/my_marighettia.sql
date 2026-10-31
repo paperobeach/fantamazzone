@@ -996,6 +996,26 @@ CREATE TABLE `NEW_MERCATO2_TRANSAZIONI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_ROSA_STORICO`
+--
+-- Periodi in cui un giocatore e' nella rosa di una squadra (le rose cambiano
+-- solo durante il mercato). Vedi Script DB/NEW_ROSA_STORICO.sql per il backfill.
+--
+
+CREATE TABLE `NEW_ROSA_STORICO` (
+  `stagione`     int NOT NULL,
+  `id_giocatore` int NOT NULL,
+  `id_squadra`   int NOT NULL,
+  `da_giornata`  int NOT NULL DEFAULT '1' COMMENT 'Prima giornata in cui il giocatore e'' in rosa',
+  `a_giornata`   int DEFAULT NULL COMMENT 'Ultima giornata in rosa; NULL = ancora in rosa',
+  PRIMARY KEY (`stagione`,`id_giocatore`,`id_squadra`,`da_giornata`),
+  KEY `idx_rosa_storico_squadra` (`stagione`,`id_squadra`),
+  KEY `idx_rosa_storico_giocatore` (`stagione`,`id_giocatore`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_NAZIONI`
 --
 

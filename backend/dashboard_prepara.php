@@ -16,7 +16,16 @@
 //                      se inserite (null altrimenti)
 //   rosa               ogni giocatore della rosa con: squadra di Serie A,
 //                      avversaria di Serie A della giornata, casa/trasferta,
-//                      presenze e medie voto netto/lordo (per il Top 11)
+//                      presenze e medie voto netto/lordo (per il Top 11).
+//                      presenze/media_* contano solo le giornate in cui il
+//                      giocatore ha concorso al punteggio (schierato);
+//                      tutta_rosa {presenze, media_netto, media_lordo} conta
+//                      le giornate in cui era in rosa con un voto reale,
+//                      schierato o no (lib/StatisticheRosa.php); null se non
+//                      calcolabile (vedi rosa_non_disponibile)
+//   rosa_non_disponibile  messaggio se la vista "tutta la rosa" non è
+//                      calcolabile per la stagione (voti Serie A o regole
+//                      mancanti), altrimenti null
 //   incontri_serie_a   partite di Serie A della giornata, con i giocatori
 //                      della rosa schierabili da ciascun lato
 //
@@ -42,6 +51,7 @@ require_once __DIR__ . "/lib/ChampionsCalendario.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/DashboardSquadra.php";
 require_once __DIR__ . "/lib/FormazioniBlocco.php";
+require_once __DIR__ . "/lib/StatisticheRosa.php";
 
 const FORMAZIONE_AVVERSARIO_VISIBILE = true;
 
@@ -164,7 +174,7 @@ if ($match) {
     if (!$champ) {
         foreach (query_all("SELECT f.GIORNATA AS g, gg.ruolo AS r, COUNT(*) AS n
                             FROM NEW_FORMAZIONI f
-                            JOIN NEW_GIOCATORI gg ON gg.id = f.ID_GIOCATORE AND gg.stagione = f.STAGIONE
+                            JOIN " . rs_sql_anagrafica($stagione) . " gg ON gg.id = f.ID_GIOCATORE AND gg.stagione = f.STAGIONE
                             WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idAvv
                               AND f.MAGLIA BETWEEN 1 AND 11
                             GROUP BY f.GIORNATA, gg.ruolo") as $r) {
@@ -178,7 +188,7 @@ if ($match) {
             $tab = formazione_tabella_champions($stagione, $g, $idAvv);
             foreach (query_all("SELECT gg.ruolo AS r, COUNT(*) AS n
                                 FROM $tab f
-                                JOIN NEW_GIOCATORI gg ON gg.id = f.ID_GIOCATORE AND gg.stagione = f.STAGIONE
+                                JOIN " . rs_sql_anagrafica($stagione) . " gg ON gg.id = f.ID_GIOCATORE AND gg.stagione = f.STAGIONE
                                 WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idAvv AND f.GIORNATA = $g
                                   AND f.MAGLIA BETWEEN 1 AND 11
                                 GROUP BY gg.ruolo") as $r) {
@@ -231,6 +241,19 @@ foreach (query_all("SELECT v.id_giocatore, COUNT(*) AS presenze, AVG(v.voto) AS 
     $medie[(int) $r["id_giocatore"]] = $r;
 }
 
+// Vista "tutta la rosa": presenze e medie indipendenti dallo schieramento
+// (giornate giocate dalla squadra nella competizione, giocatore in rosa con voto)
+$mieiRisultati = $champ ? ds_partite_champ($stagione, $idSquadra, $pub) : ds_partite_camp($stagione, $idSquadra, $pub);
+$mediePerRosa = null;
+$rosaNonDisponibile = null;
+try {
+    $mediePerRosa = sr_medie_per_giocatore(
+        sr_voti_rosa($stagione, $idSquadra, $champ, array_column($mieiRisultati, "giornata"))
+    );
+} catch (StatisticheRosaNonDisponibili $e) {
+    $rosaNonDisponibile = $e->getMessage();
+}
+
 $partiteSerieA = query_all("SELECT n_partita, data_partita, ora_partita, squadra_casa, squadra_ospite
                             FROM NEW_CALENDARIO_SERIE_A
                             WHERE stagione = $stagione AND giornata = $giornataSerieA
@@ -263,6 +286,8 @@ foreach (query_all("SELECT id, descrizione, ruolo FROM NEW_GIOCATORI
         "presenze"     => $m ? (int) $m["presenze"] : 0,
         "media_netto"  => $m ? round((float) $m["netto"], 2) : null,
         "media_lordo"  => $m ? round((float) $m["lordo"], 2) : null,
+        "tutta_rosa"   => $mediePerRosa === null ? null
+                          : ($mediePerRosa[$id] ?? ["presenze" => 0, "media_netto" => null, "media_lordo" => null]),
     ];
 }
 
@@ -295,5 +320,6 @@ api_success([
     "formazioni"        => $formazioni,
     "giornata_serie_a"  => $giornataSerieA,
     "rosa"              => $rosa,
+    "rosa_non_disponibile" => $rosaNonDisponibile,
     "incontri_serie_a"  => $incontri,
 ]);

@@ -17,6 +17,8 @@
 // lib/FormazioniChampions.php.
 // ============================================================
 
+require_once __DIR__ . "/RosaStorico.php";   // anagrafica storica (giocatori ceduti)
+
 // ── Helper ───────────────────────────────────────────────────
 
 function ds_segno($s): string
@@ -163,7 +165,7 @@ function ds_formazione(int $stagione, int $giornata, int $id, string $tab = "NEW
     $rows = query_all("SELECT f.MAGLIA AS maglia, f.ID_GIOCATORE AS id_giocatore,
                               g.descrizione AS giocatore, g.ruolo
                        FROM $tab f
-                       JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+                       JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                        WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id
                        ORDER BY f.MAGLIA");
     return array_map(fn($r) => [
@@ -182,7 +184,7 @@ function ds_formazione_con_voti(int $stagione, int $giornata, int $id): array
                               g.descrizione AS giocatore, g.ruolo,
                               v.voto, v.totale, v.giocata
                        FROM NEW_FORMAZIONI f
-                       JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+                       JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
                        LEFT JOIN NEW_VOTI v ON v.stagione = f.STAGIONE AND v.giornata = f.GIORNATA
                                            AND v.id_squadra = f.ID_SQUADRA AND v.id_giocatore = f.ID_GIOCATORE
                        WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id

@@ -22,6 +22,8 @@
 // restano senza coppia sono "senza voto, non sostituiti".
 // ============================================================
 
+require_once __DIR__ . "/RosaStorico.php";   // anagrafica storica (giocatori ceduti)
+
 // Formazione (titolari + panchina) delle squadre, raggruppata per squadra.
 // $tForm = tabella o sotto-query con STAGIONE, ID_SQUADRA, ID_GIOCATORE,
 // GIORNATA, MAGLIA (NEW_FORMAZIONI oppure formazione_champions_sql_effettiva).
@@ -32,7 +34,7 @@ function pd_carica_formazione(int $stagione, int $giornata, string $tForm, array
     $righe = query_all("SELECT f.ID_SQUADRA AS id_squadra, f.ID_GIOCATORE AS id_giocatore,
             g.descrizione AS giocatore, g.ruolo, f.MAGLIA AS maglia
         FROM $tForm f
-        JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
+        JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
         WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata
           AND f.ID_SQUADRA IN ($ids)
         ORDER BY f.ID_SQUADRA, f.MAGLIA");

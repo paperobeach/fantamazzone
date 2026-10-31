@@ -275,7 +275,7 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione }) {
         : (
           <>
             {sezione === 'avversario' && <SezioneAvversario p={p} d={d} champ={champ} />}
-            {sezione === 'top11' && <PreparaTop11 rosa={p.rosa} competizione={competizione} />}
+            {sezione === 'top11' && <PreparaTop11 rosa={p.rosa} competizione={competizione} rosaNonDisponibile={p.rosa_non_disponibile} />}
             {sezione === 'serie_a' && (
               <PreparaSerieA rosa={p.rosa} incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />
             )}

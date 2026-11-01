@@ -54,6 +54,13 @@ export default function Classifica() {
     return 0
   })
 
+  // Miglior e peggior media (confronto sul valore reale, non su quello arrotondato).
+  // Senza almeno due valori diversi non si evidenzia nulla.
+  const medie = data.map(sq => Number(sq.media))
+  const mediaMax = Math.max(...medie)
+  const mediaMin = Math.min(...medie)
+  const evidenziaMedie = mediaMax !== mediaMin
+
   const SortBtn = ({ col, label }) => (
     <button
       onClick={() => setSortBy(col)}
@@ -101,7 +108,7 @@ export default function Classifica() {
               <th className="text-center">S</th>
               <th className="text-center">GF</th>
               <th className="text-center">GS</th>
-              <th className="text-center">Media</th>
+              <th className="text-center bg-sky-500/10 !text-sky-300">Media</th>
               <th className="text-center">Media A</th>
               <th className="text-center">Max</th>
               <th className="text-center">Min</th>
@@ -153,8 +160,24 @@ export default function Classifica() {
                   <td className="px-4 py-3 text-center text-slate-400 text-sm">{sq.perse}</td>
                   <td className="px-4 py-3 text-center text-slate-300 text-sm">{sq.golf}</td>
                   <td className="px-4 py-3 text-center text-slate-500 text-sm">{sq.gols}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="font-mono text-xs text-slate-400">{Number(sq.media).toFixed(1)}</span>
+                  <td className="px-3 py-3 text-center bg-sky-500/10 border-x border-sky-500/20">
+                    {(() => {
+                      const m = Number(sq.media)
+                      const migliore = evidenziaMedie && m === mediaMax
+                      const peggiore = evidenziaMedie && m === mediaMin
+                      return (
+                        <span
+                          title={migliore ? 'Miglior media' : peggiore ? 'Peggior media' : undefined}
+                          className={`inline-block min-w-[3.75rem] rounded-md px-2 py-0.5 text-display font-extrabold text-xl ${
+                            migliore ? 'bg-grass-500/20 text-grass-300 ring-1 ring-grass-400/50'
+                            : peggiore ? 'bg-red-500/20 text-red-400 ring-1 ring-red-400/50'
+                            : 'text-sky-300'
+                          }`}
+                        >
+                          {m.toFixed(2)}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className="font-mono text-xs text-slate-400">{Number(sq.media_a).toFixed(1)}</span>
@@ -200,6 +223,14 @@ export default function Classifica() {
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded-full bg-black ring-1 ring-white/30" />
           <span className="text-xs text-slate-600">Maglia nera</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-sm bg-grass-500/30 ring-1 ring-grass-400/60" />
+          <span className="text-xs text-slate-600">Miglior media</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-sm bg-red-500/30 ring-1 ring-red-400/60" />
+          <span className="text-xs text-slate-600">Peggior media</span>
         </div>
       </div>
     </div>

@@ -16,10 +16,10 @@
 //                      se inserite (null altrimenti)
 //   rosa               ogni giocatore della rosa con: squadra di Serie A,
 //                      avversaria di Serie A della giornata, casa/trasferta,
-//                      presenze e medie voto netto/lordo (per il Top 11).
+//                      presenze e medie voto/fantavoto (per il Top 11).
 //                      presenze/media_* contano solo le giornate in cui il
 //                      giocatore ha concorso al punteggio (schierato);
-//                      tutta_rosa {presenze, media_netto, media_lordo} conta
+//                      tutta_rosa {presenze, media_voto, media_fantavoto} conta
 //                      le giornate in cui era in rosa con un voto reale,
 //                      schierato o no (lib/StatisticheRosa.php); null se non
 //                      calcolabile (vedi rosa_non_disponibile)
@@ -31,7 +31,7 @@
 //
 // Giornata di Serie A = giornata di fantacampionato + GIORNATA_SERIE_A_INIZIO
 // - 1 (vedi ds_inizio_giornata). Per la Champions si usa la giornata del match.
-// Voto NETTO = voto base senza bonus/malus, LORDO = fantavoto con bonus/malus.
+// VOTO = voto base senza bonus/malus, FANTAVOTO = voto con bonus/malus.
 // Le giornate non chiuse non entrano mai nelle medie, nella forma e nei moduli.
 //
 // ATTENZIONE: FORMAZIONE_AVVERSARIO_VISIBILE decide se la formazione già
@@ -234,7 +234,7 @@ $condPub = $storica ? "1 = 1"
          : ($chiuse ? "v.giornata IN (" . implode(",", array_keys($chiuse)) . ")" : "1 = 0");
 
 $medie = [];
-foreach (query_all("SELECT v.id_giocatore, COUNT(*) AS presenze, AVG(v.voto) AS netto, AVG(v.totale) AS lordo
+foreach (query_all("SELECT v.id_giocatore, COUNT(*) AS presenze, AVG(v.voto) AS voto, AVG(v.totale) AS fantavoto
                     FROM $tabVoti v
                     WHERE v.stagione = $stagione AND v.id_squadra = $idSquadra AND v.giocata = 1 AND $condPub
                     GROUP BY v.id_giocatore") as $r) {
@@ -284,10 +284,10 @@ foreach (query_all("SELECT id, descrizione, ruolo FROM NEW_GIOCATORI
         "data"         => $inc["data"] ?? null,
         "ora"          => $inc["ora"] ?? null,
         "presenze"     => $m ? (int) $m["presenze"] : 0,
-        "media_netto"  => $m ? round((float) $m["netto"], 2) : null,
-        "media_lordo"  => $m ? round((float) $m["lordo"], 2) : null,
+        "media_voto"  => $m ? round((float) $m["voto"], 2) : null,
+        "media_fantavoto"  => $m ? round((float) $m["fantavoto"], 2) : null,
         "tutta_rosa"   => $mediePerRosa === null ? null
-                          : ($mediePerRosa[$id] ?? ["presenze" => 0, "media_netto" => null, "media_lordo" => null]),
+                          : ($mediePerRosa[$id] ?? ["presenze" => 0, "media_voto" => null, "media_fantavoto" => null]),
     ];
 }
 

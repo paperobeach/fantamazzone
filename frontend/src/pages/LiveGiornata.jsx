@@ -5,11 +5,12 @@ import {
   getLiveGiornata, getLiveDettaglio, getLiveGiocatori, getDettaglioPartita,
   simulaGiornata, eliminaSimulazionePartita,
 } from '../api/client'
-import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge } from '../components/ui'
+import { PageHeader, LoadingState, ErrorState, EmptyState, Spinner, RoleBadge, TabBar } from '../components/ui'
 import { MatchDetailPanel, LegendaEventi } from '../components/MatchDetail'
 import { CAMPI, ThStat, ThVoto, BadgeStatoDato, nomeUtente, useEditGiocatore } from '../components/LiveEdit'
 import { Bandiera } from '../components/Bandiera'
 import { MatchResultRow } from '../components/MatchResult'
+import { ClassificaCampionatoLive, ClassificaChampionsLive } from '../components/ClassificheLive'
 import {
   Radio, Play, Trash2, Clock, Pencil, Save, Undo2, AlertTriangle, CheckCircle2, User, CalendarClock, MinusCircle, Calculator, X,
 } from 'lucide-react'
@@ -306,6 +307,7 @@ export default function LiveGiornata() {
   const [simulando, setSimulando] = useState(false)
   const [esito, setEsito] = useState(null)
   const [errSim, setErrSim] = useState(null)
+  const [vista, setVista] = useState('partite')   // partite | classifica | champions
 
   const { data, loading, error, refetch } = useFetch(
     stagione ? () => getLiveGiornata(Number(stagione)) : null, [stagione])
@@ -328,7 +330,7 @@ export default function LiveGiornata() {
   if (error) return <ErrorState message={error} onRetry={refetch} />
   if (!data) return null
 
-  const { stato, partite, champions } = data
+  const { stato, partite, champions, classifiche } = data
 
   if (!stato.in_corso) {
     return (
@@ -372,6 +374,34 @@ export default function LiveGiornata() {
         </div>
       )}
 
+      {/* Partite · classifiche aggiornate live. Le partite restano montate (nascoste) per
+          non perdere righe espanse o editing in corso quando si cambia scheda. */}
+      <div className="mb-4 overflow-x-auto">
+        <TabBar
+          tabs={[
+            { value: 'partite', label: 'Partite' },
+            { value: 'classifica', label: 'Classifica LIVE' },
+            ...(classifiche?.champions ? [{ value: 'champions', label: 'Champions LIVE' }] : []),
+          ]}
+          active={vista}
+          onChange={setVista}
+        />
+      </div>
+
+      {vista !== 'partite' && classifiche?.errore && (
+        <div className="card p-3 mb-4 border-amber-500/30 text-xs text-amber-400 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" /> {classifiche.errore}
+        </div>
+      )}
+
+      {vista === 'classifica' && (
+        <ClassificaCampionatoLive dati={classifiche?.campionato} giornata={stato.giornata} />
+      )}
+      {vista === 'champions' && (
+        <ClassificaChampionsLive dati={classifiche?.champions} giornata={stato.giornata} />
+      )}
+
+      <div className={vista === 'partite' ? '' : 'hidden'}>
       {/* Legenda */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mb-4 text-[11px] text-slate-500">
         <span className="flex items-center gap-1.5"><Calculator className="w-3.5 h-3.5 text-grass-400" /> Calc. = risultato già calcolato (se presente)</span>
@@ -422,6 +452,7 @@ export default function LiveGiornata() {
           )}
         </div>
       )}
+      </div>
     </div>
   )
 }

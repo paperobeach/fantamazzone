@@ -83,8 +83,8 @@ function LineaVoti({ giornate }) {
           <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
                    formatter={(v, n) => [fmt(v, 2), n]} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line type="monotone" name="Voto netto" dataKey="media_netto" stroke="#4ade80" strokeWidth={2.5} dot={{ r: 3 }} />
-          <Line type="monotone" name="Voto lordo" dataKey="media_lordo" stroke="#fbbf24" strokeWidth={2.5} dot={{ r: 3 }} />
+          <Line type="monotone" name="Voto" dataKey="media_voto" stroke="#4ade80" strokeWidth={2.5} dot={{ r: 3 }} />
+          <Line type="monotone" name="Fantavoto" dataKey="media_fantavoto" stroke="#fbbf24" strokeWidth={2.5} dot={{ r: 3 }} />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -165,8 +165,8 @@ function Reparto({ r, ruolo, vista }) {
       {/* Indicatori */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Indicatore label="Partite" value={r.partite} />
-        <Indicatore label="Media voto netto" value={fmt(rs.media_netto, 2)} sub="base, senza bonus/malus" tono="text-grass-400" />
-        <Indicatore label="Media voto lordo" value={fmt(rs.media_lordo, 2)} sub="con bonus/malus" tono="text-gold-400" />
+        <Indicatore label="Media voto" value={fmt(rs.media_voto, 2)} sub="base, senza bonus/malus" tono="text-grass-400" />
+        <Indicatore label="Media fantavoto" value={fmt(rs.media_fantavoto, 2)} sub="con bonus/malus" tono="text-gold-400" />
         <Indicatore label={`${nomeGol} (tot.)`} value={rs.gol_totali} tono={portiere ? 'text-red-400' : 'text-white'} />
         <Indicatore label={`${nomeGol} a partita`} value={fmt(rs.media_gol, 2)} />
         {portiere
@@ -197,11 +197,11 @@ function Reparto({ r, ruolo, vista }) {
       </Section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Section title="Partite per fascia di media voto netto" icon={Gauge}>
-          <Istogramma data={fasce(r.fasce_netto)} colore="#4ade80" />
+        <Section title="Partite per fascia di media voto" icon={Gauge}>
+          <Istogramma data={fasce(r.fasce_voto)} colore="#4ade80" />
         </Section>
-        <Section title="Partite per fascia di media voto lordo" icon={Gauge}>
-          <Istogramma data={fasce(r.fasce_lordo)} colore="#fbbf24" />
+        <Section title="Partite per fascia di media fantavoto" icon={Gauge}>
+          <Istogramma data={fasce(r.fasce_fantavoto)} colore="#fbbf24" />
         </Section>
       </div>
 
@@ -217,8 +217,8 @@ function Reparto({ r, ruolo, vista }) {
                   <tr>
                     <th className="text-center">{nSchierati}</th>
                     <th className="text-center">Partite</th>
-                    <th className="text-center">Voto netto</th>
-                    <th className="text-center">Voto lordo</th>
+                    <th className="text-center">Voto</th>
+                    <th className="text-center">Fantavoto</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -226,8 +226,8 @@ function Reparto({ r, ruolo, vista }) {
                     <tr key={x.schierati}>
                       <td className="text-center font-mono font-bold text-slate-200">{x.schierati}</td>
                       <td className="text-center font-mono text-slate-400">{x.partite}</td>
-                      <td className="text-center font-mono text-grass-400">{fmt(x.media_netto, 2)}</td>
-                      <td className="text-center font-mono text-gold-400">{fmt(x.media_lordo, 2)}</td>
+                      <td className="text-center font-mono text-grass-400">{fmt(x.media_voto, 2)}</td>
+                      <td className="text-center font-mono text-gold-400">{fmt(x.media_fantavoto, 2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -272,11 +272,11 @@ function Reparto({ r, ruolo, vista }) {
       )}
 
       <p className="text-[11px] text-slate-600 leading-relaxed">
-        Voto netto = voto base senza bonus/malus; voto lordo = fantavoto con bonus/malus. La media del reparto è la media
+        Voto = voto base senza bonus/malus; fantavoto = voto con bonus/malus. La media del reparto è la media
         delle medie di partita. {portiere && 'I gol subiti sono quelli del portiere (malus “gol subito”), non il punteggio fanta della partita. '}
         {!portiere && !rosa && 'Il modificatore è visto dalla tua squadra: positivo = favorevole. '}
         {rosa
-          ? 'Conta ogni giocatore della rosa che ha preso voto nella giornata, anche se non schierato o sostituito: un giocatore compare solo nelle giornate in cui faceva parte della tua rosa. Il voto lordo dei non schierati è calcolato con le regole bonus/malus della stagione; il modificatore, che dipende dallo schieramento, non è mostrato.'
+          ? 'Conta ogni giocatore della rosa che ha preso voto nella giornata, anche se non schierato o sostituito: un giocatore compare solo nelle giornate in cui faceva parte della tua rosa. Il fantavoto dei non schierati è calcolato con le regole bonus/malus della stagione; il modificatore, che dipende dallo schieramento, non è mostrato.'
           : 'Conta chi ha concorso al punteggio, riserve d\'ufficio comprese.'}
       </p>
     </div>
@@ -285,8 +285,9 @@ function Reparto({ r, ruolo, vista }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-export default function AreaRuoli({ stagione, idSquadra, competizione }) {
-  const [reparto, setReparto] = useState('1')
+export default function AreaRuoli({ stagione, idSquadra, competizione, repartoFisso = null }) {
+  const [repartoScelto, setReparto] = useState('1')
+  const reparto = repartoFisso ? String(repartoFisso) : repartoScelto
   const [vista, setVista] = useState('SCHIERATI')
   const { data: r, loading, error, refetch } = useFetch(
     () => getDashboardRuoli(stagione, idSquadra, Number(reparto), competizione, vista),
@@ -296,9 +297,11 @@ export default function AreaRuoli({ stagione, idSquadra, competizione }) {
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-        <div className="overflow-x-auto">
-          <TabBar tabs={REPARTI} active={reparto} onChange={setReparto} />
-        </div>
+        {!repartoFisso && (
+          <div className="overflow-x-auto">
+            <TabBar tabs={REPARTI} active={reparto} onChange={setReparto} />
+          </div>
+        )}
         <div className="overflow-x-auto lg:ml-auto">
           <TabBar tabs={VISTE} active={vista} onChange={setVista} />
         </div>

@@ -29,7 +29,7 @@ function costruisciTop11(rosa, modulo, metrica, minPres) {
 }
 
 export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisponibile = null }) {
-  const [metrica, setMetrica] = useState('media_netto')
+  const [metrica, setMetrica] = useState('media_voto')
   const [modulo, setModulo] = useState('4-3-3')
   const [minPres, setMinPres] = useState(1)
   const [vista, setVista] = useState('SCHIERATI')
@@ -74,8 +74,8 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisp
         <label className="space-y-1.5">
           <span className="text-[10px] uppercase tracking-widest text-slate-500">Voto</span>
           <Select value={metrica} onChange={setMetrica} options={[
-            { value: 'media_netto', label: 'Netto (base, senza bonus/malus)' },
-            { value: 'media_lordo', label: 'Lordo (con bonus/malus)' },
+            { value: 'media_voto', label: 'Voto (base, senza bonus/malus)' },
+            { value: 'media_fantavoto', label: 'Fantavoto (con bonus/malus)' },
           ]} />
         </label>
         <label className="space-y-1.5">
@@ -134,7 +134,7 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisp
           </Section>
 
           <Section title="Medie dei titolari" icon={Star}
-                   right={metrica === 'media_netto' ? 'voto netto' : 'voto lordo'}>
+                   right={metrica === 'media_voto' ? 'voto' : 'fantavoto'}>
             {top.titolari.map(g => (
               <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
                 <RoleBadge ruolo={g.ruolo} />

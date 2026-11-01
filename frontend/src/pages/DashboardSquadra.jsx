@@ -4,13 +4,17 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getDashboardSquadra } from '../api/client'
+import { getDashboardSquadra, getDashboardMetriche } from '../api/client'
 import { LoadingState, ErrorState } from '../components/ui'
 import HeaderSquadra from '../components/dashboard/HeaderSquadra'
 import AreaStatistiche from '../components/dashboard/AreaStatistiche'
 import AreaPrepara from '../components/dashboard/AreaPrepara'
+import AreaAndamento from '../components/dashboard/AreaAndamento'
+import AreaConfronta from '../components/dashboard/AreaConfronta'
+import { BarraSelezione } from '../components/dashboard/SelezioneMetriche'
+import { useSelezioneMetriche } from '../components/dashboard/metriche'
 import {
-  AreaAndamento, AreaConfronta, AreaStoria, AreaUltimaPartita, AreaInArrivo,
+  AreaStoria, AreaUltimaPartita, AreaInArrivo,
 } from '../components/dashboard/AreeMinori'
 
 // ── Competizione (filtro valido per tutte le aree) ───────────
@@ -90,6 +94,21 @@ export default function DashboardSquadra() {
     [ultimaStagione, idSquadra]
   )
 
+  // Statistiche selezionabili di tutta la lega (aree Statistiche, Confronta, Andamento).
+  // La selezione resta valida passando da un'area all'altra.
+  const sel = useSelezioneMetriche()
+  const met = useFetch(
+    d?.stagione ? () => getDashboardMetriche(d.stagione, competizione) : null,
+    [d?.stagione, competizione]
+  )
+  const ctx = {
+    data: met.data && met.data.competizione === competizione ? met.data : null,
+    errore: met.error,
+    riprova: met.refetch,
+    me: idSquadra,
+    sel,
+  }
+
   if (loading || (!d && !error)) return <LoadingState label="Caricamento dashboard..." />
   if (error) return <ErrorState message={error} onRetry={refetch} />
 
@@ -107,12 +126,15 @@ export default function DashboardSquadra() {
       </div>
 
       {area === 'statistiche' && (
-        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} />
+        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} ctx={ctx} />
+      )}
+      {area === 'statistiche' && (
+        <BarraSelezione ctx={ctx} onConfronta={() => setArea('confronta')} onAndamento={() => setArea('andamento')} />
       )}
       {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} />}
       {area === 'ultima'    && <AreaUltimaPartita d={d} competizione={competizione} />}
-      {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} />}
-      {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} />}
+      {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} ctx={ctx} />}
+      {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} ctx={ctx} />}
       {area === 'storia'    && <AreaStoria d={d} />}
       {(area === 'fortuna' || area === 'finanza') && <AreaInArrivo titolo={titoloArea} />}
     </div>

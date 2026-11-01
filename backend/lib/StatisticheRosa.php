@@ -143,7 +143,7 @@ function sr_voti_rosa(int $stagione, int $idSquadra, bool $champ, array $giornat
 }
 
 /**
- * Presenze e medie per giocatore: id_giocatore => [presenze, media_netto, media_lordo].
+ * Presenze e medie per giocatore: id_giocatore => [presenze, media_voto, media_fantavoto].
  * Usata dal Top 11 di "Prepara la prossima partita".
  */
 function sr_medie_per_giocatore(array $righe): array
@@ -159,8 +159,8 @@ function sr_medie_per_giocatore(array $righe): array
         $n = count($a["voti"]);
         $out[$id] = [
             "presenze"    => $n,
-            "media_netto" => round(array_sum($a["voti"]) / $n, 2),
-            "media_lordo" => round(array_sum($a["totali"]) / $n, 2),
+            "media_voto" => round(array_sum($a["voti"]) / $n, 2),
+            "media_fantavoto" => round(array_sum($a["totali"]) / $n, 2),
         ];
     }
     return $out;

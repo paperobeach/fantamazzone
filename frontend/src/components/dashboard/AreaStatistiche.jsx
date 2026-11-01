@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import {
-  ClipboardList, Flame, Swords, Star, ThumbsDown, Home, Plane, Target, BarChart3, Hash,
+  ClipboardList, Flame, Swords, Star, ThumbsDown, Home, Plane, Target, BarChart3, Hash, Shield, X, MousePointerClick,
 } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardStatistiche } from '../../api/client'
-import { LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../ui'
+import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
 import {
   Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
 } from './shared'
 import AreaRuoli from './AreaRuoli'
 import { NomeConBandiera } from '../Bandiera'
+import { CardMetrica, RigaMetrica, ChipMetrica } from './SelezioneMetriche'
 
 // ── Serie ────────────────────────────────────────────────────
 
@@ -20,7 +21,19 @@ const SERIE_DEF = [
   { key: 'senza_vittorie', label: 'Partite senza vittorie',  positiva: false },
 ]
 
-function SerieTable({ serie }) {
+function CellaSerie({ k, valore, colore, ctx }) {
+  const on = ctx.sel.ha(k)
+  return (
+    <button type="button" onClick={() => ctx.sel.toggle(k)} aria-pressed={on}
+            title={on ? 'Togli dalla selezione' : 'Aggiungi alla selezione'}
+            className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-1 rounded-lg border font-mono font-bold transition-colors ${
+              on ? 'bg-grass-500/10 border-grass-500/50' : 'border-transparent hover:border-white/20'} ${colore}`}>
+      {valore}
+    </button>
+  )
+}
+
+function SerieTable({ serie, ctx }) {
   return (
     <div className="overflow-x-auto">
       <table className="fanta-table">
@@ -39,9 +52,11 @@ function SerieTable({ serie }) {
               <tr key={key}>
                 <td className="text-sm text-slate-300">{label}</td>
                 <td className="text-center">
-                  <span className={`font-mono font-bold ${s.corrente > 0 ? colore : 'text-slate-600'}`}>{s.corrente}</span>
+                  <CellaSerie k={`serie_${key}`} ctx={ctx} valore={s.corrente} colore={s.corrente > 0 ? colore : 'text-slate-600'} />
                 </td>
-                <td className="text-center font-mono font-bold text-slate-300">{s.record}</td>
+                <td className="text-center">
+                  <CellaSerie k={`serie_${key}_record`} ctx={ctx} valore={s.record} colore="text-slate-300" />
+                </td>
               </tr>
             )
           })}
@@ -53,7 +68,7 @@ function SerieTable({ serie }) {
 
 // ── Casa / trasferta ─────────────────────────────────────────
 
-function BloccoCasaTrasferta({ titolo, icona: Icona, r }) {
+function BloccoCasaTrasferta({ titolo, icona: Icona, r, chips }) {
   return (
     <div className="rounded-xl bg-pitch-900 border border-white/5 p-4">
       <p className="text-xs uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-3">
@@ -72,56 +87,85 @@ function BloccoCasaTrasferta({ titolo, icona: Icona, r }) {
           <p className="text-xs text-slate-500 font-mono mt-3 text-center">
             {r.punti} pt · {fmt(r.punti_per_partita, 2)} a partita · gol {r.golf}-{r.gols}
           </p>
+          {chips && <div className="flex flex-wrap justify-center gap-2 mt-3">{chips}</div>}
         </>
       )}
     </div>
   )
 }
 
-// ── Sezione "Risultati e classifica" ─────────────────────────
+// ── Pagina unica: sezioni ────────────────────────────────────
 
-function RisultatiClassifica({ s, champ, kpi }) {
+const NAV = [
+  { id: 'risultati', label: 'Risultati' },
+  { id: 'gol',       label: 'Gol' },
+  { id: 'serie',     label: 'Serie' },
+  { id: 'reparti',   label: 'Reparti' },
+  { id: 'giocatori', label: 'Top / Flop' },
+]
+
+const vaiA = id => document.getElementById(`stat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+function BarraNavigazione() {
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="flex gap-1.5 w-max">
+        {NAV.map(n => (
+          <button key={n.id} type="button" onClick={() => vaiA(n.id)}
+                  className="px-3 py-1.5 rounded-full border border-white/10 text-xs text-slate-400 hover:text-white hover:border-white/25 transition-colors whitespace-nowrap">
+            {n.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Intro({ ctx }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-pitch-900/60 px-4 py-3 text-xs text-slate-500">
+      <MousePointerClick className="w-4 h-4 text-grass-400 flex-shrink-0 mt-0.5" />
+      <p className="leading-relaxed">
+        Tocca una statistica per selezionarla: poi puoi <b className="text-slate-300">confrontarla</b> con le altre squadre e con
+        il benchmark di lega, oppure vederne l’<b className="text-slate-300">andamento</b> giornata per giornata.
+        {ctx.errore && <span className="text-red-400"> Dati di lega non disponibili: {ctx.errore}</span>}
+        {!ctx.data && !ctx.errore && <span> Carico i dati di lega…</span>}
+      </p>
+    </div>
+  )
+}
+
+function SezioneRisultati({ s, ctx }) {
   const [nForma, setNForma] = useState(5)
   const r = s.riepilogo
-  const n = r.giocate
-  const g = s.gol
   const forma = s.forma.slice(0, nForma)
-
-  if (n === 0) {
-    return <EmptyState label={champ ? 'Nessuna partita di Champions ancora giocata.' : 'Nessuna giornata ancora giocata.'} />
-  }
-
-  const diff = r.diff_reti > 0 ? `+${r.diff_reti}` : String(r.diff_reti)
+  const diffTono = r.diff_reti > 0 ? 'text-green-400' : r.diff_reti < 0 ? 'text-red-400' : 'text-white'
 
   return (
     <div className="space-y-6">
-      {/* Indicatori principali */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Indicatore label={s.posizione?.etichetta ?? 'Posizione'}
                     value={s.posizione ? `${s.posizione.posizione}°` : '–'}
                     sub={s.posizione ? `su ${s.posizione.squadre}` : undefined} tono="text-grass-400" />
-        <Indicatore label="Punti" value={r.punti} />
-        <Indicatore label="Punti / partita" value={fmt(r.punti_per_partita, 2)} />
-        <Indicatore label="Giocate" value={n} />
-        <Indicatore label="Vittorie" value={r.vinte} tono="text-green-400" />
-        <Indicatore label="Pareggi" value={r.nulle} tono="text-yellow-400" />
-        <Indicatore label="Sconfitte" value={r.perse} tono="text-red-400" />
-        <Indicatore label="Diff. reti" value={diff}
-                    sub={`${r.golf} fatti · ${r.gols} subiti`}
-                    tono={r.diff_reti > 0 ? 'text-green-400' : r.diff_reti < 0 ? 'text-red-400' : 'text-white'} />
+        <Indicatore label="Giocate" value={r.giocate} />
+        <CardMetrica k="punti" ctx={ctx} />
+        <CardMetrica k="punti_partita" ctx={ctx} label="Punti / partita" />
+        <CardMetrica k="vittorie" ctx={ctx} tono="text-green-400" />
+        <CardMetrica k="pareggi" ctx={ctx} tono="text-yellow-400" />
+        <CardMetrica k="sconfitte" ctx={ctx} tono="text-red-400" />
+        <CardMetrica k="diff_reti" ctx={ctx} label="Diff. reti" tono={diffTono} sub={`${r.golf} fatti · ${r.gols} subiti`} />
       </div>
 
-      {/* Fantapunteggi (solo campionato: dati di classifica generale) */}
-      {kpi && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Indicatore label="Miglior fantapunteggio" value={fmt(kpi.migliore)} tono="text-grass-400" />
-          <Indicatore label="Peggior fantapunteggio" value={fmt(kpi.peggiore)} />
-          <Indicatore label="Media fantapunti" value={fmt(kpi.media, 2)} />
-          <Indicatore label="Media avversari" value={fmt(kpi.media_avversari, 2)} sub="fantapunti subiti" />
+      <Section title="Fantapunti" icon={BarChart3} right="tocca per selezionare">
+        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <CardMetrica k="fanta_media" ctx={ctx} label="Media fantapunti" tono="text-grass-400" />
+          <CardMetrica k="fanta_subiti" ctx={ctx} label="Media avversari" sub="fantapunti subiti" />
+          <CardMetrica k="fanta_diff" ctx={ctx} />
+          <CardMetrica k="fanta_max" ctx={ctx} tono="text-grass-400" />
+          <CardMetrica k="fanta_min" ctx={ctx} />
         </div>
-      )}
+      </Section>
 
-      {/* Forma */}
       <Section title="Forma" icon={ClipboardList}
                right={
                  <span className="inline-flex gap-1">
@@ -156,11 +200,12 @@ function RisultatiClassifica({ s, champ, kpi }) {
         </div>
       </Section>
 
-      {/* Casa / trasferta */}
       <Section title="Rendimento casa / trasferta" icon={Home}>
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <BloccoCasaTrasferta titolo="In casa" icona={Home} r={s.casa_trasferta.casa} />
-          <BloccoCasaTrasferta titolo="In trasferta" icona={Plane} r={s.casa_trasferta.trasferta} />
+          <BloccoCasaTrasferta titolo="In casa" icona={Home} r={s.casa_trasferta.casa}
+                               chips={<><ChipMetrica k="ppp_casa" ctx={ctx} label="Punti/partita" /><ChipMetrica k="fanta_casa" ctx={ctx} label="Fantapunti" /></>} />
+          <BloccoCasaTrasferta titolo="In trasferta" icona={Plane} r={s.casa_trasferta.trasferta}
+                               chips={<><ChipMetrica k="ppp_trasferta" ctx={ctx} label="Punti/partita" /><ChipMetrica k="fanta_trasferta" ctx={ctx} label="Fantapunti" /></>} />
         </div>
         {s.casa_trasferta.non_definite > 0 && (
           <p className="px-4 pb-3 text-xs text-slate-600">
@@ -169,29 +214,48 @@ function RisultatiClassifica({ s, champ, kpi }) {
         )}
       </Section>
 
-      {/* Gol */}
+      <Section title="Matrice dei risultati" icon={Swords} right="contro ogni avversario">
+        <MatriceScontri matrice={s.matrice} vuota={s.competizione === 'CHAMP' ? 'Mai affrontata' : 'Non ancora giocato'} />
+      </Section>
+    </div>
+  )
+}
+
+function SezioneGol({ s, ctx }) {
+  const n = s.riepilogo.giocate
+  const g = s.gol
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <CardMetrica k="gol_fatti" ctx={ctx} tono="text-green-400" />
+        <CardMetrica k="gol_subiti" ctx={ctx} tono="text-red-400" />
+        <CardMetrica k="gol_fatti_tot" ctx={ctx} />
+        <CardMetrica k="gol_subiti_tot" ctx={ctx} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Section title="Gol segnati e subiti" icon={Target} right={`${n} partite`}>
-          <div className="p-4 space-y-3">
-            <BarraPerc label="Clean sheet"      valore={g.clean_sheet}      totale={n} colore="bg-green-500" />
-            <BarraPerc label="Senza segnare"    valore={g.senza_segnare}    totale={n} colore="bg-red-500" />
-            <BarraPerc label="Gol segnato"      valore={g.con_gol_segnato}  totale={n} colore="bg-grass-400" />
-            <BarraPerc label="Gol subito"       valore={g.con_gol_subito}   totale={n} colore="bg-orange-400" />
-            <BarraPerc label="Segnato e subito" valore={g.segnato_e_subito} totale={n} colore="bg-sky-400" />
-            <p className="text-[11px] text-slate-600 pt-1">
-              Media gol: {fmt(r.media_golf, 2)} fatti · {fmt(r.media_gols, 2)} subiti a partita.
+          <div className="p-3 space-y-1">
+            <RigaMetrica k="clean_sheet" ctx={ctx} colore="bg-green-500" />
+            <RigaMetrica k="senza_segnare" ctx={ctx} label="Senza segnare" colore="bg-red-500" />
+            <RigaMetrica k="gol_segnato" ctx={ctx} label="Gol segnato" colore="bg-grass-400" />
+            <RigaMetrica k="gol_subito" ctx={ctx} label="Gol subito" colore="bg-orange-400" />
+            <RigaMetrica k="segnato_e_subito" ctx={ctx} colore="bg-sky-400" />
+            <p className="text-[11px] text-slate-600 pt-2 px-2">
+              Media gol: {fmt(s.riepilogo.media_golf, 2)} fatti · {fmt(s.riepilogo.media_gols, 2)} subiti a partita.
+              Il numero a destra è la posizione in lega.
             </p>
           </div>
         </Section>
 
         <Section title="Over / Under" icon={BarChart3} right="gol totali della partita">
-          <div className="p-4 space-y-4">
+          <div className="p-3 space-y-3">
             {['1.5', '2.5', '3.5'].map(k => (
               <div key={k}>
-                <p className="text-xs font-mono text-slate-400 mb-1.5">Soglia {k}</p>
-                <div className="space-y-1.5">
-                  <BarraPerc label={`Over ${k}`}  valore={s.over_under[k].over}  totale={n} colore="bg-grass-500" />
-                  <BarraPerc label={`Under ${k}`} valore={s.over_under[k].under} totale={n} colore="bg-slate-500" />
+                <p className="text-xs font-mono text-slate-400 mb-1 px-2">Soglia {k}</p>
+                <div className="space-y-1">
+                  <RigaMetrica k={`over_${k.replace('.', '')}`} ctx={ctx} label={`Over ${k}`} colore="bg-grass-500" />
+                  <div className="px-2"><BarraPerc label={`Under ${k}`} valore={s.over_under[k].under} totale={n} colore="bg-slate-500" /></div>
                 </div>
               </div>
             ))}
@@ -199,28 +263,76 @@ function RisultatiClassifica({ s, champ, kpi }) {
         </Section>
       </div>
 
-      {/* Serie e punteggi */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Section title="Serie" icon={Flame}>
-          <SerieTable serie={s.serie} />
-        </Section>
+      <Section title="Distribuzione per punteggio finale" icon={Hash} right="gol fatti - subiti">
+        <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
+          {s.punteggi.map(p => (
+            <BarraPerc key={`${p.golf}-${p.gols}`} label={`${p.golf} - ${p.gols}`}
+                       valore={p.n} totale={n}
+                       colore={p.segno === 'V' ? 'bg-green-500' : p.segno === 'N' ? 'bg-yellow-400' : 'bg-red-500'}
+                       dx={`${p.n}×`} />
+          ))}
+        </div>
+      </Section>
+    </div>
+  )
+}
 
-        <Section title="Distribuzione per punteggio finale" icon={Hash} right="gol fatti - subiti">
-          <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
-            {s.punteggi.map(p => (
-              <BarraPerc key={`${p.golf}-${p.gols}`} label={`${p.golf} - ${p.gols}`}
-                         valore={p.n} totale={n}
-                         colore={p.segno === 'V' ? 'bg-green-500' : p.segno === 'N' ? 'bg-yellow-400' : 'bg-red-500'}
-                         dx={`${p.n}×`} />
-            ))}
+// ── Reparti ──────────────────────────────────────────────────
+
+const REPARTI = [
+  { ruolo: 1, nome: 'Portieri' },
+  { ruolo: 2, nome: 'Difensori' },
+  { ruolo: 3, nome: 'Centrocampisti' },
+  { ruolo: 4, nome: 'Attaccanti' },
+]
+
+function CardReparto({ reparto, ctx, aperto, onDettaglio }) {
+  const kv = `reparto_${reparto.ruolo}_voto`
+  const kf = `reparto_${reparto.ruolo}_fantavoto`
+  return (
+    <div className={`rounded-xl border p-3 space-y-2 transition-colors ${aperto ? 'border-grass-500/40 bg-pitch-900' : 'border-white/5 bg-pitch-900'}`}>
+      <p className="text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
+        <RoleBadge ruolo={reparto.ruolo} /> {reparto.nome}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <CardMetrica k={kv} ctx={ctx} label="Voto" tono="text-grass-400" />
+        <CardMetrica k={kf} ctx={ctx} label="Fantavoto" tono="text-gold-400" />
+      </div>
+      <button type="button" onClick={onDettaglio}
+              className="w-full text-xs rounded-lg border border-white/10 py-1.5 text-slate-400 hover:text-white hover:border-white/25 transition-colors">
+        {aperto ? 'Chiudi dettaglio' : 'Apri dettaglio'}
+      </button>
+    </div>
+  )
+}
+
+function SezioneReparti({ ctx, stagione, idSquadra, competizione }) {
+  const [aperto, setAperto] = useState(null)
+  const rep = REPARTI.find(r => r.ruolo === aperto)
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {REPARTI.map(r => (
+          <CardReparto key={r.ruolo} reparto={r} ctx={ctx} aperto={aperto === r.ruolo}
+                       onDettaglio={() => setAperto(a => (a === r.ruolo ? null : r.ruolo))} />
+        ))}
+      </div>
+      <p className="text-[11px] text-slate-600 -mt-3">
+        Voto = voto base senza bonus/malus; fantavoto = voto con bonus/malus. Media dei giocatori schierati, calcolata
+        come media delle medie di partita.
+      </p>
+      {rep && (
+        <Section title={`Dettaglio ${rep.nome.toLowerCase()}`} icon={Shield}
+                 right={
+                   <button type="button" onClick={() => setAperto(null)} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-300">
+                     <X className="w-3.5 h-3.5" /> Chiudi
+                   </button>
+                 }>
+          <div className="p-4">
+            <AreaRuoli stagione={stagione} idSquadra={idSquadra} competizione={competizione} repartoFisso={rep.ruolo} />
           </div>
         </Section>
-      </div>
-
-      {/* Matrice */}
-      <Section title="Matrice dei risultati" icon={Swords} right="contro ogni avversario">
-        <MatriceScontri matrice={s.matrice} vuota={champ ? 'Mai affrontata' : 'Non ancora giocato'} />
-      </Section>
+      )}
     </div>
   )
 }
@@ -262,43 +374,57 @@ function TopFlopPropri({ top, flop }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-const SOTTO_AREE = [
-  { value: 'risultati', label: 'Risultati e classifica' },
-  { value: 'ruoli',     label: 'Analisi per ruolo' },
-  { value: 'topflop',   label: 'Top / Flop 11' },
-]
-
-export default function AreaStatistiche({ d, stagione, idSquadra, competizione }) {
-  const [sotto, setSotto] = useState('risultati')
+export default function AreaStatistiche({ d, stagione, idSquadra, competizione, ctx }) {
   const champ = competizione === 'CHAMP'
-
   const { data: s, loading, error, refetch } = useFetch(
-    sotto === 'risultati' ? () => getDashboardStatistiche(stagione, idSquadra, competizione) : null,
-    [stagione, idSquadra, competizione, sotto]
+    () => getDashboardStatistiche(stagione, idSquadra, competizione),
+    [stagione, idSquadra, competizione]
   )
+
+  const caricamento = loading || (!s && !error)
+  const nessunaPartita = s && s.riepilogo.giocate === 0
 
   return (
     <div className="space-y-6">
-      <div className="overflow-x-auto">
-        <TabBar tabs={SOTTO_AREE} active={sotto} onChange={setSotto} />
+      <BarraNavigazione />
+      <Intro ctx={ctx} />
+
+      <div id="stat-risultati" className="scroll-mt-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-widest text-slate-500">Risultati</h2>
+        {caricamento ? <LoadingState label="Calcolo statistiche..." />
+          : error ? <ErrorState message={error} onRetry={refetch} />
+          : nessunaPartita ? <EmptyState label={champ ? 'Nessuna partita di Champions ancora giocata.' : 'Nessuna giornata ancora giocata.'} />
+          : <SezioneRisultati s={{ ...s, competizione }} ctx={ctx} />}
       </div>
 
-      {sotto === 'risultati' && (
-        loading || (!s && !error) ? <LoadingState label="Calcolo statistiche..." />
-          : error ? <ErrorState message={error} onRetry={refetch} />
-          : <RisultatiClassifica s={s} champ={champ} kpi={champ ? null : d.kpi} />
+      {s && !nessunaPartita && (
+        <>
+          <div id="stat-gol" className="scroll-mt-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest text-slate-500">Gol</h2>
+            <SezioneGol s={s} ctx={ctx} />
+          </div>
+
+          <div id="stat-serie" className="scroll-mt-4 space-y-3">
+            <h2 className="text-xs uppercase tracking-widest text-slate-500">Serie</h2>
+            <Section title="Serie" icon={Flame} right="tocca un valore per selezionarlo">
+              <SerieTable serie={s.serie} ctx={ctx} />
+            </Section>
+          </div>
+        </>
       )}
 
-      {sotto === 'ruoli' && (
-        <AreaRuoli stagione={stagione} idSquadra={idSquadra} competizione={competizione} />
-      )}
+      <div id="stat-reparti" className="scroll-mt-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-widest text-slate-500">Reparti</h2>
+        <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} />
+      </div>
 
-      {sotto === 'topflop' && (
+      <div id="stat-giocatori" className="scroll-mt-4 space-y-3">
+        <h2 className="text-xs uppercase tracking-widest text-slate-500">Top / Flop 11</h2>
         <TopFlopPropri
           top={champ ? d.champions.top11 : d.campionato.top11}
           flop={champ ? d.champions.flop11 : d.campionato.flop11}
         />
-      )}
+      </div>
     </div>
   )
 }

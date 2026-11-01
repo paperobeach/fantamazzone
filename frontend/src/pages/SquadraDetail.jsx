@@ -3,8 +3,10 @@ import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getSquadra } from '../api/client'
 import { LoadingState, ErrorState, RoleBadge, PageHeader } from '../components/ui'
-import { ArrowLeft, Trophy } from 'lucide-react'
+import { ArrowLeft, Wallet } from 'lucide-react'
 import { Bandiera } from '../components/Bandiera'
+import AlboTrofei from '../components/AlboTrofei'
+import { CoachPhoto } from '../components/dashboard/shared'
 
 const RUOLO_ORDER = { '1': 0, '2': 1, '3': 2, '4': 3 }
 const RUOLO_LABEL = { '1': 'Portieri', '2': 'Difensori', '3': 'Centrocampisti', '4': 'Attaccanti' }
@@ -32,24 +34,61 @@ export default function SquadraDetail() {
 
   const ruoli = Object.keys(grouped).sort((a, b) => RUOLO_ORDER[a] - RUOLO_ORDER[b])
 
+  const crediti = data.crediti ?? null
+  const residuoNegativo = crediti ? Number(crediti.residuo) < 0 : false
+
   return (
     <div className="animate-fade-up">
       <Link to="/squadre" className="btn-ghost mb-6 inline-flex">
         <ArrowLeft className="w-4 h-4" /> Tutte le squadre
       </Link>
 
-      <PageHeader
-        label="Dettaglio squadra"
-        title={data.nome}
-        subtitle={data.allenatore ? `Allenatore: ${data.allenatore}` : undefined}
-      >
-        {data.albo && Number(data.albo) > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gold-500/10 border border-gold-500/20">
-            <Trophy className="w-4 h-4 text-gold-400" />
-            <span className="text-sm font-medium text-gold-400">{data.albo} titoli</span>
+      {/* Intestazione: nome squadra + albo (campionati, secondi posti, Champions, maglie nere) */}
+      <PageHeader label="Dettaglio squadra" title={data.nome}>
+        <AlboTrofei trofei={data.trofei} variant="tile" />
+      </PageHeader>
+
+      {/* Allenatore + crediti (per ruolo, totale, residuo) */}
+      <div className="card p-4 sm:p-5 mb-6 flex flex-col lg:flex-row lg:items-center gap-5">
+        <div className="flex items-center gap-4 lg:min-w-[16rem]">
+          <CoachPhoto logo={data.logo_allenatore} nome={data.allenatore} className="w-20 h-20" />
+          <div className="min-w-0">
+            <p className="section-label !mb-0.5">Allenatore</p>
+            <p className="text-base font-semibold text-slate-200 truncate">{data.allenatore || 'n.d.'}</p>
+          </div>
+        </div>
+
+        {crediti && (
+          <div className="flex-1 min-w-0 lg:border-l lg:border-white/5 lg:pl-5">
+            <p className="flex items-center gap-1.5 text-xs font-mono tracking-widest uppercase text-slate-500 mb-2">
+              <Wallet className="w-3.5 h-3.5" aria-hidden="true" /> Crediti
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+              {['1', '2', '3', '4'].map(r => (
+                <div key={r} className="rounded-xl bg-white/[0.03] border border-white/5 px-3 py-2">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <RoleBadge ruolo={r} />
+                    <span className="text-[10px] text-slate-500 truncate">{RUOLO_LABEL[r]}</span>
+                  </div>
+                  <p className="text-display text-2xl font-bold text-slate-200 leading-none">{crediti.per_ruolo?.[r] ?? 0}</p>
+                </div>
+              ))}
+              <div className="rounded-xl bg-grass-500/10 border border-grass-500/20 px-3 py-2">
+                <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">Totale</p>
+                <p className="text-display text-2xl font-bold text-grass-400 leading-none">{crediti.totale}</p>
+                <p className="text-[10px] text-slate-600 mt-0.5">su {crediti.budget}</p>
+              </div>
+              <div className={`rounded-xl border px-3 py-2 ${
+                residuoNegativo ? 'bg-red-500/10 border-red-500/30' : 'bg-gold-500/10 border-gold-500/20'}`}>
+                <p className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-0.5">Residuo</p>
+                <p className={`text-display text-2xl font-bold leading-none ${residuoNegativo ? 'text-red-400' : 'text-gold-400'}`}>
+                  {crediti.residuo}
+                </p>
+              </div>
+            </div>
           </div>
         )}
-      </PageHeader>
+      </div>
 
       {/* Rosa per ruolo */}
       <div className="space-y-6">
@@ -59,6 +98,11 @@ export default function SquadraDetail() {
               <RoleBadge ruolo={r} />
               <h3 className="text-sm font-semibold text-slate-300">{RUOLO_LABEL[r]}</h3>
               <span className="text-xs text-slate-600 font-mono">{grouped[r].length} giocatori</span>
+              {crediti && (
+                <span className="ml-auto text-xs font-mono text-grass-400">
+                  {crediti.per_ruolo?.[r] ?? 0} crediti
+                </span>
+              )}
             </div>
             <div className="overflow-x-auto">
             <table className="fanta-table sticky-1 min-w-[900px]">

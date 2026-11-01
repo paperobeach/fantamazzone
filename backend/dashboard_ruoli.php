@@ -27,8 +27,8 @@
 //   Nella vista ROSA il campo `schierati` indica i giocatori CON VOTO.
 //
 // Definizioni (le stesse della UI):
-//   voto NETTO  = voto base del giocatore, senza bonus/malus (NEW_VOTI.voto)
-//   voto LORDO  = voto con bonus/malus, cioè il fantavoto (NEW_VOTI.totale)
+//   VOTO        = voto base del giocatore, senza bonus/malus (NEW_VOTI.voto)
+//   FANTAVOTO   = voto con bonus/malus (NEW_VOTI.totale)
 //   media di una giornata = media del reparto in quella partita; la media
 //                 di reparto della stagione è la media di queste medie
 //                 (ogni partita pesa uguale, a prescindere da quanti
@@ -205,8 +205,8 @@ ksort($perGiornata);
 // ── Aggregazione per giornata ────────────────────────────────
 
 $giornate = [];
-$mediePartitaNetto = [];
-$mediePartitaLordo = [];
+$mediePartitaVoto = [];
+$mediePartitaFantavoto = [];
 $perN = [];          // numero giocatori schierati => medie
 $golPartita = [];
 $modValori = [];
@@ -228,19 +228,19 @@ foreach ($perGiornata as $g => $lista) {
         "golf"        => $p["golf"] ?? null,
         "gols"        => $p["gols"] ?? null,
         "schierati"   => $n,
-        "media_netto" => $mn,
-        "media_lordo" => $ml,
+        "media_voto" => $mn,
+        "media_fantavoto" => $ml,
         "gol"         => $gol,
         "modificatore" => $mod,
     ];
 
-    $mediePartitaNetto[] = $mn;
-    $mediePartitaLordo[] = $ml;
+    $mediePartitaVoto[] = $mn;
+    $mediePartitaFantavoto[] = $ml;
     $golPartita[] = $gol;
     $golTot += $gol;
     if ($mod !== null) $modValori[] = $mod;
-    $perN[$n]["netto"][] = $mn;
-    $perN[$n]["lordo"][] = $ml;
+    $perN[$n]["voto"][] = $mn;
+    $perN[$n]["fantavoto"][] = $ml;
 }
 
 $partiteN = count($giornate);
@@ -254,8 +254,8 @@ foreach ($giocatori as $gp) {
         "nome"         => $gp["nome"],
         "presenze"     => $gp["presenze"],
         "gol"          => $gp["gol"],
-        "media_netto"  => dr_media($gp["voti"]),
-        "media_lordo"  => dr_media($gp["totali"]),
+        "media_voto"  => dr_media($gp["voti"]),
+        "media_fantavoto"  => dr_media($gp["totali"]),
         // giornata => gol (la chiave c'è solo se il giocatore ha concorso al punteggio)
         "per_giornata" => (object) $gp["per_giornata"],
     ];
@@ -269,9 +269,9 @@ $distribuzioneN = [];
 foreach ($perN as $n => $m) {
     $distribuzioneN[] = [
         "schierati"   => $n,
-        "partite"     => count($m["netto"]),
-        "media_netto" => dr_media($m["netto"]),
-        "media_lordo" => dr_media($m["lordo"]),
+        "partite"     => count($m["voto"]),
+        "media_voto" => dr_media($m["voto"]),
+        "media_fantavoto" => dr_media($m["fantavoto"]),
     ];
 }
 
@@ -302,8 +302,8 @@ api_success([
     "vista"        => $vista,
     "partite"      => $partiteN,
     "riepilogo"    => [
-        "media_netto"    => dr_media($mediePartitaNetto),
-        "media_lordo"    => dr_media($mediePartitaLordo),
+        "media_voto"    => dr_media($mediePartitaVoto),
+        "media_fantavoto"    => dr_media($mediePartitaFantavoto),
         "gol_totali"     => $golTot,
         "media_gol"      => $partiteN ? round($golTot / $partiteN, 2) : null,
         "media_schierati" => $partiteN ? round(array_sum(array_column($giornate, "schierati")) / $partiteN, 2) : null,
@@ -311,8 +311,8 @@ api_success([
     "giornate"     => $giornate,
     "giocatori"    => $elencoGiocatori,
     "schierati"    => $distribuzioneN,
-    "fasce_netto"  => dr_fasce($mediePartitaNetto),
-    "fasce_lordo"  => dr_fasce($mediePartitaLordo),
+    "fasce_voto"  => dr_fasce($mediePartitaVoto),
+    "fasce_fantavoto"  => dr_fasce($mediePartitaFantavoto),
     "distribuzione_gol" => dr_distribuzione($golPartita),
     "modificatore" => $modificatore,
 ]);

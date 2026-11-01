@@ -15,18 +15,26 @@
 // un turno di Champions restituisce "champions": le sue partite, con la
 // stessa struttura (reale = NEW_RISULTATI_CHAMP, simulazione =
 // NEW_SIMULAZIONE_RISULTATI_CHAMP), il girone e l'elenco di chi riposa.
+// "classifiche": classifiche AGGIORNATE LIVE (lib/ClassificheLive.php), cioè
+// la classifica ufficiale delle giornate chiuse più i risultati calcolati o
+// simulati della giornata in corso:
+//   - "campionato": classifica generale, con posizione live/precedente e delta;
+//   - "champions":  classifica dei gironi della fase in corso (null se la
+//                   giornata non ha un turno a gironi, es. fase finale);
+//   - "errore":     messaggio se una delle due non è stato possibile calcolarla.
 // Se la giornata non è in corso (stagione storica, tutte le giornate
 // chiuse, nessun calendario) "in_corso" = false e "partite" è vuoto.
 // ============================================================
 require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
+require_once __DIR__ . "/lib/ClassificheLive.php";
 
 $stagione = param_int("stagione");
 $stato    = sg_stato_corrente($stagione);
 
 if (!$stato["in_corso"]) {
-    api_success(["stato" => $stato, "partite" => [], "champions" => null, "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
+    api_success(["stato" => $stato, "partite" => [], "champions" => null, "classifiche" => null, "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
 }
 $giornata = $stato["giornata"];
 
@@ -112,6 +120,8 @@ foreach ($partite as $p) {
 // CHAMPIONS: partite del turno della giornata (se presente)
 // ------------------------------------------------------------
 $champions = null;
+$faseChamp = null;     // id della fase del turno (fase1 | fase2 | finale), per la classifica live
+$gruppiOggi = [];      // gironi che giocano o riposano nella giornata
 $pc = champions_partite_giornata($stagione, $giornata);
 if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
     $nomi = [];
@@ -171,11 +181,15 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
         $idx  = champions_assegna_sorgente($stagione)[(int) ($prog["g"] ?? 0)] ?? null;
         $turno = $idx !== null ? (champions_turni_cronologici()[$idx] ?? null) : null;
         if ($turno) {
+            $faseChamp = $turno["fase_id"] ?? null;
             $faseLabel = "";
             foreach (champions_fasi() as $f) if ($f["id"] === $turno["fase_id"]) $faseLabel = $f["label"];
             $etichetta = trim($faseLabel . " - " . $turno["label"], " -");
         }
     } catch (Throwable $e) { /* etichetta facoltativa */ }
+
+    $gruppiOggi = array_values(array_unique(array_merge(
+        array_column($pc["partite"], "girone"), array_column($pc["riposa"], "girone"))));
 
     $champions = [
         "turno"   => $etichetta,
@@ -185,6 +199,23 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
             $pc["riposa"]))),
     ];
 }
+
+// ------------------------------------------------------------
+// CLASSIFICHE LIVE: classifica ufficiale + risultati calcolati/simulati della giornata
+// ------------------------------------------------------------
+$classifiche = ["campionato" => null, "champions" => null, "errore" => null];
+$errori = [];
+try {
+    $classifiche["campionato"] = cl_campionato_live($stagione, $giornata);
+} catch (Throwable $e) {
+    $errori[] = "campionato: " . $e->getMessage();
+}
+try {
+    $classifiche["champions"] = cl_champions_live($stagione, $giornata, $faseChamp, $gruppiOggi);
+} catch (Throwable $e) {
+    $errori[] = "Champions: " . $e->getMessage();
+}
+if ($errori) $classifiche["errore"] = "Classifiche live non disponibili (" . implode("; ", $errori) . ")";
 
 $tot = query_one("SELECT COALESCE(SUM(provvisorio),0) AS p, COALESCE(SUM(manuale),0) AS m
                   FROM NEW_SIMULAZIONE_VOTI WHERE stagione = $stagione AND giornata = $giornata");
@@ -207,6 +238,7 @@ api_success([
     "stato"                    => $stato,
     "partite"                  => $out,
     "champions"                => $champions,
+    "classifiche"              => $classifiche,
     "simulazione_calcolata_il" => $calcolatoIl,
     "provvisori"               => (int) ($tot["p"] ?? 0) + (int) ($totC["p"] ?? 0),
     "manuali"                  => (int) ($tot["m"] ?? 0) + (int) ($totC["m"] ?? 0),

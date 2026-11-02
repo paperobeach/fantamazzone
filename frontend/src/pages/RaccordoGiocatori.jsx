@@ -12,7 +12,9 @@ import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks } from 
 //   - "Ricostruisci raccordo": carico iniziale di tutte le stagioni (rifà i
 //     collegamenti automatici, le correzioni manuali restano);
 //   - "Da verificare": omonimi e collegamenti con nazione diversa/mancante;
-//   - "Persone": ricerca per nome, unisci due persone, separa un giocatore.
+//     per ogni caso si sceglie se collegare SOLO quella stagione a una persona
+//     o unire TUTTE le stagioni delle due persone;
+//   - "Persone": ricerca per nome, unisci due persone, collega o separa una singola stagione.
 // Per le stagioni future l'allineamento parte al termine di "Inserimento rose".
 // ============================================================
 
@@ -99,6 +101,17 @@ export default function RaccordoGiocatori() {
   const conferma = async g => {
     const r = await chiama('conferma', { stagione_giocatore: g.stagione, id_giocatore: g.id_giocatore }, 'conferma')
     if (r) caricaVerifica()
+  }
+
+  // Collega una sola stagione (un solo giocatore) a una persona esistente
+  const collega = async (g, idAnagrafica, dopo) => {
+    const r = await chiama('collega', {
+      stagione_giocatore: g.stagione, id_giocatore: g.id_giocatore, id_anagrafica: idAnagrafica,
+    }, 'collega')
+    if (r) {
+      setEsito(`${g.nome} (${stagioneLabel(g.stagione)}) collegato alla persona #${idAnagrafica}; le altre stagioni non sono state toccate.`)
+      dopo?.()
+    }
   }
 
   const unisci = async (tieni, assorbi) => {
@@ -223,10 +236,20 @@ export default function RaccordoGiocatori() {
                     <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600">Altre persone con lo stesso nome</p>
                     {r.candidati.map(c => (
                       <Persona key={c.id_anagrafica} p={c} azioni={
-                        <Pulsante piccolo icona={GitMerge} disabled={off}
-                                  onClick={() => window.confirm(`Unire la persona #${r.persona.id_anagrafica} in #${c.id_anagrafica}?`) && unisci(c.id_anagrafica, r.persona.id_anagrafica)}>
-                          Unisci a questa
-                        </Pulsante>
+                        <div className="flex flex-wrap gap-2">
+                          <Pulsante piccolo primario icona={GitMerge} disabled={off}
+                                    titolo="Collega solo questa stagione a questa persona"
+                                    onClick={() => window.confirm(`Collegare solo ${stagioneLabel(r.giocatore.stagione)} alla persona #${c.id_anagrafica}? Le altre stagioni della persona #${r.persona.id_anagrafica} non cambiano.`) && collega(r.giocatore, c.id_anagrafica, caricaVerifica)}>
+                            Collega solo {stagioneLabel(r.giocatore.stagione)}
+                          </Pulsante>
+                          {r.persona.stagioni.length > 1 && (
+                            <Pulsante piccolo icona={GitMerge} disabled={off}
+                                      titolo="Sposta tutte le stagioni della persona su questa"
+                                      onClick={() => window.confirm(`Unire TUTTE le stagioni (${r.persona.stagioni.map(stagioneLabel).join(', ')}) della persona #${r.persona.id_anagrafica} in #${c.id_anagrafica}?`) && unisci(c.id_anagrafica, r.persona.id_anagrafica)}>
+                              Unisci tutte le stagioni
+                            </Pulsante>
+                          )}
+                        </div>
                       } />
                     ))}
                   </div>
@@ -299,6 +322,13 @@ export default function RaccordoGiocatori() {
                       <InfoGiocatore g={g} />
                       {g.nota && <p className="text-xs text-gold-400/90">{g.nota}</p>}
                     </div>
+                    {selezione.length === 1 && selezione[0].id_anagrafica !== persona.id_anagrafica && (
+                      <Pulsante piccolo icona={GitMerge} disabled={off}
+                                titolo="Collega solo questa stagione alla persona selezionata"
+                                onClick={() => collega(g, selezione[0].id_anagrafica, () => apriPersona(persona.id_anagrafica))}>
+                        Collega a #{selezione[0].id_anagrafica}
+                      </Pulsante>
+                    )}
                     {persona.edizioni.length > 1 && (
                       <Pulsante piccolo icona={Scissors} disabled={off}
                                 onClick={() => separa({ ...g, id_anagrafica_origine: persona.id_anagrafica })}>

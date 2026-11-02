@@ -67,9 +67,11 @@ function calcolaMedagliere(data) {
   const m = new Map()
   const get = (t) => {
     if (!t) return null
-    if (!m.has(t.utenza)) m.set(t.utenza, { utenza: t.utenza, nome: t.nome, logo: t.logo, campionati: 0, secondi: 0, champions: 0, finali: 0, nere: 0,
+    // utenza normalizzata (spazi e maiuscole non creano squadre distinte)
+    const k = String(t.utenza ?? '').trim().toLowerCase()
+    if (!m.has(k)) m.set(k, { utenza: k, nome: t.nome, logo: t.logo, campionati: 0, secondi: 0, champions: 0, finali: 0, nere: 0,
       st: { campionati: [], secondi: [], champions: [], finali: [], nere: [] } })
-    return m.get(t.utenza)
+    return m.get(k)
   }
   // oltre al conteggio si tiene la stagione (anno di inizio) di ciascun piazzamento
   const segna = (t, tipo, stagione) => { const x = get(t); if (x) { x[tipo]++; x.st[tipo].push(stagione) } }
@@ -82,8 +84,21 @@ function calcolaMedagliere(data) {
     segna(r.vincitore, 'champions', r.stagione)
     segna(r.finalista, 'finali', r.stagione)
   }
-  for (const x of m.values()) for (const k of Object.keys(x.st)) x.st[k].sort((a, b) => a - b)
-  return [...m.values()].sort((a, b) =>
+
+  // La stessa squadra può comparire con utenze diverse nel tempo (cambio di login):
+  // si uniscono i gruppi che hanno lo stesso nome (stagione più recente, senza maiuscole/spazi).
+  const uniti = new Map()
+  for (const x of m.values()) {
+    const k = String(x.nome ?? '').trim().toLowerCase() || x.utenza
+    const y = uniti.get(k)
+    if (!y) { uniti.set(k, x); continue }
+    for (const t of ['campionati', 'secondi', 'champions', 'finali', 'nere']) {
+      y[t] += x[t]
+      y.st[t].push(...x.st[t])
+    }
+  }
+  for (const x of uniti.values()) for (const k of Object.keys(x.st)) x.st[k].sort((a, b) => a - b)
+  return [...uniti.values()].sort((a, b) =>
     (b.campionati + b.champions) - (a.campionati + a.champions)
     || b.campionati - a.campionati || b.champions - a.champions
     || b.secondi - a.secondi || a.nere - b.nere)

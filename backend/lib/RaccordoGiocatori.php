@@ -461,6 +461,33 @@ function rg_unisci(int $idTieni, int $idAssorbi): void
     rg_pulisci_orfane();
 }
 
+/**
+ * Collega UN SOLO giocatore (una stagione) a una persona esistente, senza
+ * toccare le altre stagioni della persona di provenienza.
+ * Non si puo' se la persona di destinazione ha gia' un altro giocatore nella
+ * stessa stagione.
+ */
+function rg_collega(int $stagione, int $idGiocatore, int $idAnagrafica): void
+{
+    $attuale = rg_persona_di($stagione, $idGiocatore);
+    if ($attuale === null) throw new InvalidArgumentException("Collegamento non trovato");
+    if ($attuale === $idAnagrafica) throw new InvalidArgumentException("Il giocatore e' gia' collegato a questa persona");
+    if (!query_one("SELECT 1 AS x FROM " . RG_T_ANAG . " WHERE id_anagrafica = $idAnagrafica")) {
+        throw new InvalidArgumentException("Persona $idAnagrafica non trovata");
+    }
+    $conf = query_one("SELECT id_giocatore FROM " . RG_T_RACC . "
+                       WHERE id_anagrafica = $idAnagrafica AND stagione = $stagione
+                         AND id_giocatore <> $idGiocatore LIMIT 1");
+    if ($conf) {
+        throw new InvalidArgumentException("La persona #$idAnagrafica ha gia' un altro giocatore (id "
+            . (int) $conf["id_giocatore"] . ") nella stagione $stagione");
+    }
+    rg_esegui("UPDATE " . RG_T_RACC . " SET id_anagrafica = $idAnagrafica, metodo = 'MANUALE',
+                      da_verificare = 'N', nota = NULL, aggiornato_il = NOW()
+               WHERE stagione = $stagione AND id_giocatore = $idGiocatore");
+    rg_pulisci_orfane();
+}
+
 /** Stacca un giocatore dalla sua persona e lo assegna a una persona nuova. */
 function rg_separa(int $stagione, int $idGiocatore): int
 {

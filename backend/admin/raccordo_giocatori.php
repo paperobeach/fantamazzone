@@ -17,7 +17,9 @@
 // azione = "cerca"        { q }  persone per nome
 // azione = "persona"      { id_anagrafica }  persona con le sue edizioni
 // azione = "conferma"     { stagione_giocatore, id_giocatore }
-// azione = "unisci"       { id_tieni, id_assorbi }
+// azione = "collega"      { stagione_giocatore, id_giocatore, id_anagrafica }
+//                         collega UN solo giocatore (una stagione) a una persona
+// azione = "unisci"       { id_tieni, id_assorbi }  unisce TUTTE le stagioni di due persone
 // azione = "separa"       { stagione_giocatore, id_giocatore }
 // ============================================================
 require_once __DIR__ . "/../connect.php";
@@ -77,6 +79,12 @@ try {
 
         case "conferma":
             rg_conferma((int) ($input["stagione_giocatore"] ?? 0), (int) ($input["id_giocatore"] ?? 0));
+            api_success(["ok" => true, "stato" => rg_stato()]);
+            break;
+
+        case "collega":
+            rg_collega((int) ($input["stagione_giocatore"] ?? 0), (int) ($input["id_giocatore"] ?? 0),
+                       (int) ($input["id_anagrafica"] ?? 0));
             api_success(["ok" => true, "stato" => rg_stato()]);
             break;
 

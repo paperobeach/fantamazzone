@@ -366,6 +366,7 @@ export const afMappatura = (stagione, { utenza, password, azione = 'stato', ...e
 //   azioni: stato · ricostruisci { azzera_auto? } · allinea { stagione_da_allineare }
 //           verifica { limite? } · cerca { q } · persona { id_anagrafica }
 //           conferma { stagione_giocatore, id_giocatore } · unisci { id_tieni, id_assorbi }
+//           collega { stagione_giocatore, id_giocatore, id_anagrafica }  (una sola stagione)
 //           separa { stagione_giocatore, id_giocatore }
 export const raccordoGiocatori = (stagione, { utenza, password, azione = 'stato', ...extra }) =>
   post('admin/raccordo_giocatori.php', { stagione, utenza, password, azione, ...extra })

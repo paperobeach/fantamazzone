@@ -372,7 +372,7 @@ function rg_cerca_persone(string $q): array
     return $out;
 }
 
-/** Collegamenti da verificare, con le altre persone omonime come candidate. */
+/** Collegamenti da verificare, con le altre persone omonime (e le loro edizioni) come candidate. */
 function rg_elenco_da_verificare(int $limite = 100): array
 {
     $righe = query_all("SELECT r.stagione, r.id_giocatore, r.id_anagrafica, r.nota, a.nome
@@ -389,7 +389,9 @@ function rg_elenco_da_verificare(int $limite = 100): array
                             WHERE TRIM(nome) = '" . rg_esc(trim((string) $r["nome"])) . "'
                               AND id_anagrafica <> $idPers
                             ORDER BY id_anagrafica LIMIT 8") as $c) {
-            $s = rg_persona_riassunto((int) $c["id_anagrafica"]);
+            // Persona con tutte le edizioni (e i loro dati): servono per scegliere
+            // stagione per stagione quali collegare
+            $s = rg_persona_dettaglio((int) $c["id_anagrafica"]);
             if ($s) $cand[] = $s;
         }
         $out[] = [

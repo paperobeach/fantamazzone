@@ -10,6 +10,10 @@
 // Lo storico si ricostruisce con il RACCORDO PER ID
 // (NEW_GIOCATORI_RACCORDO, vedi lib/RaccordoGiocatori.php): ogni
 // (stagione, id) e' collegato a una persona stabile.
+// Nella stessa stagione la persona puo' avere PIU' id (cessione da una
+// squadra e acquisto da un'altra): i dati della stagione (totali, giornate,
+// percorso) sono aggregati su tutti gli id; l'id piu' basso e' il primo in
+// ordine cronologico, quello piu' alto l'ultimo (usato per l'intestazione).
 // Se le tabelle del raccordo non esistono, o il giocatore non e' ancora
 // raccordato, si ripiega sul collegamento per NOME (descrizione), preferendo
 // a parita' di nome l'edizione con lo stesso ruolo; in quel caso due omonimi
@@ -68,14 +72,32 @@ function sg_cerca(int $stagione, string $q, int $limite = 10): array
                         ORDER BY (a.descrizione LIKE '$like%') DESC, a.descrizione
                         LIMIT " . ($limite * 2));
 
-    $out  = [];
-    $visti = [];
+    // Piu' id della stessa persona nella stagione (cessione/acquisto): in elenco
+    // compare una volta sola, con l'id piu' alto (l'ultimo in ordine cronologico)
+    $persona = [];
+    if ($righe && rg_tabelle_esistono()) {
+        $ids = implode(",", array_map(fn($r) => (int) $r["id"], $righe));
+        foreach (query_all("SELECT id_giocatore, id_anagrafica FROM " . RG_T_RACC . "
+                            WHERE stagione = $stagione AND id_giocatore IN ($ids)") as $r) {
+            $persona[(int) $r["id_giocatore"]] = (int) $r["id_anagrafica"];
+        }
+    }
+    $chiave = fn($r) => isset($persona[(int) $r["id"]]) ? "p" . $persona[(int) $r["id"]] : "g" . (int) $r["id"];
+    $migliore = [];
     foreach ($righe as $r) {
-        $id = (int) $r["id"];
-        if (isset($visti[$id])) continue;
-        $visti[$id] = true;
+        $k = $chiave($r);
+        if (!isset($migliore[$k]) || (int) $r["id"] > (int) $migliore[$k]["id"]) $migliore[$k] = $r;
+    }
+
+    $out   = [];
+    $visti = [];
+    foreach ($righe as $r0) {
+        $k = $chiave($r0);
+        if (isset($visti[$k])) continue;
+        $visti[$k] = true;
+        $r = $migliore[$k];
         $out[] = [
-            "id"              => $id,
+            "id"              => (int) $r["id"],
             "descrizione"     => $r["descrizione"],
             "ruolo"           => (int) $r["ruolo"],
             "squadra_serie_a" => $r["squadra_serie_a"] ?? null,
@@ -139,9 +161,12 @@ function sg_anagrafica(int $stagione, int $id): ?array
 }
 
 /**
- * Edizioni del giocatore in tutte le stagioni: [stagione => id_giocatore].
- * Con $idPersona (raccordo per id) le edizioni sono quelle della persona;
- * altrimenti il collegamento tra stagioni e' per nome (vedi intestazione).
+ * Edizioni del giocatore in tutte le stagioni: [stagione => [id_giocatore, ...]],
+ * dalla stagione piu' recente; gli id di una stagione sono in ordine crescente,
+ * cioe' cronologico (l'id piu' basso e' il primo).
+ * Con $idPersona (raccordo per id) le edizioni sono quelle della persona, anche
+ * piu' di una per stagione; altrimenti il collegamento tra stagioni e' per nome
+ * (vedi intestazione) e si considera un solo id per stagione.
  */
 function sg_edizioni(string $nome, int $stagione, int $id, int $ruolo, ?int $idPersona = null): array
 {
@@ -150,7 +175,8 @@ function sg_edizioni(string $nome, int $stagione, int $id, int $ruolo, ?int $idP
     // Raccordo per id: edizioni della persona
     if ($idPersona !== null) {
         $ed = rg_edizioni($idPersona);
-        $ed[$stagione] = $id;
+        $ed[$stagione] = array_values(array_unique(array_merge($ed[$stagione] ?? [], [$id])));
+        sort($ed[$stagione]);
         krsort($ed);
         return $ed;
     }
@@ -179,7 +205,7 @@ function sg_edizioni(string $nome, int $stagione, int $id, int $ruolo, ?int $idP
     if (!isset($scelte[$stagione])) $scelte[$stagione] = [$id, 0];
 
     $out = [];
-    foreach ($scelte as $s => $v) $out[$s] = $v[0];
+    foreach ($scelte as $s => $v) $out[$s] = [$v[0]];
     krsort($out);
     return $out;
 }
@@ -209,20 +235,27 @@ function sg_riga_statistiche(array $r): array
     ];
 }
 
-/** Dettaglio giornata per giornata della stagione (NEW_VOTI, no riserve d'ufficio). */
-function sg_giornate(int $stagione, int $id, int $ruolo): array
+/** Elenco id come lista SQL sicura (solo interi). */
+function sg_in(array $ids): string
+{
+    return implode(",", array_map("intval", $ids));
+}
+
+/** Dettaglio giornata per giornata della stagione su tutti gli id (NEW_VOTI, no riserve d'ufficio). */
+function sg_giornate(int $stagione, array $ids, int $ruolo): array
 {
     $portiere = $ruolo === 1;
-    $righe = query_all("SELECT giornata, voto, totale, giocata, reti, retis, assist,
+    $righe = query_all("SELECT giornata, id_giocatore, voto, totale, giocata, reti, retis, assist,
                                ammonizioni, espulsioni, autogol, rigores, rigorep, id_squadra
                         FROM NEW_VOTI
-                        WHERE stagione = $stagione AND id_giocatore = $id AND rufficio = 0
-                        ORDER BY giornata");
+                        WHERE stagione = $stagione AND id_giocatore IN (" . sg_in($ids) . ") AND rufficio = 0
+                        ORDER BY giornata, id_giocatore");
     $out = [];
     foreach ($righe as $r) {
         $giocata = (int) $r["giocata"] === 1;
         $out[] = [
             "giornata"         => (int) $r["giornata"],
+            "id_giocatore"     => (int) $r["id_giocatore"],
             "giocata"          => $giocata,
             "voto"             => $giocata ? sg_num($r["voto"], true) : null,
             "totale"           => $giocata ? sg_num($r["totale"], true) : null,
@@ -241,16 +274,16 @@ function sg_giornate(int $stagione, int $id, int $ruolo): array
     return $out;
 }
 
-/** Percorso in lega nella stagione (NEW_ROSA_STORICO), dal piu' recente. */
-function sg_percorso(int $stagione, int $id): array
+/** Percorso in lega nella stagione su tutti gli id (NEW_ROSA_STORICO), dal piu' recente. */
+function sg_percorso(int $stagione, array $ids): array
 {
     if (!rs_tabella_esiste()) return [];
     $righe = query_all("SELECT r.id_squadra, s.nome AS squadra, s.logo, r.da_giornata, r.a_giornata
                         FROM NEW_ROSA_STORICO r
                         LEFT JOIN NEW_SQUADRE s
                                ON s.stagione = r.stagione AND s.id = r.id_squadra
-                        WHERE r.stagione = $stagione AND r.id_giocatore = $id
-                        ORDER BY r.da_giornata DESC");
+                        WHERE r.stagione = $stagione AND r.id_giocatore IN (" . sg_in($ids) . ")
+                        ORDER BY r.da_giornata DESC, r.id_giocatore DESC");
     $out = [];
     foreach ($righe as $r) {
         $out[] = [
@@ -264,14 +297,43 @@ function sg_percorso(int $stagione, int $id): array
     return $out;
 }
 
+/**
+ * Riunisce le righe di statistiche della stessa stagione (uno per id, in ordine
+ * di id crescente = cronologico): somme dei contatori, media ponderata sulle
+ * presenze, elenco delle squadre in ordine cronologico.
+ */
+function sg_unisci_righe(array $rr): array
+{
+    $out = end($rr);   // l'ultima edizione fornisce ruolo e squadra "attuale"
+
+    $squadre = [];
+    foreach ($rr as $r) {
+        $ultima = $squadre ? $squadre[count($squadre) - 1] : null;
+        if ($ultima && $ultima["id_squadra"] === $r["id_squadra"]) continue;
+        $squadre[] = ["id_squadra" => $r["id_squadra"], "squadra" => $r["squadra"], "logo" => $r["logo"]];
+    }
+    $out["squadre"] = $squadre;
+
+    if (count($rr) > 1) {
+        foreach (["giocate", "gol", "gol_subiti", "assist", "ammonizioni", "espulsioni",
+                  "autogol", "rigori_segnati", "rigori_parati", "rigori_sbagliati"] as $k) {
+            $out[$k] = array_sum(array_column($rr, $k));
+        }
+        $somma = 0.0;
+        foreach ($rr as $r) $somma += $r["media"] * $r["giocate"];
+        $out["media"] = $out["giocate"] > 0 ? round($somma / $out["giocate"], 2) : $out["media"];
+    }
+    return $out;
+}
+
 /** Statistiche di tutte le stagioni delle edizioni indicate (+ squadra Serie A). */
 function sg_storico(array $edizioni): array
 {
     if (!$edizioni) return [];
 
     $cond = [];
-    foreach ($edizioni as $s => $i) {
-        $cond[] = "(stagione = " . (int) $s . " AND id_giocatore = " . (int) $i . ")";
+    foreach ($edizioni as $s => $ids) {
+        $cond[] = "(stagione = " . (int) $s . " AND id_giocatore IN (" . sg_in($ids) . "))";
     }
     $where = implode(" OR ", $cond);
 
@@ -280,18 +342,22 @@ function sg_storico(array $edizioni): array
                                rigores, rigorep, autogol, assist
                         FROM NEW_STATISTICHE
                         WHERE $where
-                        ORDER BY stagione DESC");
+                        ORDER BY stagione DESC, id_giocatore");
 
+    // Squadra Serie A della stagione: quella dell'id piu' alto che la riporta
     $serieA = [];
-    foreach (query_all("SELECT stagione, squadra_serie_a FROM NEW_GIOCATORI_BASE_ASTA
-                        WHERE $where") as $b) {
-        $serieA[(int) $b["stagione"]] = $b["squadra_serie_a"];
+    foreach (query_all("SELECT stagione, id_giocatore, squadra_serie_a FROM NEW_GIOCATORI_BASE_ASTA
+                        WHERE $where ORDER BY stagione, id_giocatore") as $b) {
+        if (trim((string) $b["squadra_serie_a"]) !== "") $serieA[(int) $b["stagione"]] = $b["squadra_serie_a"];
     }
 
+    $perStagione = [];
+    foreach ($righe as $r) $perStagione[(int) $r["stagione"]][] = sg_riga_statistiche($r);
+
     $out = [];
-    foreach ($righe as $r) {
-        $riga = sg_riga_statistiche($r);
-        $riga["squadra_serie_a"] = $serieA[$riga["stagione"]] ?? null;
+    foreach ($perStagione as $s => $rr) {
+        $riga = sg_unisci_righe($rr);
+        $riga["squadra_serie_a"] = $serieA[$s] ?? null;
         $out[] = $riga;
     }
     return $out;
@@ -326,10 +392,21 @@ function sg_scheda(int $stagione, int $id): ?array
 
     // Persona del raccordo (null se tabelle assenti o giocatore non raccordato)
     $idPersona = rg_tabelle_esistono() ? rg_persona_di($stagione, $id) : null;
-    $anag["id_anagrafica"] = $idPersona;
 
-    $edizioni = sg_edizioni($anag["nome"], $stagione, $id, $anag["ruolo"], $idPersona);
-    $storico  = sg_storico($edizioni);
+    $edizioni    = sg_edizioni($anag["nome"], $stagione, $id, $anag["ruolo"], $idPersona);
+    $idsStagione = $edizioni[$stagione] ?? [$id];
+
+    // Piu' id nella stagione (cessione/acquisto): l'intestazione (squadra,
+    // crediti, ...) riflette l'ultimo in ordine cronologico, cioe' l'id piu' alto
+    $idUltimo = max($idsStagione);
+    if ($idUltimo !== $id) {
+        $ultimo = sg_anagrafica($stagione, $idUltimo);
+        if ($ultimo) $anag = $ultimo;
+    }
+    $anag["id_anagrafica"] = $idPersona;
+    $anag["ids_stagione"]  = $idsStagione;
+
+    $storico = sg_storico($edizioni);
 
     $totali = null;
     foreach ($storico as $r) {
@@ -341,8 +418,8 @@ function sg_scheda(int $stagione, int $id): ?array
         "stagione_corrente" => [
             "stagione" => $stagione,
             "totali"   => $totali,
-            "giornate" => sg_giornate($stagione, $id, $anag["ruolo"]),
-            "percorso" => sg_percorso($stagione, $id),
+            "giornate" => sg_giornate($stagione, $idsStagione, $anag["ruolo"]),
+            "percorso" => sg_percorso($stagione, $idsStagione),
         ],
         "storico" => [
             "stagioni"      => $storico,

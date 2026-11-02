@@ -14,7 +14,9 @@ import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks } from 
 //   - "Da verificare": omonimi e collegamenti con nazione diversa/mancante;
 //     la riga resta nell'elenco finché non si preme "Conferma e chiudi": nel
 //     frattempo si collegano, una stagione alla volta, le edizioni delle altre
-//     persone omonime (oppure si uniscono tutte le stagioni di una persona);
+//     persone omonime (oppure si uniscono tutte le stagioni di una persona).
+//     Una persona può avere PIÙ id nella stessa stagione (cessione/acquisto):
+//     l'id più basso è il primo in ordine cronologico;
 //   - "Persone": ricerca per nome, unisci due persone, collega o separa una singola stagione.
 // Per le stagioni future l'allineamento parte al termine di "Inserimento rose".
 // ============================================================
@@ -252,7 +254,7 @@ export default function RaccordoGiocatori() {
                           )}
                         </div>
                         {c.edizioni.map(e => {
-                          const occupata = r.persona.stagioni.includes(e.stagione)
+                          const stessaStagione = r.persona.stagioni.includes(e.stagione)
                           return (
                             <div key={`${e.stagione}-${e.id_giocatore}`}
                                  className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.04] pt-2">
@@ -260,11 +262,9 @@ export default function RaccordoGiocatori() {
                                 <p className="text-xs font-mono text-slate-400">{stagioneLabel(e.stagione)} · id {e.id_giocatore}</p>
                                 <InfoGiocatore g={e} />
                               </div>
-                              <Pulsante piccolo primario icona={GitMerge} disabled={off || occupata}
-                                        titolo={occupata
-                                          ? `La persona #${r.persona.id_anagrafica} ha già un giocatore nella stagione ${stagioneLabel(e.stagione)}`
-                                          : `Collega solo ${stagioneLabel(e.stagione)} alla persona #${r.persona.id_anagrafica}`}
-                                        onClick={() => window.confirm(`Collegare solo ${stagioneLabel(e.stagione)} (id ${e.id_giocatore}) alla persona #${r.persona.id_anagrafica}? Le altre stagioni di #${c.id_anagrafica} non cambiano.`) && collega(e, r.persona.id_anagrafica, caricaVerifica)}>
+                              <Pulsante piccolo primario icona={GitMerge} disabled={off}
+                                        titolo={`Collega solo ${stagioneLabel(e.stagione)} alla persona #${r.persona.id_anagrafica}`}
+                                        onClick={() => window.confirm(`Collegare solo ${stagioneLabel(e.stagione)} (id ${e.id_giocatore}) alla persona #${r.persona.id_anagrafica}? Le altre stagioni di #${c.id_anagrafica} non cambiano.${stessaStagione ? '\n\nLa persona avrà più id nella stessa stagione (cessione/acquisto): l\'id più basso è il primo in ordine cronologico.' : ''}`) && collega(e, r.persona.id_anagrafica, caricaVerifica)}>
                                 Collega solo {stagioneLabel(e.stagione)}
                               </Pulsante>
                             </div>
@@ -339,6 +339,11 @@ export default function RaccordoGiocatori() {
                       <p className="text-sm text-slate-300">
                         {stagioneLabel(g.stagione)} · {g.nome}
                         <span className="ml-2 text-xs text-slate-600 font-mono">id {g.id_giocatore} · {g.metodo}{g.da_verificare ? ' · da verificare' : ''}</span>
+                        {g.totale_stagione > 1 && (
+                          <span className="ml-2 text-xs text-gold-400/90">
+                            {g.ordine_stagione}/{g.totale_stagione} nella stagione (id più basso = primo cronologicamente)
+                          </span>
+                        )}
                       </p>
                       <InfoGiocatore g={g} />
                       {g.nota && <p className="text-xs text-gold-400/90">{g.nota}</p>}

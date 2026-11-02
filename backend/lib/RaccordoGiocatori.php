@@ -25,6 +25,13 @@
 // (es. "MARTINEZ L." -> "MARTINEZ LAUTARO"), non si aggancia da solo:
 // si risolve con "unisci" (admin/raccordo_giocatori.php).
 //
+// RACCORDO MULTIPLO PER STAGIONE: nelle stagioni passate lo stesso giocatore
+// puo' comparire con PIU' id nella stessa stagione (ceduto da una squadra e
+// acquistato da un'altra). Una persona puo' quindi avere piu' righe di
+// raccordo nella stessa stagione; l'id PIU' BASSO e' il primo in ordine
+// cronologico. L'allineamento automatico non li riunisce (stesso nome due
+// volte = omonimia, da verificare): si collegano a mano con "unisci"/"collega".
+//
 // Le righe con metodo = 'MANUALE' (correzioni dell'amministratore) non
 // vengono mai toccate dall'allineamento automatico.
 // Nazione: NEW_GIOCATORI_BASE_ASTA.nazione, in mancanza quella di
@@ -200,6 +207,9 @@ function rg_allinea(int $stagione): array
         $chiave = rg_norm($g["nome"]);
         $cand   = $perNomeP[$chiave] ?? [];
         $nS     = count($perNomeS[$chiave]);
+        // Persone distinte tra i candidati della stagione precedente (piu' id
+        // della stessa persona, es. cessione/acquisto, contano una volta sola)
+        $personeCand = array_values(array_unique(array_map(fn($i) => $precPersona[$i] ?? 0, $cand)));
         $idPers = 0;
         $verif  = "N";
         $nota   = null;
@@ -207,14 +217,24 @@ function rg_allinea(int $stagione): array
         if (!$cand) {
             $idPers = rg_nuova_persona($g["nome"]);
             $esito["nuove_persone"]++;
-        } elseif ($nS > 1 || count($cand) > 1) {
+        } elseif ($nS > 1 || count($personeCand) > 1) {
+            // Stesso nome piu' volte nella stagione (omonimi o cessione/acquisto)
+            // o persone diverse nella precedente: nessun collegamento automatico
+            $trasf = false;
+            foreach ($perNomeS[$chiave] as $altro) {
+                if ($altro !== $id
+                    && $giocatori[$altro]["ruolo"] === $g["ruolo"]
+                    && rg_norm($giocatori[$altro]["nazione"]) === rg_norm($g["nazione"])) $trasf = true;
+            }
             $idPers = rg_nuova_persona($g["nome"]);
             $verif  = "Y";
-            $nota   = "Omonimia: $nS in stagione $stagione, " . count($cand) . " in stagione $prec";
+            $nota   = "Omonimia: $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
+                    . ", " . count($personeCand) . " persone in $prec";
             $esito["nuove_persone"]++;
             $esito["omonimi"]++;
         } else {
-            $idPrec = $precPersona[$cand[0]] ?? 0;
+            $idPrec = $personeCand[0];
+            $rif    = $precGioc[max($cand)];
             if ($idPrec <= 0 || isset($personeUsate[$idPrec])) {
                 // Persona precedente non raccordata o gia' collegata a un altro giocatore
                 $idPers = rg_nuova_persona($g["nome"]);
@@ -225,10 +245,10 @@ function rg_allinea(int $stagione): array
             } else {
                 $idPers = $idPrec;
                 $nazS = rg_norm($g["nazione"]);
-                $nazP = rg_norm($precGioc[$cand[0]]["nazione"]);
+                $nazP = rg_norm($rif["nazione"]);
                 if ($nazS === "" || $nazP === "" || $nazS !== $nazP) {
                     $verif = "Y";
-                    $nota  = "Nazione diversa o mancante (" . ($precGioc[$cand[0]]["nazione"] ?: "?") . " -> " . ($g["nazione"] ?: "?") . ")";
+                    $nota  = "Nazione diversa o mancante (" . ($rif["nazione"] ?: "?") . " -> " . ($g["nazione"] ?: "?") . ")";
                 }
                 $esito["collegati"]++;
             }
@@ -274,14 +294,18 @@ function rg_persona_di(int $stagione, int $idGiocatore): ?int
     return $r ? (int) $r["id_anagrafica"] : null;
 }
 
-/** Edizioni della persona: [stagione => id_giocatore], dalla piu' recente. */
+/**
+ * Edizioni della persona: [stagione => [id_giocatore, ...]], dalla stagione
+ * piu' recente. In una stagione possono esserci piu' id (cessione/acquisto):
+ * sono in ordine crescente, cioe' cronologico (l'id piu' basso e' il primo).
+ */
 function rg_edizioni(int $idAnagrafica): array
 {
     $out = [];
-    foreach (query_all("SELECT stagione, MIN(id_giocatore) AS id_giocatore FROM " . RG_T_RACC . "
+    foreach (query_all("SELECT stagione, id_giocatore FROM " . RG_T_RACC . "
                         WHERE id_anagrafica = $idAnagrafica
-                        GROUP BY stagione ORDER BY stagione DESC") as $r) {
-        $out[(int) $r["stagione"]] = (int) $r["id_giocatore"];
+                        ORDER BY stagione DESC, id_giocatore ASC") as $r) {
+        $out[(int) $r["stagione"]][] = (int) $r["id_giocatore"];
     }
     return $out;
 }
@@ -327,7 +351,8 @@ function rg_persona_riassunto(int $idAnagrafica): ?array
     if (!$p) return null;
     $ed = rg_edizioni($idAnagrafica);
     $ultima = null;
-    foreach ($ed as $s => $id) { $ultima = rg_dettaglio_edizione($s, $id); break; }
+    // Ultima edizione: stagione piu' recente, e in essa l'id piu' alto (l'ultimo in ordine cronologico)
+    foreach ($ed as $s => $ids) { $ultima = rg_dettaglio_edizione($s, max($ids)); break; }
     return [
         "id_anagrafica" => (int) $p["id_anagrafica"],
         "nome"          => trim((string) $p["nome"]),
@@ -342,16 +367,25 @@ function rg_persona_dettaglio(int $idAnagrafica): ?array
     $p = query_one("SELECT id_anagrafica, nome FROM " . RG_T_ANAG . " WHERE id_anagrafica = $idAnagrafica");
     if (!$p) return null;
     $edizioni = [];
-    foreach (query_all("SELECT stagione, id_giocatore, metodo, da_verificare, nota FROM " . RG_T_RACC . "
-                        WHERE id_anagrafica = $idAnagrafica ORDER BY stagione DESC, id_giocatore") as $r) {
-        $d = rg_dettaglio_edizione((int) $r["stagione"], (int) $r["id_giocatore"]) ?? [
-            "stagione" => (int) $r["stagione"], "id_giocatore" => (int) $r["id_giocatore"],
+    $conteggio = [];   // stagione => quanti id ha la persona in quella stagione
+    $righe = query_all("SELECT stagione, id_giocatore, metodo, da_verificare, nota FROM " . RG_T_RACC . "
+                        WHERE id_anagrafica = $idAnagrafica ORDER BY stagione DESC, id_giocatore ASC");
+    foreach ($righe as $r) $conteggio[(int) $r["stagione"]] = ($conteggio[(int) $r["stagione"]] ?? 0) + 1;
+    $progressivo = [];
+    foreach ($righe as $r) {
+        $st = (int) $r["stagione"];
+        $progressivo[$st] = ($progressivo[$st] ?? 0) + 1;
+        $d = rg_dettaglio_edizione($st, (int) $r["id_giocatore"]) ?? [
+            "stagione" => $st, "id_giocatore" => (int) $r["id_giocatore"],
             "nome" => "(giocatore non piu' presente)", "ruolo" => 0, "nazione" => "",
             "squadra_serie_a" => null, "squadra" => null,
         ];
-        $d["metodo"]        = $r["metodo"];
-        $d["da_verificare"] = $r["da_verificare"] === "Y";
-        $d["nota"]          = $r["nota"];
+        $d["metodo"]           = $r["metodo"];
+        $d["da_verificare"]    = $r["da_verificare"] === "Y";
+        $d["nota"]             = $r["nota"];
+        // Piu' id nella stessa stagione: il numero 1 (id piu' basso) e' il primo cronologicamente
+        $d["ordine_stagione"]  = $progressivo[$st];
+        $d["totale_stagione"]  = $conteggio[$st];
         $edizioni[] = $d;
     }
     return ["id_anagrafica" => (int) $p["id_anagrafica"], "nome" => trim((string) $p["nome"]), "edizioni" => $edizioni];
@@ -438,8 +472,9 @@ function rg_conferma(int $stagione, int $idGiocatore): void
 
 /**
  * Unisce due persone: tutti i giocatori di $idAssorbi passano a $idTieni.
- * Non si puo' se le due persone hanno entrambe un giocatore nella stessa
- * stagione (sarebbero due persone diverse).
+ * Se entrambe hanno un giocatore nella stessa stagione, la persona risultante
+ * avra' piu' id in quella stagione (cessione/acquisto): l'id piu' basso e' il
+ * primo in ordine cronologico.
  */
 function rg_unisci(int $idTieni, int $idAssorbi): void
 {
@@ -448,14 +483,6 @@ function rg_unisci(int $idTieni, int $idAssorbi): void
         if (!query_one("SELECT 1 AS x FROM " . RG_T_ANAG . " WHERE id_anagrafica = $i")) {
             throw new InvalidArgumentException("Persona $i non trovata");
         }
-    }
-    $conf = query_all("SELECT DISTINCT a.stagione FROM " . RG_T_RACC . " a
-                       JOIN " . RG_T_RACC . " b ON b.stagione = a.stagione
-                       WHERE a.id_anagrafica = $idTieni AND b.id_anagrafica = $idAssorbi
-                       ORDER BY a.stagione");
-    if ($conf) {
-        throw new InvalidArgumentException("Le due persone hanno entrambe un giocatore nella stagione "
-            . implode(", ", array_map(fn($r) => $r["stagione"], $conf)) . ": non sono la stessa persona");
     }
     rg_esegui("UPDATE " . RG_T_RACC . " SET id_anagrafica = $idTieni, metodo = 'MANUALE',
                       da_verificare = 'N', nota = NULL, aggiornato_il = NOW()
@@ -466,8 +493,8 @@ function rg_unisci(int $idTieni, int $idAssorbi): void
 /**
  * Collega UN SOLO giocatore (una stagione) a una persona esistente, senza
  * toccare le altre stagioni della persona di provenienza.
- * Non si puo' se la persona di destinazione ha gia' un altro giocatore nella
- * stessa stagione.
+ * La persona di destinazione puo' avere gia' un altro giocatore nella stessa
+ * stagione (cessione/acquisto): avra' piu' id, il piu' basso e' il primo.
  */
 function rg_collega(int $stagione, int $idGiocatore, int $idAnagrafica): void
 {
@@ -476,13 +503,6 @@ function rg_collega(int $stagione, int $idGiocatore, int $idAnagrafica): void
     if ($attuale === $idAnagrafica) throw new InvalidArgumentException("Il giocatore e' gia' collegato a questa persona");
     if (!query_one("SELECT 1 AS x FROM " . RG_T_ANAG . " WHERE id_anagrafica = $idAnagrafica")) {
         throw new InvalidArgumentException("Persona $idAnagrafica non trovata");
-    }
-    $conf = query_one("SELECT id_giocatore FROM " . RG_T_RACC . "
-                       WHERE id_anagrafica = $idAnagrafica AND stagione = $stagione
-                         AND id_giocatore <> $idGiocatore LIMIT 1");
-    if ($conf) {
-        throw new InvalidArgumentException("La persona #$idAnagrafica ha gia' un altro giocatore (id "
-            . (int) $conf["id_giocatore"] . ") nella stagione $stagione");
     }
     rg_esegui("UPDATE " . RG_T_RACC . " SET id_anagrafica = $idAnagrafica, metodo = 'MANUALE',
                       da_verificare = 'N', nota = NULL, aggiornato_il = NOW()

@@ -57,7 +57,7 @@ function Andamento({ giornate, media }) {
           const h = g.giocata ? Math.max(6, ((g.totale - Math.min(min, 0)) / span) * 100) : 0
           const sopra = g.giocata && g.totale >= media
           return (
-            <div key={g.giornata} className="flex-1 min-w-[10px] h-full flex flex-col justify-end items-center gap-1"
+            <div key={`${g.giornata}-${g.id_giocatore}`} className="flex-1 min-w-[10px] h-full flex flex-col justify-end items-center gap-1"
                  title={g.giocata ? `G${g.giornata}: voto ${f1(g.voto)} · fantavoto ${f1(g.totale)}` : `G${g.giornata}: s.v.`}>
               {g.giocata ? (
                 <>
@@ -164,6 +164,13 @@ export default function Giocatore() {
         )}
       </Sezione>
 
+      {a.ids_stagione?.length > 1 && (
+        <p className="text-[11px] text-slate-600 -mt-3 mb-6">
+          In questa stagione il giocatore compare con {a.ids_stagione.length} id (cessione e acquisto tra squadre):
+          i dati della stagione sono la somma di tutti, in ordine cronologico.
+        </p>
+      )}
+
       {sc.giornate.length > 0 && (
         <Sezione titolo="Giornata per giornata" destra={`${sc.giornate.filter(g => g.giocata).length} presenze`}>
           <Andamento giornate={sc.giornate} media={t?.media ?? 0} />
@@ -179,7 +186,7 @@ export default function Giocatore() {
               </thead>
               <tbody>
                 {[...sc.giornate].reverse().map(g => (
-                  <tr key={g.giornata}>
+                  <tr key={`${g.giornata}-${g.id_giocatore}`}>
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-500">{g.giornata}</td>
                     <td className="px-4 py-2.5 text-center font-mono text-sm text-slate-400">
                       {g.giocata ? f1(g.voto) : <span className="text-xs text-slate-600">s.v.</span>}
@@ -236,7 +243,9 @@ export default function Giocatore() {
                   <tr key={r.stagione} className={r.stagione === stagione ? 'bg-grass-500/5' : ''}>
                     <td className="px-4 py-2.5 font-mono text-xs text-slate-400 whitespace-nowrap">{stagioneLabel(r.stagione)}</td>
                     <td className="px-4 py-2.5 text-sm text-slate-300">
-                      <span className="block truncate max-w-[10rem]">{r.squadra}</span>
+                      <span className="block truncate max-w-[12rem]">
+                        {(r.squadre?.length ? r.squadre.map(x => x.squadra) : [r.squadra]).join(' → ')}
+                      </span>
                       {r.squadra_serie_a && <span className="block text-[11px] text-slate-600">{r.squadra_serie_a}</span>}
                     </td>
                     <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-400">{r.giocate}</td>

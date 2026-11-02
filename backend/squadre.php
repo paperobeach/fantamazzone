@@ -13,6 +13,9 @@
 //                        CAMP  posizione 2  = secondi posti
 //                        CHAMP posizione 1  = Champions vinte
 //                        CAMP  posizione 99 = maglie nere (ultimo posto)
+//                      "trofei.stagioni" riporta, per ogni tipo, le stagioni (anno di
+//                      inizio, ordine crescente) in cui il trofeo e' stato conquistato:
+//                        { campionati:[2019,..], secondi_posti:[..], champions:[..], maglie_nere:[..] }
 // Nel dettaglio anche:
 //   - crediti          { per_ruolo: {1,2,3,4}, totale, budget, residuo }
 //                      budget = parametro stagione MERCATO_BUDGET_CREDITI
@@ -30,7 +33,23 @@ const SQ_BUDGET_DEFAULT = 470;
 /** Trofei vuoti (albo non disponibile o squadra senza piazzamenti). */
 function sq_trofei_vuoti(): array
 {
-    return ["campionati" => 0, "secondi_posti" => 0, "champions" => 0, "maglie_nere" => 0];
+    return [
+        "campionati" => 0, "secondi_posti" => 0, "champions" => 0, "maglie_nere" => 0,
+        "stagioni" => sq_stagioni_vuote(),
+    ];
+}
+
+/** Elenco stagioni vuoto per ogni tipo di trofeo. */
+function sq_stagioni_vuote(): array
+{
+    return ["campionati" => [], "secondi_posti" => [], "champions" => [], "maglie_nere" => []];
+}
+
+/** "2019,2021" (GROUP_CONCAT) -> [2019, 2021]. */
+function sq_lista_stagioni($csv): array
+{
+    if ($csv === null || $csv === "") return [];
+    return array_map("intval", explode(",", (string) $csv));
 }
 
 /**
@@ -48,7 +67,15 @@ function sq_trofei_stagione(int $stagione): array
                                SUM(UPPER(a.competizione) = 'CAMP'  AND a.posizione = 1)  AS campionati,
                                SUM(UPPER(a.competizione) = 'CAMP'  AND a.posizione = 2)  AS secondi_posti,
                                SUM(UPPER(a.competizione) = 'CHAMP' AND a.posizione = 1)  AS champions,
-                               SUM(UPPER(a.competizione) = 'CAMP'  AND a.posizione = 99) AS maglie_nere
+                               SUM(UPPER(a.competizione) = 'CAMP'  AND a.posizione = 99) AS maglie_nere,
+                               GROUP_CONCAT(CASE WHEN UPPER(a.competizione) = 'CAMP'  AND a.posizione = 1
+                                                 THEN a.stagione END ORDER BY a.stagione SEPARATOR ',') AS st_campionati,
+                               GROUP_CONCAT(CASE WHEN UPPER(a.competizione) = 'CAMP'  AND a.posizione = 2
+                                                 THEN a.stagione END ORDER BY a.stagione SEPARATOR ',') AS st_secondi,
+                               GROUP_CONCAT(CASE WHEN UPPER(a.competizione) = 'CHAMP' AND a.posizione = 1
+                                                 THEN a.stagione END ORDER BY a.stagione SEPARATOR ',') AS st_champions,
+                               GROUP_CONCAT(CASE WHEN UPPER(a.competizione) = 'CAMP'  AND a.posizione = 99
+                                                 THEN a.stagione END ORDER BY a.stagione SEPARATOR ',') AS st_nere
                         FROM (SELECT id, MIN(utenza) AS utenza
                               FROM NEW_UTENZE
                               WHERE stagione = $stagione
@@ -61,6 +88,12 @@ function sq_trofei_stagione(int $stagione): array
             "secondi_posti" => (int) $r["secondi_posti"],
             "champions"     => (int) $r["champions"],
             "maglie_nere"   => (int) $r["maglie_nere"],
+            "stagioni"      => [
+                "campionati"    => sq_lista_stagioni($r["st_campionati"]),
+                "secondi_posti" => sq_lista_stagioni($r["st_secondi"]),
+                "champions"     => sq_lista_stagioni($r["st_champions"]),
+                "maglie_nere"   => sq_lista_stagioni($r["st_nere"]),
+            ],
         ];
     }
     return $out;

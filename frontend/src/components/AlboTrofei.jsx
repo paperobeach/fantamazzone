@@ -5,7 +5,9 @@ import { Trophy, Medal, Shield, Shirt } from 'lucide-react'
 //   campionati vinti → coppa oro · secondi posti → medaglia argento
 //   Champions        → scudo azzurro · maglie nere → maglia nera
 //
-// trofei: { campionati, secondi_posti, champions, maglie_nere }
+// trofei: { campionati, secondi_posti, champions, maglie_nere,
+//           stagioni: { campionati:[2019,..], secondi_posti:[..], champions:[..], maglie_nere:[..] } }
+//         "stagioni" riporta l'anno di inizio delle stagioni in cui il trofeo e' stato conquistato.
 // variant: 'chip'  → compatto (icona + numero), per le card del riepilogo
 //          'tile'  → riquadri con etichetta, per l'intestazione del dettaglio
 export const TROFEI = [
@@ -15,12 +17,38 @@ export const TROFEI = [
   { key: 'maglie_nere',   label: 'Maglie nere',      corto: 'Maglie nere', Icon: Shirt, attivo: 'text-white bg-black border-white/30' },
 ]
 
+/** 2019 -> "19/20" */
+export const stagioneBreve = (s) => `${String(s).slice(-2)}/${String(Number(s) + 1).slice(-2)}`
+
+/**
+ * Per ogni trofeo vinto, la riga con le stagioni in cui e' stato conquistato
+ * (es. "Campionati  03/04 · 07/08"). Non mostra nulla se non ci sono titoli.
+ */
+function StagioniTrofei({ t }) {
+  const righe = TROFEI.filter(({ key }) => (t.stagioni?.[key] ?? []).length > 0)
+  if (!righe.length) return null
+  return (
+    <ul className="mt-2 space-y-1">
+      {righe.map(({ key, label, Icon, attivo }) => (
+        <li key={key} className="flex items-start gap-1.5 text-[11px] leading-snug">
+          <Icon className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${attivo.split(' ')[0]}`} aria-hidden="true" />
+          <span className="text-slate-500 flex-shrink-0">{label}:</span>
+          <span className="font-mono text-slate-300 flex flex-wrap gap-x-1.5">
+            {t.stagioni[key].map(st => <span key={st} title={`Stagione ${st}/${st + 1}`}>{stagioneBreve(st)}</span>)}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export default function AlboTrofei({ trofei, variant = 'chip', className = '' }) {
   const t = trofei ?? {}
 
   if (variant === 'tile') {
     return (
-      <div className={`grid grid-cols-4 gap-2 ${className}`}>
+      <div className={className}>
+      <div className="grid grid-cols-4 gap-2">
         {TROFEI.map(({ key, label, corto, Icon, attivo }) => {
           const n = Number(t[key] ?? 0)
           return (
@@ -38,11 +66,14 @@ export default function AlboTrofei({ trofei, variant = 'chip', className = '' })
           )
         })}
       </div>
+      <StagioniTrofei t={t} />
+      </div>
     )
   }
 
   return (
-    <div className={`flex items-center gap-1.5 flex-wrap ${className}`}>
+    <div className={className}>
+    <div className="flex items-center gap-1.5 flex-wrap">
       {TROFEI.map(({ key, label, Icon, attivo }) => {
         const n = Number(t[key] ?? 0)
         return (
@@ -58,6 +89,8 @@ export default function AlboTrofei({ trofei, variant = 'chip', className = '' })
           </span>
         )
       })}
+    </div>
+    <StagioniTrofei t={t} />
     </div>
   )
 }

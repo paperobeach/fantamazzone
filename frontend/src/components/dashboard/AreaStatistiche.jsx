@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  ClipboardList, Flame, Swords, Star, ThumbsDown, Home, Plane, Target, BarChart3, Hash, Shield, X, MousePointerClick,
+  ClipboardList, Swords, Star, ThumbsDown, Home, Plane, Target, BarChart3, Hash, Shield, X, MousePointerClick,
 } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardStatistiche } from '../../api/client'
@@ -11,60 +11,6 @@ import {
 import AreaRuoli from './AreaRuoli'
 import { NomeConBandiera } from '../Bandiera'
 import { CardMetrica, RigaMetrica, ChipMetrica } from './SelezioneMetriche'
-
-// ── Serie ────────────────────────────────────────────────────
-
-const SERIE_DEF = [
-  { key: 'vittorie',       label: 'Vittorie consecutive',    positiva: true  },
-  { key: 'imbattibilita',  label: 'Partite senza sconfitte', positiva: true  },
-  { key: 'sconfitte',      label: 'Sconfitte consecutive',   positiva: false },
-  { key: 'senza_vittorie', label: 'Partite senza vittorie',  positiva: false },
-]
-
-function CellaSerie({ k, valore, colore, ctx }) {
-  const on = ctx.sel.ha(k)
-  return (
-    <button type="button" onClick={() => ctx.sel.toggle(k)} aria-pressed={on}
-            title={on ? 'Togli dalla selezione' : 'Aggiungi alla selezione'}
-            className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-1 rounded-lg border font-mono font-bold transition-colors ${
-              on ? 'bg-grass-500/10 border-grass-500/50' : 'border-transparent hover:border-white/20'} ${colore}`}>
-      {valore}
-    </button>
-  )
-}
-
-function SerieTable({ serie, ctx }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="fanta-table">
-        <thead>
-          <tr>
-            <th>Serie</th>
-            <th className="text-center">In corso</th>
-            <th className="text-center">Record stagione</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SERIE_DEF.map(({ key, label, positiva }) => {
-            const s = serie[key]
-            const colore = positiva ? 'text-green-400' : 'text-red-400'
-            return (
-              <tr key={key}>
-                <td className="text-sm text-slate-300">{label}</td>
-                <td className="text-center">
-                  <CellaSerie k={`serie_${key}`} ctx={ctx} valore={s.corrente} colore={s.corrente > 0 ? colore : 'text-slate-600'} />
-                </td>
-                <td className="text-center">
-                  <CellaSerie k={`serie_${key}_record`} ctx={ctx} valore={s.record} colore="text-slate-300" />
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 // ── Casa / trasferta ─────────────────────────────────────────
 
@@ -99,7 +45,6 @@ function BloccoCasaTrasferta({ titolo, icona: Icona, r, chips }) {
 const NAV = [
   { id: 'risultati', label: 'Risultati' },
   { id: 'gol',       label: 'Gol' },
-  { id: 'serie',     label: 'Serie' },
   { id: 'reparti',   label: 'Reparti' },
   { id: 'giocatori', label: 'Top / Flop' },
 ]
@@ -233,7 +178,7 @@ function SezioneGol({ s, ctx }) {
         <CardMetrica k="gol_subiti_tot" ctx={ctx} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         <Section title="Gol segnati e subiti" icon={Target} right={`${n} partite`}>
           <div className="p-3 space-y-1">
             <RigaMetrica k="clean_sheet" ctx={ctx} colore="bg-green-500" />
@@ -245,20 +190,6 @@ function SezioneGol({ s, ctx }) {
               Media gol: {fmt(s.riepilogo.media_golf, 2)} fatti · {fmt(s.riepilogo.media_gols, 2)} subiti a partita.
               Il numero a destra è la posizione in lega.
             </p>
-          </div>
-        </Section>
-
-        <Section title="Over / Under" icon={BarChart3} right="gol totali della partita">
-          <div className="p-3 space-y-3">
-            {['1.5', '2.5', '3.5'].map(k => (
-              <div key={k}>
-                <p className="text-xs font-mono text-slate-400 mb-1 px-2">Soglia {k}</p>
-                <div className="space-y-1">
-                  <RigaMetrica k={`over_${k.replace('.', '')}`} ctx={ctx} label={`Over ${k}`} colore="bg-grass-500" />
-                  <div className="px-2"><BarraPerc label={`Under ${k}`} valore={s.over_under[k].under} totale={n} colore="bg-slate-500" /></div>
-                </div>
-              </div>
-            ))}
           </div>
         </Section>
       </div>
@@ -402,13 +333,6 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
           <div id="stat-gol" className="scroll-mt-4 space-y-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-500">Gol</h2>
             <SezioneGol s={s} ctx={ctx} />
-          </div>
-
-          <div id="stat-serie" className="scroll-mt-4 space-y-3">
-            <h2 className="text-xs uppercase tracking-widest text-slate-500">Serie</h2>
-            <Section title="Serie" icon={Flame} right="tocca un valore per selezionarlo">
-              <SerieTable serie={s.serie} ctx={ctx} />
-            </Section>
           </div>
         </>
       )}

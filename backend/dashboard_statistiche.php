@@ -14,9 +14,7 @@
 //   casa_trasferta rendimento in casa e in trasferta
 //   forma          ultime 10 partite (la UI mostra le ultime 5 o 10)
 //   gol            clean sheet, partite senza segnare, con gol segnato e/o
-//                  subito, Over/Under 1.5 - 2.5 - 3.5 (gol totali della partita)
-//   serie          serie corrente e record (vittorie, imbattibilità,
-//                  sconfitte, senza vittorie)
+//                  subito
 //   matrice        risultati contro ogni altra squadra
 //   punteggi       distribuzione dei risultati per punteggio finale
 //
@@ -125,8 +123,6 @@ $forma = array_map(fn($p) => [
 
 $gol = ["clean_sheet" => 0, "senza_segnare" => 0, "con_gol_segnato" => 0,
         "con_gol_subito" => 0, "segnato_e_subito" => 0];
-$ou  = ["1.5" => ["over" => 0, "under" => 0], "2.5" => ["over" => 0, "under" => 0],
-        "3.5" => ["over" => 0, "under" => 0]];
 $punteggi = [];
 foreach ($partite as $p) {
     if ($p["gols"] === 0) $gol["clean_sheet"]++;
@@ -134,11 +130,6 @@ foreach ($partite as $p) {
     if ($p["golf"] > 0)   $gol["con_gol_segnato"]++;
     if ($p["gols"] > 0)   $gol["con_gol_subito"]++;
     if ($p["golf"] > 0 && $p["gols"] > 0) $gol["segnato_e_subito"]++;
-
-    $tot = $p["golf"] + $p["gols"];
-    foreach (["1.5" => 1.5, "2.5" => 2.5, "3.5" => 3.5] as $k => $soglia) {
-        $ou[$k][$tot > $soglia ? "over" : "under"]++;
-    }
 
     $k = $p["golf"] . "-" . $p["gols"];
     if (!isset($punteggi[$k])) $punteggi[$k] = ["golf" => $p["golf"], "gols" => $p["gols"], "n" => 0, "segno" => $p["segno"]];
@@ -159,8 +150,6 @@ api_success([
     ],
     "forma"          => $forma,
     "gol"            => $gol,
-    "over_under"     => $ou,
-    "serie"          => ds_serie(array_map(fn($p) => $p["segno"], $partite)),
     "matrice"        => ds_matrice($tutteSquadre, $idSquadra, $partite),
     "punteggi"       => $punteggi,
 ]);

@@ -62,9 +62,6 @@ function ms_catalogo(): array
     $c[] = ms_def("gol_segnato",      "Con gol segnato",       $G, "mean", "up",      "%", 0);
     $c[] = ms_def("gol_subito",       "Con gol subito",        $G, "mean", "down",    "%", 0);
     $c[] = ms_def("segnato_e_subito", "Segnato e subito",      $G, "mean", "neutral", "%", 0);
-    $c[] = ms_def("over_15",          "Over 1.5",              $G, "mean", "neutral", "%", 0, "Gol totali della partita");
-    $c[] = ms_def("over_25",          "Over 2.5",              $G, "mean", "neutral", "%", 0, "Gol totali della partita");
-    $c[] = ms_def("over_35",          "Over 3.5",              $G, "mean", "neutral", "%", 0, "Gol totali della partita");
 
     $G = "Fantapunti";
     $c[] = ms_def("fanta_media",   "Fantapunti",              $G, "mean", "up",   "", 2);
@@ -78,16 +75,6 @@ function ms_catalogo(): array
     $c[] = ms_def("ppp_trasferta",    "Punti a partita in trasferta", $G, "mean", "up", "", 2);
     $c[] = ms_def("fanta_casa",       "Fantapunti in casa",           $G, "mean", "up", "", 2);
     $c[] = ms_def("fanta_trasferta",  "Fantapunti in trasferta",      $G, "mean", "up", "", 2);
-
-    $G = "Serie";
-    $c[] = ms_def("serie_vittorie",             "Vittorie consecutive (in corso)",    $G, "last", "up",   "", 0);
-    $c[] = ms_def("serie_vittorie_record",      "Vittorie consecutive (record)",      $G, "max",  "up",   "", 0);
-    $c[] = ms_def("serie_imbattibilita",        "Senza sconfitte (in corso)",         $G, "last", "up",   "", 0);
-    $c[] = ms_def("serie_imbattibilita_record", "Senza sconfitte (record)",           $G, "max",  "up",   "", 0);
-    $c[] = ms_def("serie_sconfitte",            "Sconfitte consecutive (in corso)",   $G, "last", "down", "", 0);
-    $c[] = ms_def("serie_sconfitte_record",     "Sconfitte consecutive (record)",     $G, "max",  "down", "", 0);
-    $c[] = ms_def("serie_senza_vittorie",       "Senza vittorie (in corso)",          $G, "last", "down", "", 0);
-    $c[] = ms_def("serie_senza_vittorie_record","Senza vittorie (record)",            $G, "max",  "down", "", 0);
 
     $G = "Reparti";
     foreach (MS_REPARTI as $r => $nome) {
@@ -142,21 +129,11 @@ function ms_benchmark(array $valori): array
 function ms_estrai_partite(array $partite): array
 {
     $out = [];
-    $streak = ["vittorie" => 0, "imbattibilita" => 0, "sconfitte" => 0, "senza_vittorie" => 0];
-    $set = [
-        "vittorie"       => ["V"],
-        "imbattibilita"  => ["V", "N"],
-        "sconfitte"      => ["P"],
-        "senza_vittorie" => ["N", "P"],
-    ];
-    $recMax = array_fill_keys(array_keys($streak), 0);
-
     foreach ($partite as $p) {
         $g = (int) $p["giornata"];
         $segno = $p["segno"];
         $golf = (int) $p["golf"];
         $gols = (int) $p["gols"];
-        $tot  = $golf + $gols;
         $pt   = (int) $p["punti"];
         $ft   = (float) $p["ftotale"];
         $fta  = (float) $p["ftotale_a"];
@@ -178,9 +155,6 @@ function ms_estrai_partite(array $partite): array
         $out["gol_segnato"][$g]      = $golf > 0 ? 100 : 0;
         $out["gol_subito"][$g]       = $gols > 0 ? 100 : 0;
         $out["segnato_e_subito"][$g] = ($golf > 0 && $gols > 0) ? 100 : 0;
-        $out["over_15"][$g] = $tot > 1.5 ? 100 : 0;
-        $out["over_25"][$g] = $tot > 2.5 ? 100 : 0;
-        $out["over_35"][$g] = $tot > 3.5 ? 100 : 0;
 
         $out["fanta_media"][$g]  = $ft;
         $out["fanta_subiti"][$g] = $fta;
@@ -192,17 +166,6 @@ function ms_estrai_partite(array $partite): array
         $out["ppp_trasferta"][$g]   = $casa === false ? $pt : null;
         $out["fanta_casa"][$g]      = $casa === true  ? $ft : null;
         $out["fanta_trasferta"][$g] = $casa === false ? $ft : null;
-
-        foreach ($set as $k => $segni) {
-            if (in_array($segno, $segni, true)) {
-                $streak[$k]++;
-                if ($streak[$k] > $recMax[$k]) $recMax[$k] = $streak[$k];
-            } else {
-                $streak[$k] = 0;
-            }
-            $out["serie_$k"][$g]          = $streak[$k];
-            $out["serie_{$k}_record"][$g] = $streak[$k];
-        }
     }
     return $out;
 }

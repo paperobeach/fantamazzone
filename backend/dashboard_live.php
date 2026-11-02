@@ -26,6 +26,13 @@
 //               "avversari", i titolari delle squadre avversarie di
 //               giornata (campionato e/o Champions) che giocano in quella
 //               partita: [{ id_squadra, nome, competizioni, giocatori }]
+//               Per le partite CONCLUSE del giorno corrente (data = oggi) i
+//               giocatori coinvolti sono comunque riportati (con voto/stato del
+//               dato), cosi' da poterne aprire l'editing: se la squadra di Serie A
+//               ha gia' i voti ufficiali il giocatore resta bloccato
+//               ("modificabile": false) e il modale ne spiega il motivo.
+//               Le concluse di giorni precedenti non hanno giocatori.
+//   oggi        data odierna (Y-m-d, ora del server) usata per questo filtro
 //   avversari   per ciascuna squadra avversaria di giornata: stessi dati di
 //               senza_voto e panchinari calcolati sulla sua formazione
 //               [{ id_squadra, nome, competizioni, senza_voto, panchinari }]
@@ -324,15 +331,18 @@ function dl_subentranti(array $tabelle, int $idSquadra, array $ctx, int $stagion
  * Analisi LIVE di una squadra, nella situazione aggiornata della simulazione.
  * @param array $sicuri id panchinaro => true: entra per un SV UFFICIALE (senza editing manuali)
  * @param array $sim    id panchinaro => true: entra nella simulazione (con gli editing manuali)
- * @return array{per_partita:array, senza_voto:array, panchinari:array}
+ * @return array{per_partita:array, per_partita_concluse:array, senza_voto:array, panchinari:array}
  *   per_partita: n_partita => titolari ancora da giocare/in corso nelle partite della giornata,
  *                più i panchinari già sicuri di giocare ("subentra")
+ *   per_partita_concluse: n_partita => titolari (anche senza voto) e panchinari subentrati
+ *                delle partite di Serie A già concluse
  *   senza_voto : titolari senza voto (ufficiale o manuale): saranno sostituiti
  *   panchinari : per ruolo, i 3 panchinari successivi all'ultimo giocatore considerato titolare
  */
 function dl_analizza_squadra(array $titolari, array $bench, array $sicuri, array $sim): array
 {
     $perPartita = [];
+    $perPartitaConcluse = [];   // n_partita => titolari (e panchinari subentrati) di partite già concluse
     $senzaVoto  = [];
     $aRischio   = [];   // ruolo => numero di titolari non ancora "sicuri"
     $svPerRuolo = [];   // ruolo => titolari senza voto
@@ -340,6 +350,7 @@ function dl_analizza_squadra(array $titolari, array $bench, array $sicuri, array
     foreach ($titolari as $t) {
         $p = $t["_partita"];
         if ($p === null) continue;   // squadra non determinata o a riposo
+        if ($t["stato_partita"] === "conclusa") $perPartitaConcluse[$p["n_partita"]][] = $t;   // editabile dal LIVE
         if ($t["senza_voto"]) {      // SV ufficiale o manuale: sarà sostituito
             $senzaVoto[] = $t;
             $svPerRuolo[$t["ruolo"]] = ($svPerRuolo[$t["ruolo"]] ?? 0) + 1;
@@ -357,7 +368,11 @@ function dl_analizza_squadra(array $titolari, array $bench, array $sicuri, array
         foreach ($lista as $b) {
             if (!isset($sicuri[$b["id_giocatore"]])) continue;
             $p = $b["_partita"];
-            if ($p === null || $b["stato_partita"] === "conclusa") continue;
+            if ($p === null) continue;
+            if ($b["stato_partita"] === "conclusa") {
+                $perPartitaConcluse[$p["n_partita"]][] = $b + ["subentra" => true];
+                continue;
+            }
             $perPartita[$p["n_partita"]][] = $b + ["subentra" => true];
         }
     }
@@ -392,6 +407,7 @@ function dl_analizza_squadra(array $titolari, array $bench, array $sicuri, array
 
     return [
         "per_partita" => $perPartita,
+        "per_partita_concluse" => $perPartitaConcluse,
         "senza_voto"  => array_map("dl_out_giocatore", $senzaVoto),
         "panchinari"  => $panchinari,
     ];
@@ -412,12 +428,14 @@ $mia = dl_analizza_squadra($titolari, $bench,
 // Le squadre avversarie di giornata (campionato e/o Champions): stessa analisi
 $outAvversari = [];
 $perPartitaAvv = [];   // n_partita => id squadra avversaria => giocatori
+$perPartitaAvvConcluse = [];   // idem, per le partite già concluse
 foreach ($avversari as $idAvv => $a) {
     [$tAvv, $bAvv] = dl_carica_squadra($a["righe"], $ctx, $perSquadra, $ora);
     $an = dl_analizza_squadra($tAvv, $bAvv,
         dl_subentranti($a["tab"], $idAvv, $ctxUff, $stagione, $giornata, $cfg),
         dl_subentranti($a["tab"], $idAvv, $ctx, $stagione, $giornata, $cfg));
     foreach ($an["per_partita"] as $n => $gioc) $perPartitaAvv[$n][$idAvv] = $gioc;
+    foreach ($an["per_partita_concluse"] as $n => $gioc) $perPartitaAvvConcluse[$n][$idAvv] = $gioc;
     $outAvversari[] = [
         "id_squadra" => $idAvv, "nome" => $a["nome"], "competizioni" => $a["competizioni"],
         "senza_voto" => $an["senza_voto"], "panchinari" => $an["panchinari"],
@@ -427,21 +445,34 @@ foreach ($avversari as $idAvv => $a) {
 // ── Tutte le partite di Serie A della giornata, con i giocatori coinvolti ─
 
 $outSerieA = [];
+$oggiSrv = date("Y-m-d");
 foreach ($partiteSerieA as $p) {
     $n = (int) $p["n_partita"];
     $stCasa = dl_stato_partita($perSquadra[sim_norm($p["squadra_casa"])] ?? null, sim_norm($p["squadra_casa"]), $ctx, $ora);
     $stOsp  = dl_stato_partita($perSquadra[sim_norm($p["squadra_ospite"])] ?? null, sim_norm($p["squadra_ospite"]), $ctx, $ora);
+    $stato  = $stCasa === "conclusa" && $stOsp === "conclusa" ? "conclusa"
+            : ($stCasa === "in_corso" || $stOsp === "in_corso" ? "in_corso" : "da_giocare");
+
+    // Partita conclusa: i giocatori coinvolti si riportano solo se è del giorno corrente
+    // (quelle di giorni precedenti non servono più); altrimenti solo le partite da giocare / in corso.
+    $conclusa = $stato === "conclusa";
+    $gMie = $conclusa
+        ? ($p["data_partita"] === $oggiSrv ? ($mia["per_partita_concluse"][$n] ?? []) : [])
+        : ($mia["per_partita"][$n] ?? []);
+    $gAvv = $conclusa
+        ? ($p["data_partita"] === $oggiSrv ? ($perPartitaAvvConcluse[$n] ?? []) : [])
+        : ($perPartitaAvv[$n] ?? []);
+
     $outSerieA[] = [
         "n_partita" => $n, "data" => $p["data_partita"], "ora" => $p["ora_partita"],
-        "stato" => $stCasa === "conclusa" && $stOsp === "conclusa" ? "conclusa"
-                 : ($stCasa === "in_corso" || $stOsp === "in_corso" ? "in_corso" : "da_giocare"),
+        "stato" => $stato,
         "casa" => $p["squadra_casa"], "ospite" => $p["squadra_ospite"],
-        "giocatori" => array_map("dl_out_giocatore", $mia["per_partita"][$n] ?? []),
+        "giocatori" => array_map("dl_out_giocatore", $gMie),
         "avversari" => array_values(array_map(fn($idAvv, $gioc) => [
             "id_squadra" => $idAvv, "nome" => $avversari[$idAvv]["nome"],
             "competizioni" => $avversari[$idAvv]["competizioni"],
             "giocatori" => array_map("dl_out_giocatore", $gioc),
-        ], array_keys($perPartitaAvv[$n] ?? []), array_values($perPartitaAvv[$n] ?? []))),
+        ], array_keys($gAvv), array_values($gAvv))),
     ];
 }
 
@@ -450,6 +481,7 @@ api_success([
     "stagione"         => $stagione,
     "giornata"         => $giornata,
     "giornata_serie_a" => $giornataSerieA,
+    "oggi"             => $oggiSrv,
     "finestra"         => $finestra,
     "partite"          => $partite,
     "serie_a"          => $outSerieA,

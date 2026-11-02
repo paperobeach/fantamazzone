@@ -3,6 +3,7 @@ import { getAlboOro } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, EmptyState } from '../components/ui'
 import { Trophy, Shield, Medal, ShieldX, Shirt, Crown } from 'lucide-react'
 import TeamLogo from '../components/TeamLogo'
+import { stagioneBreve } from '../components/AlboTrofei'
 
 // Cella con logo + nome squadra (o trattino se il dato non c'è)
 function Squadra({ team }) {
@@ -66,18 +67,22 @@ function calcolaMedagliere(data) {
   const m = new Map()
   const get = (t) => {
     if (!t) return null
-    if (!m.has(t.utenza)) m.set(t.utenza, { utenza: t.utenza, nome: t.nome, logo: t.logo, campionati: 0, secondi: 0, champions: 0, finali: 0, nere: 0 })
+    if (!m.has(t.utenza)) m.set(t.utenza, { utenza: t.utenza, nome: t.nome, logo: t.logo, campionati: 0, secondi: 0, champions: 0, finali: 0, nere: 0,
+      st: { campionati: [], secondi: [], champions: [], finali: [], nere: [] } })
     return m.get(t.utenza)
   }
+  // oltre al conteggio si tiene la stagione (anno di inizio) di ciascun piazzamento
+  const segna = (t, tipo, stagione) => { const x = get(t); if (x) { x[tipo]++; x.st[tipo].push(stagione) } }
   for (const r of data.campionato ?? []) {
-    const a = get(r.primo);   if (a) a.campionati++
-    const b = get(r.secondo); if (b) b.secondi++
-    const c = get(r.ultimo);  if (c) c.nere++
+    segna(r.primo, 'campionati', r.stagione)
+    segna(r.secondo, 'secondi', r.stagione)
+    segna(r.ultimo, 'nere', r.stagione)
   }
   for (const r of data.champions ?? []) {
-    const a = get(r.vincitore); if (a) a.champions++
-    const b = get(r.finalista); if (b) b.finali++
+    segna(r.vincitore, 'champions', r.stagione)
+    segna(r.finalista, 'finali', r.stagione)
   }
+  for (const x of m.values()) for (const k of Object.keys(x.st)) x.st[k].sort((a, b) => a - b)
   return [...m.values()].sort((a, b) =>
     (b.campionati + b.champions) - (a.campionati + a.champions)
     || b.campionati - a.campionati || b.champions - a.champions
@@ -92,14 +97,17 @@ const TIPI = [
   { key: 'nere',       label: 'Maglie nere', Icon: Shirt,  cls: 'text-slate-500' },
 ]
 
-// Una icona per ogni trofeo (oltre MAX si compatta in "+N"): la quantità si legge a colpo d'occhio
-function Icone({ n, Icon, cls, max = 8 }) {
-  if (!n) return <span className="text-slate-700 text-xs">—</span>
-  const visibili = Math.min(n, max)
+// Un'icona per ogni trofeo, accompagnata dalla stagione in cui e' stato conquistato (es. "19/20")
+function Titoli({ stagioni, Icon, cls }) {
+  if (!stagioni?.length) return <span className="text-slate-700 text-xs">—</span>
   return (
-    <span className="inline-flex items-center flex-wrap gap-0.5">
-      {Array.from({ length: visibili }).map((_, i) => <Icon key={i} className={`w-4 h-4 ${cls}`} aria-hidden="true" />)}
-      {n > max && <span className={`text-xs font-mono font-bold ml-0.5 ${cls}`}>+{n - max}</span>}
+    <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+      {stagioni.map(st => (
+        <span key={st} title={`Stagione ${st}/${st + 1}`}
+              className="inline-flex items-center gap-0.5 text-[11px] font-mono text-slate-300">
+          <Icon className={`w-3.5 h-3.5 ${cls}`} aria-hidden="true" />{stagioneBreve(st)}
+        </span>
+      ))}
     </span>
   )
 }
@@ -159,7 +167,7 @@ function Medagliere({ squadre }) {
                       {label}
                       <span className={`font-bold ${t[key] ? cls : 'text-slate-700'}`}>{t[key]}</span>
                     </p>
-                    <Icone n={t[key]} Icon={Icon} cls={cls} />
+                    <Titoli stagioni={t.st[key]} Icon={Icon} cls={cls} />
                   </div>
                 ))}
               </div>

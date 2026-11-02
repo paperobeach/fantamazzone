@@ -200,16 +200,19 @@ const TONI = {
 }
 
 /** Giocatore cliccabile: apre l'editing come nella simulazione. */
-function ChipGiocatore({ g, tono, onEdit }) {
+function ChipGiocatore({ g, tono, onEdit, conclusa = false }) {
   const sub = Boolean(g.subentra)
+  // Partita terminata con voto ufficiale già importato: il voto reale prevale, il modale spiega il blocco
+  const bloccato = conclusa && !g.modificabile
   const titolo = [
     g.squadra_serie_a,
     sub ? 'panchinaro già sicuro di giocare: subentra a un titolare senza voto' : null,
-    'clic per modificare il voto nella simulazione',
+    bloccato ? 'voto ufficiale già presente: clic per i dettagli' : 'clic per modificare il voto nella simulazione',
   ].filter(Boolean).join(' · ')
+  const votoDato = conclusa && ['reale', 'api', 'api_parziale'].includes(g.stato_dato) && g.voto !== null && g.voto !== undefined
   return (
     <button type="button" onClick={() => onEdit(g)} title={titolo}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] transition-colors cursor-pointer ${TONI[sub ? 'sub' : tono]}`}>
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] transition-colors cursor-pointer ${TONI[sub ? 'sub' : tono]} ${bloccato ? 'opacity-70' : ''}`}>
       {sub && <ArrowRightLeft className="w-3 h-3 flex-shrink-0" aria-label="Subentra" />}
       <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
       {g.stato_dato === 'manuale' && (
@@ -218,6 +221,8 @@ function ChipGiocatore({ g, tono, onEdit }) {
         </span>
       )}
       {g.sv_manuale && <span className="font-mono text-violet-300" title="S.V. inserito manualmente">S.V.</span>}
+      {votoDato && <span className="font-mono text-slate-200" title={g.stato_dato === 'reale' ? 'Voto ufficiale' : 'Dato API'}>{fmt(g.voto, 1)}</span>}
+      {conclusa && g.stato_dato === 'senza_voto' && !g.sv_manuale && <span className="font-mono text-red-300" title="Senza voto">S.V.</span>}
       {g.competizioni?.includes('CHAMP') && g.competizioni?.includes('CAMP') && (
         <Crown className="w-3 h-3 text-sky-400" aria-label="Anche in Champions" />
       )}
@@ -299,8 +304,11 @@ function TitoloSquadra({ nome, competizioni, tua = false }) {
 function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
   const [edit, setEdit] = useState(null)   // { giocatore, idSquadra, competizione }
   const avversari = live.avversari ?? []
-  const nGiocatori = live.serie_a.reduce((n, m) => n + m.giocatori.length, 0)
-  const nAvversari = live.serie_a.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
+  // Partite terminate: si mostrano solo quelle del giorno corrente (con i giocatori coinvolti, editabili)
+  const oggi = live.oggi ?? oggiLocale()
+  const partiteSerieA = live.serie_a.filter(m => m.stato !== 'conclusa' || m.data === oggi)
+  const nGiocatori = partiteSerieA.reduce((n, m) => n + m.giocatori.length, 0)
+  const nAvversari = partiteSerieA.reduce((n, m) => n + (m.avversari ?? []).reduce((k, a) => k + a.giocatori.length, 0), 0)
   const nPanch = live.panchinari.reduce((n, r) => n + r.candidati.length, 0)
   const comp = (live.partite ?? []).map(p => p.competizione)
 
@@ -321,7 +329,10 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
         {live.serie_a.length === 0 && (
           <p className="px-3 py-3 text-xs text-slate-600">Calendario della Serie A non disponibile.</p>
         )}
-        {live.serie_a.map(m => (
+        {live.serie_a.length > 0 && partiteSerieA.length === 0 && (
+          <p className="px-3 py-3 text-xs text-slate-600">Nessuna partita da giocare e nessuna terminata oggi.</p>
+        )}
+        {partiteSerieA.map(m => (
           <div key={m.n_partita} className={`px-3 py-2.5 ${m.stato === 'conclusa' ? 'bg-white/[0.015]' : ''}`}>
             <p className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
               {m.stato === 'conclusa' ? (
@@ -336,13 +347,13 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
               )}
               <span className={m.stato === 'conclusa' ? 'text-slate-500' : 'text-slate-300'}>{m.casa} – {m.ospite}</span>
             </p>
-            {m.stato === 'conclusa' ? null : m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
+            {m.giocatori.length === 0 && !(m.avversari ?? []).length ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun titolare tuo né degli avversari.</p>
             ) : m.giocatori.length === 0 ? (
               <p className="text-[11px] text-slate-700 mt-1">Nessun tuo titolare.</p>
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                {m.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="mio" onEdit={editaDi(idSquadra)} />)}
+                {m.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="mio" conclusa={m.stato === 'conclusa'} onEdit={editaDi(idSquadra)} />)}
               </div>
             )}
 
@@ -354,7 +365,7 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
                   Avversario: <span className="text-slate-300 normal-case tracking-normal">{a.nome}</span>
                 </p>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {a.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="avv" onEdit={editaDi(a.id_squadra)} />)}
+                  {a.giocatori.map(g => <ChipGiocatore key={g.id_giocatore} g={g} tono="avv" conclusa={m.stato === 'conclusa'} onEdit={editaDi(a.id_squadra)} />)}
                 </div>
               </div>
             ))}
@@ -383,7 +394,7 @@ function GiocatoriLive({ live, stagione, nomeSquadra, idSquadra }) {
           <span className="inline-flex items-center gap-1"><Clock className="w-3 h-3 text-emerald-400" aria-hidden />dato API (parziale se la partita è in corso)</span>
           <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-emerald-400" aria-hidden />panchinaro già sicuro di giocare (titolare s.v.)</span>
           <span className="inline-flex items-center gap-1"><ArrowRightLeft className="w-3 h-3 text-violet-400" aria-hidden />entra solo nella simulazione (s.v. manuale)</span>
-          <span>Clic su un giocatore per modificarne il voto: la simulazione si aggiorna.</span>
+          <span>Clic su un giocatore per modificarne il voto: la simulazione si aggiorna. Delle partite terminate si vedono solo quelle di oggi (i giocatori con voto ufficiale già importato non sono modificabili).</span>
         </p>
       </div>
 

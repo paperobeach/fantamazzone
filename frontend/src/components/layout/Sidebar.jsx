@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../../context/AppContext'
+import RicercaGiocatore from '../RicercaGiocatore'
 import {
   Trophy, Calendar, Users,
   Star, Shield, LogOut, UserPlus,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle, GitMerge
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -75,6 +76,7 @@ const ADMIN_SECTIONS = [
       { to: '/regole-calcolo',              icon: SlidersHorizontal, label: 'Gestisci regole di calcolo' },
       { to: '/inizializzazione-stagione',   icon: RefreshCw, label: 'Inizializza stagione' },
       { to: '/inserimento-rose',            icon: Upload,    label: 'Inserimento rose' },
+      { to: '/raccordo-giocatori',          icon: GitMerge,  label: 'Raccordo giocatori' },
       { to: '/api-football/test',          icon: PlugZap,   label: 'Test API-Football' },
       { to: '/api-football/mappatura',      icon: Link2,     label: 'Mappatura API-Football' },
       { to: '/api-football/sync',           icon: Activity,  label: 'Sync API-Football' },
@@ -229,6 +231,11 @@ export default function Sidebar({ open = false, onClose = () => {} }) {
         >
           <X className="w-4 h-4" />
         </button>
+      </div>
+
+      {/* Ricerca rapida giocatore (su mobile è nella barra in alto) */}
+      <div className="hidden lg:block px-3 py-3 border-b border-white/5">
+        <RicercaGiocatore />
       </div>
 
       {/* Stagione selector */}

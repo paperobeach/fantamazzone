@@ -25,6 +25,7 @@
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/RosaStorico.php";
+require_once __DIR__ . "/../lib/RaccordoGiocatori.php";
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     api_error("Metodo non consentito. Usare POST.", 405);
@@ -392,11 +393,22 @@ try {
 
     mysqli_commit($conn);
 
+    // Raccordo per id con le stagioni precedenti (vedi lib/RaccordoGiocatori.php).
+    // Non blocca il caricamento: se fallisce o le tabelle non esistono ancora,
+    // si puo' rilanciare da "Raccordo giocatori" (menu Admin).
+    $raccordo = null;
+    try {
+        if (rg_tabelle_esistono()) $raccordo = rg_allinea($stagione);
+    } catch (Throwable $e) {
+        error_log("Raccordo giocatori ($stagione): " . $e->getMessage());
+    }
+
     api_success([
         "ok"         => true,
         "totale"     => count($data),
         "caricati"   => $caricati,
         "svincolati" => $svincolati,
+        "raccordo"   => $raccordo,
     ]);
 } catch (Throwable $e) {
     mysqli_rollback($conn);

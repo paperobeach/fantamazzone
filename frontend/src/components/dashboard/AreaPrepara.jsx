@@ -5,6 +5,7 @@ import { getDashboardPrepara } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../ui'
 import TeamLogo from '../TeamLogo'
 import { NomeConBandiera } from '../Bandiera'
+import { useApp } from '../../context/AppContext'
 import { PitchLineup } from '../PitchLineup'
 import PreparaTop11 from './PreparaTop11'
 import PreparaSerieA from './PreparaSerieA'
@@ -15,12 +16,13 @@ import {
 // ── Formazioni (elenco) ──────────────────────────────────────
 
 function Lineup({ giocatori, conVoti = false }) {
+  const { ultimaStagione } = useApp()
   const tit = giocatori.filter(g => g.titolare)
   const pan = giocatori.filter(g => !g.titolare)
   const riga = g => (
     <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2 border-b border-white/[0.03] last:border-0">
       <RoleBadge ruolo={g.ruolo} />
-      <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} className={`flex-1 text-sm ${g.titolare ? 'text-slate-300' : 'text-slate-500'}`} />
+      <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} stagione={ultimaStagione} className={`flex-1 text-sm ${g.titolare ? 'text-slate-300' : 'text-slate-500'}`} />
       {conVoti && (
         <span className="text-right flex-shrink-0">
           {g.giocata === false || g.voto === null || g.voto === undefined

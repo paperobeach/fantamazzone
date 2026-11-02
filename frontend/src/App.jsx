@@ -3,7 +3,8 @@ import { AppProvider, useApp } from './context/AppContext'
 import Sidebar from './components/layout/Sidebar'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Spinner } from './components/ui'
-import { Menu, Trophy } from 'lucide-react'
+import RicercaGiocatore from './components/RicercaGiocatore'
+import { Menu, Trophy, Search, X } from 'lucide-react'
 
 // Pages (lazy-loaded)
 import { lazy, Suspense, useState } from 'react'
@@ -14,6 +15,7 @@ const FortunaCalendario = lazy(() => import('./pages/FortunaCalendario'))
 const LiveGiornata = lazy(() => import('./pages/LiveGiornata'))
 const Squadre     = lazy(() => import('./pages/Squadre'))
 const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
+const Giocatore   = lazy(() => import('./pages/Giocatore'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
 const AlboOro     = lazy(() => import('./pages/AlboOro'))
@@ -32,6 +34,7 @@ const RiaperturaGiornata = lazy(() => import('./pages/RiaperturaGiornata'))
 const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSerieA'))
 const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
+const RaccordoGiocatori = lazy(() => import('./pages/RaccordoGiocatori'))
 const AiTest = lazy(() => import('./pages/AiTest'))
 const ApiFootballTest = lazy(() => import('./pages/ApiFootballTest'))
 const ApiFootballMappatura = lazy(() => import('./pages/ApiFootballMappatura'))
@@ -82,6 +85,7 @@ function AppShell() {
   const { loading } = useApp()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [ricercaOpen, setRicercaOpen] = useState(false)
 
   return (
     <div className="flex min-h-screen bg-pitch-950">
@@ -105,7 +109,21 @@ function AppShell() {
             LFM
           </span>
         </div>
+        <button
+          onClick={() => setRicercaOpen(o => !o)}
+          aria-label={ricercaOpen ? 'Chiudi ricerca giocatore' : 'Cerca giocatore'}
+          className="ml-auto p-2 -mr-2 rounded-lg text-slate-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+        >
+          {ricercaOpen ? <X className="w-5 h-5" /> : <Search className="w-5 h-5" />}
+        </button>
       </header>
+
+      {/* Ricerca rapida giocatore (mobile) */}
+      {ricercaOpen && (
+        <div className="lg:hidden fixed top-14 left-0 right-0 z-30 px-4 py-3 bg-pitch-900/95 backdrop-blur border-b border-white/5 shadow-xl shadow-black/40">
+          <RicercaGiocatore autoFocus inline onSelect={() => setRicercaOpen(false)} />
+        </div>
+      )}
 
       <main className="flex-1 min-w-0 lg:ml-56 min-h-screen pt-14 lg:pt-0">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
@@ -122,6 +140,7 @@ function AppShell() {
                   <Route path="/live"         element={<LiveGiornata />} />
                   <Route path="/squadre"      element={<Squadre />} />
                   <Route path="/squadre/:id"  element={<SquadraDetail />} />
+                  <Route path="/giocatori/:id" element={<Giocatore />} />
                   {/* Pagina "Incontri" rimossa: i dettagli partita sono ora
                       consultabili direttamente da "Calendario". Redirect
                       mantenuto per eventuali link/segnalibri esistenti. */}
@@ -173,6 +192,9 @@ function AppShell() {
                   } />
                   <Route path="/gestione-voti" element={
                     <AdminRoute><GestioneVoti /></AdminRoute>
+                  } />
+                  <Route path="/raccordo-giocatori" element={
+                    <AdminRoute><RaccordoGiocatori /></AdminRoute>
                   } />
                   <Route path="/riapertura-giornata" element={
                     <AdminRoute><RiaperturaGiornata /></AdminRoute>

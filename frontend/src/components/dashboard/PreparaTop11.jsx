@@ -3,6 +3,7 @@ import { Star, Sparkles } from 'lucide-react'
 import { RoleBadge, Select } from '../ui'
 import { PitchLineup } from '../PitchLineup'
 import { NomeConBandiera } from '../Bandiera'
+import { useApp } from '../../context/AppContext'
 import { MODULI, MODULI_VALIDI } from '../../lib/pitchLayout'
 import { Section, Vuoto, fmt } from './shared'
 
@@ -29,6 +30,7 @@ function costruisciTop11(rosa, modulo, metrica, minPres) {
 }
 
 export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisponibile = null }) {
+  const { ultimaStagione } = useApp()
   const [metrica, setMetrica] = useState('media_voto')
   const [modulo, setModulo] = useState('4-3-3')
   const [minPres, setMinPres] = useState(1)
@@ -138,7 +140,7 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisp
             {top.titolari.map(g => (
               <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
                 <RoleBadge ruolo={g.ruolo} />
-                <NomeConBandiera id={g.id_giocatore} nome={g.nome} className="flex-1 text-sm text-slate-300" />
+                <NomeConBandiera id={g.id_giocatore} nome={g.nome} stagione={ultimaStagione} className="flex-1 text-sm text-slate-300" />
                 <span className="text-xs text-slate-600 font-mono">{g.presenze} pres.</span>
                 <span className="font-mono text-sm font-bold text-grass-400 w-12 text-right">{fmt(g[metrica], 2)}</span>
               </div>

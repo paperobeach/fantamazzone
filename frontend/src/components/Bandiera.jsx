@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 // Bandiera della nazionalità di un giocatore.
@@ -62,11 +63,28 @@ export function BandieraTonda({ id, children }) {
 
 // Nome del giocatore preceduto dalla bandiera; il nome si tronca con i puntini.
 // `className` riguarda il contenitore (colore, dimensione, flex-1, ...).
-export function NomeConBandiera({ id, nome, className = '' }) {
+// Il nome è un link alla scheda del giocatore (/giocatori/:id). Poiché l'id è
+// valido solo nella propria stagione, il link porta con sé la stagione:
+// `stagione` (se omessa, quella scelta nell'app). `link={false}` disattiva il
+// link (es. elenchi in cui il click sul nome ha già un altro significato).
+export function NomeConBandiera({ id, nome, className = '', link = true, stagione }) {
+  const { stagione: stagioneApp } = useApp()
+  const st = stagione ?? stagioneApp
+  const cliccabile = link && Number(id) > 0 && !!st
   return (
     <span className={`flex items-center gap-1.5 min-w-0 ${className}`}>
       <Bandiera id={id} />
-      <span className="truncate">{nome}</span>
+      {cliccabile ? (
+        <Link
+          to={`/giocatori/${id}?stagione=${st}`}
+          onClick={e => e.stopPropagation()}
+          className="truncate hover:text-grass-400 hover:underline underline-offset-2 transition-colors"
+        >
+          {nome}
+        </Link>
+      ) : (
+        <span className="truncate">{nome}</span>
+      )}
     </span>
   )
 }

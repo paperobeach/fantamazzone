@@ -10,6 +10,7 @@ import {
 } from './shared'
 import AreaRuoli from './AreaRuoli'
 import { NomeConBandiera } from '../Bandiera'
+import { useApp } from '../../context/AppContext'
 import { CardMetrica, RigaMetrica, ChipMetrica } from './SelezioneMetriche'
 
 // ── Casa / trasferta ─────────────────────────────────────────
@@ -271,6 +272,7 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione }) {
 // ── Top / Flop 11 propri ─────────────────────────────────────
 
 function ElencoGiocatori({ giocatori, tipo }) {
+  const { ultimaStagione } = useApp()
   if (!giocatori?.length) {
     return <Vuoto>{tipo === 'top' ? 'Nessun tuo giocatore in Top 11.' : 'Nessun tuo giocatore in Flop 11.'}</Vuoto>
   }
@@ -279,7 +281,7 @@ function ElencoGiocatori({ giocatori, tipo }) {
       {giocatori.map(g => (
         <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
           <RoleBadge ruolo={g.ruolo} />
-          <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} className="flex-1 text-sm text-slate-300 font-medium" />
+          <NomeConBandiera id={g.id_giocatore} nome={g.giocatore} stagione={ultimaStagione} className="flex-1 text-sm text-slate-300 font-medium" />
           <span className="text-xs text-slate-600 font-mono">{g.giocate} pres.</span>
           <span className={`font-mono text-sm font-bold w-12 text-right ${tipo === 'top' ? 'text-green-400' : 'text-red-400'}`}>
             {fmt(g.media, 2)}

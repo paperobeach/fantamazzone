@@ -761,6 +761,20 @@ CREATE TABLE `NEW_GIOCATORI` (
 -- --------------------------------------------------------
 
 --
+-- Struttura della tabella `NEW_GIOCATORI_ANAGRAFICA`
+--
+
+CREATE TABLE `NEW_GIOCATORI_ANAGRAFICA` (
+  `id_anagrafica` int NOT NULL AUTO_INCREMENT COMMENT 'Persona reale, stabile tra le stagioni',
+  `nome` varchar(50) NOT NULL DEFAULT '' COMMENT 'Nome canonico',
+  `creato_il` datetime NOT NULL,
+  PRIMARY KEY (`id_anagrafica`),
+  KEY `idx_nome` (`nome`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
 -- Struttura della tabella `NEW_GIOCATORI_BASE_ASTA`
 --
 
@@ -773,6 +787,24 @@ CREATE TABLE `NEW_GIOCATORI_BASE_ASTA` (
   `nazione` varchar(50) NOT NULL DEFAULT '',
   `id_squadra_lega` int DEFAULT NULL,
   `crediti` int NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Struttura della tabella `NEW_GIOCATORI_RACCORDO`
+--
+
+CREATE TABLE `NEW_GIOCATORI_RACCORDO` (
+  `stagione` int NOT NULL,
+  `id_giocatore` int NOT NULL COMMENT 'NEW_GIOCATORI.id (valido solo nella stagione)',
+  `id_anagrafica` int NOT NULL COMMENT 'NEW_GIOCATORI_ANAGRAFICA.id_anagrafica',
+  `metodo` varchar(10) NOT NULL DEFAULT 'AUTO' COMMENT 'AUTO | MANUALE',
+  `da_verificare` char(1) NOT NULL DEFAULT 'N' COMMENT 'Y = collegamento incerto o omonimia',
+  `nota` varchar(100) DEFAULT NULL,
+  `aggiornato_il` datetime NOT NULL,
+  PRIMARY KEY (`stagione`,`id_giocatore`),
+  KEY `idx_anagrafica` (`id_anagrafica`,`stagione`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------

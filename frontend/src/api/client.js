@@ -161,6 +161,14 @@ export const getSquadre = (stagione)      => get('squadre.php', { stagione })
 export const getBandiere = (stagione) => get('bandiere.php', { stagione })
 export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id })
 
+// ── Scheda giocatore ─────────────────────────────────────────
+// Scheda completa (stagione indicata + storico). L'id del giocatore è valido
+// solo nella stagione indicata; lo storico è collegato per nome.
+export const getGiocatore = (stagione, id) => get('giocatore.php', { stagione, id })
+
+// Ricerca rapida per nome tra i giocatori della stagione (min. 2 caratteri, max 10 risultati)
+export const cercaGiocatori = (stagione, q) => get('giocatori_cerca.php', { stagione, q })
+
 // ── Dashboard squadra ────────────────────────────────────────
 // Tutti i dati della dashboard (albo, KPI, campionato, Champions,
 // prossima sfida) in un'unica chiamata.
@@ -353,6 +361,14 @@ export const afTest = (stagione, { utenza, password, azione = 'diagnostica', ...
 //           giocatori_cerca_api { q, api_team_id? } · giocatore_associa { id_giocatore, api_player_id|null }
 export const afMappatura = (stagione, { utenza, password, azione = 'stato', ...extra }) =>
   post('admin/api_football_mapping.php', { stagione, utenza, password, azione, ...extra })
+
+// admin/raccordo_giocatori.php (raccordo per id dei giocatori tra le stagioni)
+//   azioni: stato · ricostruisci { azzera_auto? } · allinea { stagione_da_allineare }
+//           verifica { limite? } · cerca { q } · persona { id_anagrafica }
+//           conferma { stagione_giocatore, id_giocatore } · unisci { id_tieni, id_assorbi }
+//           separa { stagione_giocatore, id_giocatore }
+export const raccordoGiocatori = (stagione, { utenza, password, azione = 'stato', ...extra }) =>
+  post('admin/raccordo_giocatori.php', { stagione, utenza, password, azione, ...extra })
 
 // admin/api_football_sync.php (Fase 1)
 //   azione 'stato' { giornata? } → { ora_roma, giornate, giornata, partite[], regole, richieste_oggi,

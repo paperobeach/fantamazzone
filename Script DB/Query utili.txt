@@ -11,9 +11,9 @@ WHERE A.STAGIONE = 2026
  
  
  ---raccordo storico giocatori
- SELECT A.*, B.*, C.descrizione AS NOME_STAGIONI_OLD, D.nome AS NOME_CORRENTE_IN_ROSA, E.descrizione AS NOME_CORRENTE_NO_ROSA FROM NEW_GIOCATORI_ANAGRAFICA A 
+SELECT A.*, B.*, C.descrizione AS NOME_STAGIONI_OLD, D.nome AS NOME_CORRENTE_IN_ROSA, E.descrizione AS NOME_CORRENTE_NO_ROSA FROM NEW_GIOCATORI_ANAGRAFICA A 
 INNER JOIN NEW_GIOCATORI_RACCORDO B ON B.id_anagrafica = A.id_anagrafica
 LEFT JOIN NEW_GIOCATORI C ON C.id = B.id_giocatore AND C.stagione = B.stagione
 LEFT JOIN NEW_GIOCATORI_BASE_ASTA D ON D.id_giocatore = B.id_giocatore AND D.stagione = B.stagione
 LEFT JOIN NEW_GIOCATORI_SVINCOLATI E ON E.id = B.id_giocatore AND E.stagione = B.stagione
-WHERE A.ID_ANAGRAFICA = 3406;
+WHERE A.ID_ANAGRAFICA = 3474;

@@ -217,6 +217,7 @@ function sg_riga_statistiche(array $r): array
     $rigoriRis = (int) $r["rigores"];
     return [
         "stagione"         => (int) $r["stagione"],
+        "id_giocatore"     => (int) $r["id_giocatore"],
         "ruolo"            => (int) $r["ruolo"],
         "id_squadra"       => (int) $r["id_squadra"],
         "squadra"          => $r["squadra"],
@@ -326,8 +327,19 @@ function sg_unisci_righe(array $rr): array
     return $out;
 }
 
-/** Statistiche di tutte le stagioni delle edizioni indicate (+ squadra Serie A). */
-function sg_storico(array $edizioni): array
+/**
+ * Statistiche di tutte le stagioni delle edizioni indicate: UNA RIGA PER ID
+ * (stesso giocatore con due id nella stessa stagione = due righe, ciascuna
+ * con la propria squadra), da stagione piu' recente; nella stagione l'id piu'
+ * alto (ultimo in ordine cronologico) viene prima.
+ *
+ * I numeri sono calcolati da NEW_VOTI con le stesse formule di
+ * agg_statistiche(): NEW_STATISTICHE esclude i giocatori con
+ * NEW_GIOCATORI.flag = 1 (ceduti), che quindi mancherebbero. NEW_STATISTICHE
+ * resta come ripiego per gli id senza voti. Un id esistente ma senza alcun
+ * dato compare comunque, con presenze a 0.
+ */
+function sg_storico(array $edizioni, int $ruoloDefault = 0): array
 {
     if (!$edizioni) return [];
 
@@ -337,29 +349,141 @@ function sg_storico(array $edizioni): array
     }
     $where = implode(" OR ", $cond);
 
-    $righe = query_all("SELECT stagione, id_squadra, squadra, logo, id_giocatore, ruolo,
+    // 1. Aggregato di NEW_VOTI per (stagione, id) + squadra dell'ultima giornata
+    $righe = [];   // "stagione-id" => riga
+    $voti = query_all("SELECT a.stagione, a.id_giocatore, a.giocate, a.totale, a.reti, a.retis,
+                              a.ammonizioni, a.espulsioni, a.rigores, a.rigorep, a.autogol, a.assist,
+                              u.id_squadra
+                       FROM (
+                         SELECT stagione, id_giocatore,
+                                MAX(giornata)    AS ultima,
+                                SUM(giocata)     AS giocate,
+                                SUM(totale)      AS totale,
+                                SUM(reti)        AS reti,
+                                SUM(retis)       AS retis,
+                                SUM(ammonizioni) AS ammonizioni,
+                                SUM(espulsioni)  AS espulsioni,
+                                SUM(rigores)     AS rigores,
+                                SUM(rigorep)     AS rigorep,
+                                SUM(autogol)     AS autogol,
+                                SUM(assist)      AS assist
+                         FROM NEW_VOTI
+                         WHERE ($where) AND rufficio = 0
+                         GROUP BY stagione, id_giocatore
+                       ) a
+                       JOIN NEW_VOTI u ON u.stagione = a.stagione AND u.id_giocatore = a.id_giocatore
+                                      AND u.giornata = a.ultima AND u.rufficio = 0");
+
+    // Ruolo e squadra (nome, logo) per (stagione, id)
+    $whereG = [];
+    foreach ($edizioni as $s => $ids) {
+        $whereG[] = "(stagione = " . (int) $s . " AND id IN (" . sg_in($ids) . "))";
+    }
+    $ruoli = [];     // "stagione-id" => ruolo
+    $inLega = [];    // "stagione-id" => id squadra di lega (0 = svincolato)
+    foreach (query_all("SELECT stagione, id, ruolo, squadra FROM NEW_GIOCATORI WHERE " . implode(" OR ", $whereG)) as $g) {
+        $k = (int) $g["stagione"] . "-" . (int) $g["id"];
+        $ruoli[$k]  = (int) $g["ruolo"];
+        $inLega[$k] = (int) $g["squadra"];
+    }
+    foreach (query_all("SELECT stagione, id, ruolo FROM NEW_GIOCATORI_SVINCOLATI WHERE " . implode(" OR ", $whereG)) as $g) {
+        $k = (int) $g["stagione"] . "-" . (int) $g["id"];
+        if (!isset($ruoli[$k])) { $ruoli[$k] = (int) $g["ruolo"]; $inLega[$k] = 0; }
+    }
+    $squadre = [];
+    foreach (query_all("SELECT stagione, id, nome, logo FROM NEW_SQUADRE") as $q) {
+        $squadre[(int) $q["stagione"] . "-" . (int) $q["id"]] = $q;
+    }
+
+    foreach ($voti as $v) {
+        $st = (int) $v["stagione"];
+        $id = (int) $v["id_giocatore"];
+        $k  = "$st-$id";
+        if (isset($righe[$k])) continue;
+        $ruolo = $ruoli[$k] ?? $ruoloDefault;
+        $gi = (int) $v["giocate"];
+        $sq = $squadre[$st . "-" . (int) $v["id_squadra"]] ?? null;
+        $righe[$k] = [
+            "stagione"         => $st,
+            "id_giocatore"     => $id,
+            "ruolo"            => $ruolo,
+            "id_squadra"       => (int) $v["id_squadra"],
+            "squadra"          => $sq["nome"] ?? null,
+            "logo"             => $sq["logo"] ?? null,
+            "giocate"          => $gi,
+            "media"            => $gi > 0 ? round((float) $v["totale"] / $gi, 2) : 0.0,
+            "gol"              => (int) $v["reti"],
+            "gol_subiti"       => (int) $v["retis"],
+            "assist"           => (int) $v["assist"],
+            "ammonizioni"      => (int) $v["ammonizioni"],
+            "espulsioni"       => (int) $v["espulsioni"],
+            "autogol"          => (int) $v["autogol"],
+            "rigori_segnati"   => $ruolo === 1 ? 0 : (int) $v["rigores"],
+            "rigori_parati"    => $ruolo === 1 ? (int) $v["rigores"] : 0,
+            "rigori_sbagliati" => (int) $v["rigorep"],
+        ];
+    }
+
+    // 2. Ripiego: id senza voti ma con riga in NEW_STATISTICHE
+    foreach (query_all("SELECT stagione, id_squadra, squadra, logo, id_giocatore, ruolo,
                                giocate, media, golf, gols, ammonizioni, espulsioni,
                                rigores, rigorep, autogol, assist
-                        FROM NEW_STATISTICHE
-                        WHERE $where
-                        ORDER BY stagione DESC, id_giocatore");
+                        FROM NEW_STATISTICHE WHERE $where") as $r) {
+        $k = (int) $r["stagione"] . "-" . (int) $r["id_giocatore"];
+        if (!isset($righe[$k])) $righe[$k] = sg_riga_statistiche($r);
+    }
 
-    // Squadra Serie A della stagione: quella dell'id piu' alto che la riporta
+    // 2b. Edizioni senza alcun dato (nessun voto, nessuna statistica): la stagione
+    // compare comunque, con presenze a 0 (es. giocatore appena acquistato o svincolato)
+    foreach ($edizioni as $st => $ids) {
+        foreach ($ids as $id) {
+            $k = "$st-$id";
+            if (isset($righe[$k]) || !isset($ruoli[$k])) continue;   // solo id realmente esistenti
+            $sq = ($inLega[$k] ?? 0) > 0 ? ($squadre[$st . "-" . $inLega[$k]] ?? null) : null;
+            $righe[$k] = [
+                "stagione"         => (int) $st,
+                "id_giocatore"     => (int) $id,
+                "ruolo"            => $ruoli[$k],
+                "id_squadra"       => $sq ? (int) $inLega[$k] : 0,
+                "squadra"          => $sq["nome"] ?? null,
+                "logo"             => $sq["logo"] ?? null,
+                "giocate"          => 0,
+                "media"            => 0.0,
+                "gol"              => 0,
+                "gol_subiti"       => 0,
+                "assist"           => 0,
+                "ammonizioni"      => 0,
+                "espulsioni"       => 0,
+                "autogol"          => 0,
+                "rigori_segnati"   => 0,
+                "rigori_parati"    => 0,
+                "rigori_sbagliati" => 0,
+            ];
+        }
+    }
+
+    // 3. Squadra Serie A per stagione: quella dell'id piu' alto che la riporta
     $serieA = [];
     foreach (query_all("SELECT stagione, id_giocatore, squadra_serie_a FROM NEW_GIOCATORI_BASE_ASTA
                         WHERE $where ORDER BY stagione, id_giocatore") as $b) {
         if (trim((string) $b["squadra_serie_a"]) !== "") $serieA[(int) $b["stagione"]] = $b["squadra_serie_a"];
     }
 
-    $perStagione = [];
-    foreach ($righe as $r) $perStagione[(int) $r["stagione"]][] = sg_riga_statistiche($r);
-
-    $out = [];
-    foreach ($perStagione as $s => $rr) {
-        $riga = sg_unisci_righe($rr);
-        $riga["squadra_serie_a"] = $serieA[$s] ?? null;
-        $out[] = $riga;
+    // 4. Ordinamento (stagione desc, id desc) e posizione cronologica nella stagione
+    $out = array_values($righe);
+    usort($out, fn($a, $b) => [$b["stagione"], $b["id_giocatore"]] <=> [$a["stagione"], $a["id_giocatore"]]);
+    $totale = [];
+    foreach ($out as $r) $totale[$r["stagione"]] = ($totale[$r["stagione"]] ?? 0) + 1;
+    $posizione = [];
+    foreach (array_reverse($out) as $i => $r) {   // dal piu' vecchio: id piu' basso = 1
+        $posizione[$r["stagione"]] = ($posizione[$r["stagione"]] ?? 0) + 1;
+        $out[count($out) - 1 - $i]["ordine_stagione"] = $posizione[$r["stagione"]];
     }
+    foreach ($out as &$r) {
+        $r["totale_stagione"]  = $totale[$r["stagione"]];
+        $r["squadra_serie_a"]  = $serieA[$r["stagione"]] ?? null;
+    }
+    unset($r);
     return $out;
 }
 
@@ -367,7 +491,7 @@ function sg_storico(array $edizioni): array
 function sg_carriera(array $storico): array
 {
     $t = [
-        "stagioni" => count($storico), "giocate" => 0, "media" => 0.0,
+        "stagioni" => count(array_unique(array_column($storico, "stagione"))), "giocate" => 0, "media" => 0.0,
         "gol" => 0, "gol_subiti" => 0, "assist" => 0, "ammonizioni" => 0,
         "espulsioni" => 0, "autogol" => 0,
         "rigori_segnati" => 0, "rigori_parati" => 0, "rigori_sbagliati" => 0,
@@ -406,12 +530,12 @@ function sg_scheda(int $stagione, int $id): ?array
     $anag["id_anagrafica"] = $idPersona;
     $anag["ids_stagione"]  = $idsStagione;
 
-    $storico = sg_storico($edizioni);
+    $storico = sg_storico($edizioni, $anag["ruolo"]);
 
-    $totali = null;
-    foreach ($storico as $r) {
-        if ($r["stagione"] === $stagione) { $totali = $r; break; }
-    }
+    // Totali della stagione richiesta: somma di tutti gli id (in ordine cronologico)
+    $righeStagione = array_values(array_filter($storico, fn($r) => $r["stagione"] === $stagione));
+    usort($righeStagione, fn($a, $b) => $a["id_giocatore"] <=> $b["id_giocatore"]);
+    $totali = $righeStagione ? sg_unisci_righe($righeStagione) : null;
 
     return [
         "anagrafica" => $anag,

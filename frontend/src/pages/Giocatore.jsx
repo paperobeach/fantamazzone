@@ -167,7 +167,7 @@ export default function Giocatore() {
       {a.ids_stagione?.length > 1 && (
         <p className="text-[11px] text-slate-600 -mt-3 mb-6">
           In questa stagione il giocatore compare con {a.ids_stagione.length} id (cessione e acquisto tra squadre):
-          i dati della stagione sono la somma di tutti, in ordine cronologico.
+          i dati della stagione sono la somma di tutti; nello storico trovi una riga per ciascun id, in ordine cronologico (1 = il primo).
         </p>
       )}
 
@@ -240,16 +240,21 @@ export default function Giocatore() {
               </thead>
               <tbody>
                 {storico.stagioni.map(r => (
-                  <tr key={r.stagione} className={r.stagione === stagione ? 'bg-grass-500/5' : ''}>
-                    <td className="px-4 py-2.5 font-mono text-xs text-slate-400 whitespace-nowrap">{stagioneLabel(r.stagione)}</td>
+                  <tr key={`${r.stagione}-${r.id_giocatore}`} className={r.stagione === stagione ? 'bg-grass-500/5' : ''}>
+                    <td className="px-4 py-2.5 font-mono text-xs text-slate-400 whitespace-nowrap">
+                      {stagioneLabel(r.stagione)}
+                      {r.totale_stagione > 1 && (
+                        <span className="block text-[10px] text-gold-400/80" title="Più id nella stessa stagione (cessione/acquisto): 1 = il primo in ordine cronologico">
+                          {r.ordine_stagione}/{r.totale_stagione}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-sm text-slate-300">
-                      <span className="block truncate max-w-[12rem]">
-                        {(r.squadre?.length ? r.squadre.map(x => x.squadra) : [r.squadra]).join(' → ')}
-                      </span>
+                      <span className="block truncate max-w-[12rem]">{r.squadra ?? 'Svincolato'}</span>
                       {r.squadra_serie_a && <span className="block text-[11px] text-slate-600">{r.squadra_serie_a}</span>}
                     </td>
                     <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-400">{r.giocate}</td>
-                    <td className="px-4 py-2.5 text-center font-mono text-sm font-semibold text-grass-400">{f2(r.media)}</td>
+                    <td className="px-4 py-2.5 text-center font-mono text-sm font-semibold text-grass-400">{r.giocate > 0 ? f2(r.media) : '–'}</td>
                     <td className="px-4 py-2.5 text-center font-mono text-xs text-slate-400">
                       {r.ruolo === 1 ? `${r.gol_subiti} sub.` : r.gol}
                     </td>

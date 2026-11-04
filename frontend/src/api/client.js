@@ -511,6 +511,23 @@ export const adminInserimentoRose = (stagione, file) => {
   return postFile('admin/inserimento_rose.php', formData)
 }
 
+// ── Aggiorna lista giocatori (pagina admin) ──────────────────
+// Carica il listone ufficiale (xlsx, foglio "Tutti") e lo confronta con i giocatori
+// della stagione in corso. azione = 'anteprima' (non scrive nulla) | 'applica'.
+//   nuovi        -> inseriti come svincolati
+//   fuori_lista  -> restano in lista giocatori ma non acquistabili / "giocatore ceduto" se in rosa
+//   rientrati    -> di nuovo in lista
+// Errori di validazione del file: err.details = [{ riga, campo, messaggio }]
+export const adminAggiornaListaGiocatori = (stagione, file, { utenza, password }, azione = 'anteprima') => {
+  const formData = new FormData()
+  formData.append('stagione', stagione)
+  formData.append('utenza', utenza)
+  formData.append('password', password)
+  formData.append('azione', azione)
+  formData.append('file', file)
+  return postFile('admin/aggiorna_lista_giocatori.php', formData)
+}
+
 // ── Gestisci regole di calcolo (pagina admin) ────────────────
 // Configurazione usata dal motore di calcolo dei voti fantacalcio
 // (bonus/malus del giocatore + parametri degli algoritmi di

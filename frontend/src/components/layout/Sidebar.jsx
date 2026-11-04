@@ -5,7 +5,7 @@ import RicercaGiocatore from '../RicercaGiocatore'
 import {
   Trophy, Calendar, Users,
   Star, Shield, LogOut, UserPlus,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle, GitMerge
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle, GitMerge, ListChecks
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -66,6 +66,7 @@ const ADMIN_SECTIONS = [
     defaultOpen: true,
     items: [
       { to: '/gestione-voti',               icon: ClipboardCheck, label: 'Gestione voti' },
+      { to: '/aggiorna-lista-giocatori',   icon: ListChecks, label: 'Aggiorna lista giocatori' },
     ],
   },
   {

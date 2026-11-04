@@ -21,8 +21,12 @@
 //                      budget = parametro stagione MERCATO_BUDGET_CREDITI
 //                      (default 470, lo stesso usato dal mercato),
 //                      residuo = budget - somma dei crediti della rosa.
+//   - rosa[].ceduto    true se il giocatore non e' piu' nel listone della Serie A
+//                      ("giocatore ceduto", vedi lib/ListaGiocatori.php): resta in
+//                      rosa e nelle statistiche ma non e' utilizzabile in formazione.
 // ============================================================
 require_once __DIR__ . "/connect.php";
+require_once __DIR__ . "/lib/ListaGiocatori.php";
 
 $stagione = param_int("stagione");
 $id       = param_int("id", false);
@@ -138,6 +142,11 @@ if ($id !== null) {
                               ON ns.id_giocatore = g.id AND ns.stagione = g.stagione
                        WHERE g.squadra = $id AND g.stagione = $stagione
                        ORDER BY g.ruolo, g.descrizione");
+
+    // "Giocatore ceduto": non piu' in lista (Admin -> Aggiorna lista giocatori)
+    $fuoriLista = lg_fuori_lista($stagione);
+    foreach ($rosa as &$gr) $gr["ceduto"] = isset($fuoriLista[(int) $gr["id"]]);
+    unset($gr);
 
     // Crediti spesi per ruolo e totale, budget e residuo
     $perRuolo = [1 => 0, 2 => 0, 3 => 0, 4 => 0];

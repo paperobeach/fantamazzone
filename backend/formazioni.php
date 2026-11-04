@@ -65,6 +65,7 @@ require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/AvversarieSerieA.php";
 require_once __DIR__ . "/lib/FormazioniBlocco.php";
 require_once __DIR__ . "/lib/RosaStorico.php";
+require_once __DIR__ . "/lib/ListaGiocatori.php";
 
 $stagione = param_int("stagione");
 
@@ -107,6 +108,24 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         api_error("Inserimento formazione chiuso: il limite era " . date("d/m/Y H:i", strtotime($blocco["limite"]))
                   . " (un minuto prima della prima partita di Serie A della giornata). "
                   . "Tornerà possibile a giornata chiusa.", 403);
+    }
+
+    // "Giocatore ceduto" (non piu' nel listone): non e' utilizzabile in formazione.
+    // Il frontend non lo propone (resta fisso in tribuna); qui si rifiuta il salvataggio
+    // se arriva comunque (pagina non aggiornata), prima di scrivere qualunque cosa.
+    $fuori_lista = lg_fuori_lista($stagione);
+    if ($fuori_lista) {
+        $ceduti_inviati = [];
+        foreach ($giocatori as $g) {
+            $id_c = (int)($g["id"] ?? 0);
+            if ($id_c > 0 && isset($fuori_lista[$id_c])) $ceduti_inviati[$id_c] = true;
+        }
+        if ($ceduti_inviati) {
+            $nomi = array_column(query_all("SELECT descrizione FROM NEW_GIOCATORI
+                                            WHERE stagione = $stagione AND id IN (" . implode(",", array_keys($ceduti_inviati)) . ")"), "descrizione");
+            api_error("Giocatore ceduto, non utilizzabile in formazione: " . ($nomi ? implode(", ", $nomi) : implode(", ", array_keys($ceduti_inviati)))
+                      . ". Ricarica la pagina e togli il giocatore dalla formazione.", 422);
+        }
     }
 
     // Opzione "nascondi formazione": va validata prima di scrivere qualunque cosa

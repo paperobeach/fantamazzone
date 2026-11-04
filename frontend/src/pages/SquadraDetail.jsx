@@ -124,11 +124,19 @@ export default function SquadraDetail() {
               </thead>
               <tbody>
                 {grouped[r].map(g => (
-                  <tr key={g.id}>
+                  <tr key={g.id} className={g.ceduto ? 'opacity-60' : ''}>
                     <td className="px-4 py-2.5">
                       <span className="inline-flex items-center gap-1.5">
                         <Bandiera id={g.id} />
-                        <span className="text-sm text-slate-300 font-medium">{g.descrizione}</span>
+                        <span className={`text-sm font-medium ${g.ceduto ? 'text-slate-500 line-through decoration-slate-600' : 'text-slate-300'}`}>{g.descrizione}</span>
+                        {g.ceduto && (
+                          <span
+                            className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400"
+                            title="Non è più nel listone: non è utilizzabile in formazione"
+                          >
+                            Giocatore ceduto
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-center">

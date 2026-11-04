@@ -45,6 +45,7 @@
 require_once __DIR__ . "/DashboardSquadra.php";
 require_once __DIR__ . "/StatoGiornata.php";
 require_once __DIR__ . "/RosaStorico.php";
+require_once __DIR__ . "/ListaGiocatori.php";   // lg_fuori_lista: giocatori non piu' in lista, non acquistabili
 require_once __DIR__ . "/../mailer.php";
 
 const MR_FINESTRA_1       = 1;
@@ -435,6 +436,9 @@ function mr_acquista(int $stagione, int $finestra, int $idSquadra, int $idAcq, i
 
         $acq = query_one("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI WHERE stagione = $stagione AND id = $idAcq");
         if (!$acq) throw new MercatoErrore("Il giocatore da acquistare non e' tra gli svincolati", 400);
+        if (isset(lg_fuori_lista($stagione)[$idAcq])) {
+            throw new MercatoErrore("Il giocatore non e' piu' in lista: non e' acquistabile", 400);
+        }
         $ced = query_one("SELECT id, descrizione, ruolo, nazione, crediti FROM NEW_GIOCATORI
                           WHERE stagione = $stagione AND id = $idCed AND squadra = $idSquadra");
         if (!$ced) throw new MercatoErrore("Il giocatore da cedere non fa parte della tua rosa", 400);
@@ -641,11 +645,14 @@ function mr_svincolati(int $stagione, int $finestra, ?int $ruolo, string $q): ar
                         WHERE stagione = $stagione AND finestra = $finestra AND tipo = 'SCAMBIO'") as $r) {
         $ceduti[(int) $r["id_giocatore_ceduto"]] = true;
     }
+    $fuoriLista = lg_fuori_lista($stagione);   // non piu' nel listone: mai acquistabili
     $out = [];
     foreach (query_all("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI WHERE $w ORDER BY ruolo, descrizione") as $r) {
         $out[] = [
             "id" => (int) $r["id"], "descrizione" => $r["descrizione"], "ruolo" => (int) $r["ruolo"],
-            "nazione" => $r["nazione"], "acquistabile" => !isset($ceduti[(int) $r["id"]]),
+            "nazione" => $r["nazione"],
+            "acquistabile" => !isset($ceduti[(int) $r["id"]]) && !isset($fuoriLista[(int) $r["id"]]),
+            "fuori_lista" => isset($fuoriLista[(int) $r["id"]]),
         ];
     }
     return $out;
@@ -774,6 +781,7 @@ function mr_analisi_svincolati(int $stagione, int $finestra, ?int $idRichiedente
     $ultimaChiusa = $chiuse ? max(array_keys($chiuse)) : 0;
 
     // Svincolati
+    $fuoriLista = lg_fuori_lista($stagione);   // non piu' nel listone: non acquistabili
     $svinc = [];
     foreach (query_all("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI
                         WHERE stagione = $stagione ORDER BY ruolo, descrizione") as $r) {
@@ -841,7 +849,8 @@ function mr_analisi_svincolati(int $stagione, int $finestra, ?int $idRichiedente
             "ruolo"         => $ruolo,
             "nazione"       => $r["nazione"],
             "serie_a"       => $sa !== "" ? $sa : null,
-            "acquistabile"  => !isset($ceduti[$id]),
+            "acquistabile"  => !isset($ceduti[$id]) && !isset($fuoriLista[$id]),
+            "fuori_lista"   => isset($fuoriLista[$id]),
             "presenze"      => $n,
             "senza_voto"    => count($righe) - $n,
             "media_voto"    => $n ? round($sommaVoto / $n, 2) : null,

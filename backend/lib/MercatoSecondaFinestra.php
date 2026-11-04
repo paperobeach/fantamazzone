@@ -213,6 +213,9 @@ function m2_aggiudica(int $stagione, int $idRich, int $idGiocatore, int $idAgg, 
 
         $g = query_one("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI WHERE stagione = $stagione AND id = $idGiocatore");
         if (!$g) throw new MercatoErrore("Il giocatore non e' piu' tra gli svincolati", 400);
+        if (isset(lg_fuori_lista($stagione)[$idGiocatore])) {
+            throw new MercatoErrore("{$g['descrizione']} non e' piu' in lista: non e' acquistabile", 400);
+        }
 
         $agg = query_one("SELECT * FROM NEW_MERCATO2_ORDINE WHERE stagione = $stagione AND id_squadra = $idAgg");
         if (!$agg) throw new MercatoErrore("Squadra aggiudicataria non valida", 400);
@@ -372,9 +375,11 @@ function m2_svincolati(int $stagione): array
 {
     $ceduti = m2_ceduti($stagione);
     $serieA = mr_squadre_serie_a($stagione);
+    $fuoriLista = lg_fuori_lista($stagione);   // non piu' nel listone: non acquistabili, non si propongono
     $out = [];
     foreach (query_all("SELECT id, descrizione, ruolo, nazione FROM NEW_GIOCATORI_SVINCOLATI WHERE stagione = $stagione ORDER BY ruolo, descrizione") as $r) {
         $id = (int) $r["id"];
+        if (isset($fuoriLista[$id])) continue;
         $sa = $serieA[$id] ?? "";
         $out[] = ["id" => $id, "descrizione" => $r["descrizione"], "ruolo" => (int) $r["ruolo"], "nazione" => $r["nazione"],
                   "serie_a" => $sa !== "" ? $sa : null, "ceduto_da" => array_values(array_unique($ceduti[$id] ?? []))];

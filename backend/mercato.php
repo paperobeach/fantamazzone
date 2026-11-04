@@ -7,13 +7,14 @@
 //          chiamata, squadra di turno, scadenza, classifica salvata.
 //          (la GET esegue anche mr_tick: apre/chiude sessioni, solleciti)
 // GET  ?stagione=2026&modo=svincolati[&ruolo=2][&q=rossi]
-//        → svincolati con flag "acquistabile" (false se ceduti nella finestra)
+//        → svincolati con flag "acquistabile" (false se ceduti nella finestra o se non
+//          piu' in lista: in tal caso anche "fuori_lista" = true)
 // GET  ?stagione=2026&modo=analisi_svincolati[&id_richiedente=3]
 //        → pagina "Mercato > Svincolati": tutti gli svincolati con statistiche
 //          (fantamedia, forma, presenze, gol, assist...), indice di valore,
 //          prezzo e, se indicato id_richiedente, budget residuo e sostenibilita'.
 // GET  ?stagione=2026&modo=rosa&id_squadra=3
-//        → rosa della squadra (id, descrizione, ruolo, nazione, crediti)
+//        → rosa della squadra (id, descrizione, ruolo, nazione, crediti, ceduto)
 // GET  ?stagione=2026&modo=storico[&sessione=2]
 //        → transazioni salvate
 //
@@ -77,8 +78,13 @@ switch ($modo) {
         api_success(mr_analisi_svincolati($stagione, $finestra, $rich ?: null));
     case "rosa":
         $id = param_int("id_squadra");
-        api_success(query_all("SELECT id, descrizione, ruolo, nazione, crediti FROM NEW_GIOCATORI
-                               WHERE stagione = $stagione AND squadra = $id ORDER BY ruolo, descrizione"));
+        // "ceduto" = non piu' nel listone: resta cedibile nello scambio ma non e' utilizzabile in formazione
+        $fuoriLista = lg_fuori_lista($stagione);
+        $rosa = query_all("SELECT id, descrizione, ruolo, nazione, crediti FROM NEW_GIOCATORI
+                           WHERE stagione = $stagione AND squadra = $id ORDER BY ruolo, descrizione");
+        foreach ($rosa as &$g) $g["ceduto"] = isset($fuoriLista[(int) $g["id"]]);
+        unset($g);
+        api_success($rosa);
     case "storico":
         $s = param_int("sessione", false);
         api_success(mr_storico($stagione, $finestra, $s ?: null));

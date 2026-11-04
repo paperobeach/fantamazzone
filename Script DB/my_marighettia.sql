@@ -786,7 +786,9 @@ CREATE TABLE `NEW_GIOCATORI_BASE_ASTA` (
   `squadra_serie_a` varchar(50) NOT NULL DEFAULT '',
   `nazione` varchar(50) NOT NULL DEFAULT '',
   `id_squadra_lega` int DEFAULT NULL,
-  `crediti` int NOT NULL DEFAULT '0'
+  `crediti` int NOT NULL DEFAULT '0',
+  `in_lista` char(1) NOT NULL DEFAULT 'Y' COMMENT 'Y = nel listone; N = non piu'' in lista (giocatore ceduto)',
+  KEY `idx_base_asta_stagione_id` (`stagione`,`id_giocatore`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------

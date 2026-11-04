@@ -35,6 +35,7 @@ const ImportaCalendarioSerieA = lazy(() => import('./pages/ImportaCalendarioSeri
 const ResetStagione = lazy(() => import('./pages/ResetStagione'))
 const RipristinoStagione = lazy(() => import('./pages/RipristinoStagione'))
 const RaccordoGiocatori = lazy(() => import('./pages/RaccordoGiocatori'))
+const AggiornaListaGiocatori = lazy(() => import('./pages/AggiornaListaGiocatori'))
 const AiTest = lazy(() => import('./pages/AiTest'))
 const ApiFootballTest = lazy(() => import('./pages/ApiFootballTest'))
 const ApiFootballMappatura = lazy(() => import('./pages/ApiFootballMappatura'))
@@ -195,6 +196,9 @@ function AppShell() {
                   } />
                   <Route path="/raccordo-giocatori" element={
                     <AdminRoute><RaccordoGiocatori /></AdminRoute>
+                  } />
+                  <Route path="/aggiorna-lista-giocatori" element={
+                    <AdminRoute><AggiornaListaGiocatori /></AdminRoute>
                   } />
                   <Route path="/riapertura-giornata" element={
                     <AdminRoute><RiaperturaGiornata /></AdminRoute>

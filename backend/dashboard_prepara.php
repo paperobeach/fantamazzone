@@ -52,6 +52,7 @@ require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/DashboardSquadra.php";
 require_once __DIR__ . "/lib/FormazioniBlocco.php";
 require_once __DIR__ . "/lib/StatisticheRosa.php";
+require_once __DIR__ . "/lib/ListaGiocatori.php";
 
 const FORMAZIONE_AVVERSARIO_VISIBILE = true;
 
@@ -267,10 +268,12 @@ foreach ($partiteSerieA as $p) {
 
 $squadreSerieA = dp_squadre_serie_a($stagione);
 $rosa = [];
+$fuoriLista = lg_fuori_lista($stagione);   // "giocatori ceduti": non utilizzabili, fuori dalla preparazione della formazione
 foreach (query_all("SELECT id, descrizione, ruolo FROM NEW_GIOCATORI
                     WHERE stagione = $stagione AND squadra = $idSquadra
                     ORDER BY ruolo, descrizione") as $g) {
     $id  = (int) $g["id"];
+    if (isset($fuoriLista[$id])) continue;
     $sa  = $squadreSerieA[$id] ?? null;
     $inc = $sa !== null ? ($perSquadraSerieA[dp_norm($sa)] ?? null) : null;
     $m   = $medie[$id] ?? null;

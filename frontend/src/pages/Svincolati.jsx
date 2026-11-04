@@ -176,7 +176,7 @@ function Dettaglio({ g, loggato, budget }) {
             <p className="text-xs text-slate-500 mt-1">Residuo attuale: {budget.residuo} cr.</p>
           </>
         )}
-        {!g.acquistabile && <p className="text-xs text-red-400 mt-1">Ceduto nella finestra: non acquistabile.</p>}
+        {!g.acquistabile && <p className="text-xs text-red-400 mt-1">{g.fuori_lista ? 'Non più in lista: non acquistabile.' : 'Ceduto nella finestra: non acquistabile.'}</p>}
         {g.prossima && (
           <p className="text-xs text-slate-400 mt-1">
             Prossima: {g.prossima.casa ? 'in casa vs ' : 'in trasferta a '}<b className="text-white">{g.prossima.avversaria}</b>

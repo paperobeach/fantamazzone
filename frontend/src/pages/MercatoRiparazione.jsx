@@ -101,7 +101,7 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
               <RoleBadge ruolo={g.ruolo} />
               <span className="flex-1 truncate">{g.descrizione}</span>
               {!g.acquistabile
-                ? <span className="text-[10px] text-slate-600">ceduto: non acquistabile</span>
+                ? <span className="text-[10px] text-slate-600">{g.fuori_lista ? 'non più in lista: non acquistabile' : 'ceduto: non acquistabile'}</span>
                 : sforaConCessione(g)
                   ? <span className="text-[10px] text-red-400">oltre budget ({mercato.prezzi[g.ruolo]} cr.)</span>
                   : <span className="text-xs text-mono text-slate-500">{mercato.prezzi[g.ruolo]} cr.</span>}
@@ -128,7 +128,10 @@ function PannelloOperazione({ stagione, idSquadra, mercato, onDone }) {
                   ${sforaCon(g) ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 <RoleBadge ruolo={g.ruolo} />
-                <span className="flex-1 truncate">{g.descrizione}</span>
+                <span className="flex-1 truncate">
+                  {g.descrizione}
+                  {g.ceduto && <span className="ml-2 text-[10px] uppercase tracking-wider text-red-400">giocatore ceduto</span>}
+                </span>
                 {sforaCon(g)
                   ? <span className="text-[10px] text-red-400">recuperi {g.crediti} cr.: budget insufficiente</span>
                   : <span className="text-xs text-mono text-slate-500">recuperi {g.crediti} cr.</span>}

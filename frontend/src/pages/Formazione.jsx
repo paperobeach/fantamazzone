@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getFormazioneStato, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
-import { PageHeader, LoadingState, ErrorState, TabBar } from '../components/ui'
+import { PageHeader, LoadingState, ErrorState, TabBar, RoleBadge } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
 import { OrdineRigoristi, ordinaSecondo as ordinaRig } from '../components/OrdineRigoristi'
 import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
-import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info, EyeOff } from 'lucide-react'
+import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info, EyeOff, Armchair } from 'lucide-react'
 
 const MODULO_DEFAULT = '4-4-2'
 
@@ -144,7 +144,12 @@ export default function Formazione() {
     idSquadra !== null && ultimaStagione !== null ? () => getSquadra(ultimaStagione, idSquadra) : null,
     [ultimaStagione, idSquadra]
   )
-  const rosaBase = squadra?.rosa
+  // "Giocatori ceduti" (non più nel listone, vedi Admin → Aggiorna lista giocatori):
+  // restano in rosa ma non sono utilizzabili, quindi non entrano nel costruttore di
+  // formazione e vengono mostrati a parte, fissi in tribuna.
+  const rosaTutti = squadra?.rosa
+  const rosaBase = useMemo(() => (rosaTutti ?? []).filter(p => !p.ceduto), [rosaTutti])
+  const rosaCeduti = useMemo(() => (rosaTutti ?? []).filter(p => p.ceduto), [rosaTutti])
 
   // ── Giornata di riferimento: prima giornata successiva all'ultima chiusa ──
   const { data: giornataInfo, loading: loadingGiornata, error: errorGiornata } = useFetch(
@@ -513,6 +518,29 @@ export default function Formazione() {
             readOnly={readOnly}
           />
 
+          {rosaCeduti.length > 0 && (
+            <div className="card mt-6 p-4 border border-red-500/20">
+              <h3 className="text-sm font-semibold text-slate-300 mb-1 flex items-center gap-2">
+                <Armchair className="w-4 h-4 text-slate-500" /> Giocatori ceduti — fissi in tribuna
+              </h3>
+              <p className="text-xs text-slate-500 mb-3">
+                Non sono più nel listone della Serie A: restano nella tua rosa ma non possono essere schierati né messi in panchina.
+                Puoi sostituirli nel mercato di riparazione.
+              </p>
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {rosaCeduti.map(p => (
+                  <li key={p.id} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-2 opacity-70">
+                    <RoleBadge ruolo={p.ruolo} />
+                    <span className="text-sm text-slate-400 line-through decoration-slate-600 truncate flex-1">{p.descrizione}</span>
+                    <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+                      Giocatore ceduto
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {mostraRigoristi && (
             <OrdineRigoristi
               rosa={rosa}
@@ -622,6 +650,11 @@ export default function Formazione() {
                 </div>
               ))}
             </div>
+            {rosaCeduti.length > 0 && (
+              <p className="text-[11px] text-red-400/80 mt-3">
+                {rosaCeduti.length} giocator{rosaCeduti.length === 1 ? 'e' : 'i'} ceduto{rosaCeduti.length === 1 ? '' : 'i'}: non utilizzabil{rosaCeduti.length === 1 ? 'e' : 'i'} in formazione (fiss{rosaCeduti.length === 1 ? 'o' : 'i'} in tribuna).
+              </p>
+            )}
             {tribuna.length > 0 && (
               <p className="text-[11px] text-slate-600 mt-3">
                 {tribuna.length} giocator{tribuna.length === 1 ? 'e' : 'i'} in tribuna (esclus{tribuna.length === 1 ? 'o' : 'i'} da campo e panchina).

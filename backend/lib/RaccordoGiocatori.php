@@ -491,6 +491,35 @@ function rg_unisci(int $idTieni, int $idAssorbi): void
 }
 
 /**
+ * Unisce in un colpo solo piu' persone (tutte le loro stagioni) in una persona
+ * da mantenere. Tutte le persone da assorbire vengono verificate prima e il
+ * passaggio avviene con un unico UPDATE (o tutte o nessuna).
+ *
+ * @param int[] $idAssorbi persone che confluiscono in $idTieni
+ * @return int numero di persone assorbite
+ */
+function rg_unisci_molti(int $idTieni, array $idAssorbi): int
+{
+    $ids = [];
+    foreach ($idAssorbi as $i) {
+        $i = (int) $i;
+        if ($i > 0 && $i !== $idTieni) $ids[$i] = $i;
+    }
+    $ids = array_values($ids);
+    if (!$ids) throw new InvalidArgumentException("Nessuna persona da unire");
+    foreach (array_merge([$idTieni], $ids) as $i) {
+        if (!query_one("SELECT 1 AS x FROM " . RG_T_ANAG . " WHERE id_anagrafica = $i")) {
+            throw new InvalidArgumentException("Persona $i non trovata");
+        }
+    }
+    rg_esegui("UPDATE " . RG_T_RACC . " SET id_anagrafica = $idTieni, metodo = 'MANUALE',
+                      da_verificare = 'N', nota = NULL, aggiornato_il = NOW()
+               WHERE id_anagrafica IN (" . implode(",", $ids) . ")");
+    rg_pulisci_orfane();
+    return count($ids);
+}
+
+/**
  * Collega UN SOLO giocatore (una stagione) a una persona esistente, senza
  * toccare le altre stagioni della persona di provenienza.
  * La persona di destinazione puo' avere gia' un altro giocatore nella stessa

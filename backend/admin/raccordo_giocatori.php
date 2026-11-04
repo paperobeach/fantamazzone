@@ -20,6 +20,7 @@
 // azione = "collega"      { stagione_giocatore, id_giocatore, id_anagrafica }
 //                         collega UN solo giocatore (una stagione) a una persona
 // azione = "unisci"       { id_tieni, id_assorbi }  unisce TUTTE le stagioni di due persone
+// azione = "unisci_molti" { id_tieni, id_assorbi[] }  unisce TUTTE le stagioni di piu' persone in una
 // azione = "separa"       { stagione_giocatore, id_giocatore }
 // ============================================================
 require_once __DIR__ . "/../connect.php";
@@ -91,6 +92,11 @@ try {
         case "unisci":
             rg_unisci((int) ($input["id_tieni"] ?? 0), (int) ($input["id_assorbi"] ?? 0));
             api_success(["ok" => true, "stato" => rg_stato()]);
+            break;
+
+        case "unisci_molti":
+            $n = rg_unisci_molti((int) ($input["id_tieni"] ?? 0), (array) ($input["id_assorbi"] ?? []));
+            api_success(["ok" => true, "unite" => $n, "stato" => rg_stato()]);
             break;
 
         case "separa":

@@ -128,6 +128,15 @@ export default function RaccordoGiocatori() {
     }
   }
 
+  // Unisce tutte le persone omonime candidate (tutte le loro stagioni) in quella della riga
+  const uniciTuttiCandidati = async (tieni, candidati) => {
+    const r = await chiama('unisci_molti', { id_tieni: tieni, id_assorbi: candidati.map(c => c.id_anagrafica) }, 'unisci_molti')
+    if (r) {
+      setEsito(`${r.unite} persone unite nella persona #${tieni}.`)
+      caricaVerifica()
+    }
+  }
+
   const separa = async g => {
     if (!window.confirm(`Staccare ${g.nome} (${stagioneLabel(g.stagione)}) in una persona nuova?`)) return
     const r = await chiama('separa', { stagione_giocatore: g.stagione, id_giocatore: g.id_giocatore }, 'separa')
@@ -236,9 +245,18 @@ export default function RaccordoGiocatori() {
 
                 {r.candidati.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600">
-                      Altre persone con lo stesso nome — collega, stagione per stagione, quelle che sono questo giocatore
-                    </p>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600">
+                        Altre persone con lo stesso nome — collega, stagione per stagione, quelle che sono questo giocatore
+                      </p>
+                      {r.candidati.length > 1 && (
+                        <Pulsante piccolo primario icona={GitMerge} disabled={off}
+                                  titolo="Sposta tutte le stagioni di tutte le persone omonime su quella della riga"
+                                  onClick={() => window.confirm(`Unire TUTTE le ${r.candidati.length} persone omonime nella persona #${r.persona.id_anagrafica} (${stagioneLabel(r.giocatore.stagione)})?\n\n${r.candidati.map(c => `#${c.id_anagrafica}: ${c.edizioni.map(e => stagioneLabel(e.stagione)).join(', ') || '—'}`).join('\n')}\n\nUsare solo se sono tutte lo stesso giocatore.`) && uniciTuttiCandidati(r.persona.id_anagrafica, r.candidati)}>
+                          Unisci tutte le persone
+                        </Pulsante>
+                      )}
+                    </div>
                     {r.candidati.map(c => (
                       <div key={c.id_anagrafica} className="rounded-lg border border-white/10 px-3 py-2 space-y-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">

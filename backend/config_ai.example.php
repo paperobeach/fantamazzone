@@ -57,6 +57,38 @@ return [
         "token_output_tipico" => 1100,
         // Quanti episodi storici della lega richiamare al massimo (default 3)
         "max_episodi" => 3,
+        // --- Narrazione dal DB (lib/ArticoloNarrativa.php): tutti i parametri sono facoltativi ---
+        // Interruttore generale: false = prompt di base, senza schede partita/andamento/puntate precedenti
+        "narrativa_avanzata" => true,
+        // Puntate precedenti passate all'AI (continuità): quante, caratteri di sintesi e di pagelle per puntata
+        "memoria_articoli" => 3,
+        "memoria_caratteri" => 1800,
+        "memoria_pagelle_caratteri" => 450,
+        // Su quante ultime puntate cercare i richiami già usati (tormentoni, episodi) per non riproporli
+        "memoria_rilevamento" => 4,
+        // Usa solo gli articoli pubblicati (true) o anche le bozze (false)
+        "memoria_solo_pubblicati" => true,
+        // Un episodio storico usato in una delle ultime N puntate viene messo in pausa (0 = nessuna pausa)
+        "episodi_pausa_articoli" => 2,
+        // Ammetti episodi senza allenatori collegati (al massimo uno, in coda)
+        "episodi_generici" => true,
+        // Tormentoni proposti per profilo (scelti a rotazione) e lunghezza massima del campo carattere
+        "tormentoni_per_profilo" => 2,
+        "profilo_carattere_max" => 240,
+        // Scontri diretti elencati per partita; ultime partite mostrate nell'andamento delle squadre
+        "scontri_diretti_ultimi" => 3,
+        "forma_ultime" => 5,
+        // "Big": crediti >= percentile del proprio ruolo (e almeno big_crediti_min)
+        "big_percentile" => 80,
+        "big_crediti_min" => 20,
+        // Fantavoto massimo per considerare "flop" un big titolare, minimo per considerarlo "top"
+        "soglia_big_flop" => 5.5,
+        "soglia_big_top" => 8.5,
+        // Assenti illustri (costosi non schierati) per squadra, e momenti della sequenza mostrati per partita
+        "assenti_illustri_max" => 2,
+        "sequenza_max_slot" => 8,
+        // Tetto di caratteri delle schede partita: oltre, la sequenza viene compattata
+        "max_caratteri_schede" => 14000,
         // Tetto di spesa mensile in USD sugli articoli generati; 0 = nessun tetto
         "tetto_mensile_usd" => 0,
         // Euro per 1 USD, solo per mostrare anche l'importo in euro (null = non mostrare)

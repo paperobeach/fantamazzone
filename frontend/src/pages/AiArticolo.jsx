@@ -285,6 +285,20 @@ export default function AiArticolo() {
                 ? 'nessuno'
                 : anteprima.riepilogo.episodi.map(e => e.titolo).join(' · ')}
             </li>
+            {anteprima.riepilogo.narrativa && (
+              <li>
+                Narrazione dal DB: {anteprima.riepilogo.narrativa.schede_partita} schede partita
+                ({anteprima.riepilogo.narrativa.slot_serie_a} momenti in ordine di calendario Serie A,
+                {' '}{anteprima.riepilogo.narrativa.scontri_con_storico} con scontri diretti storici)
+                {' '}· fortuna/sfortuna: {anteprima.riepilogo.narrativa.subentri_fortuna} subentri, {anteprima.riepilogo.narrativa.big_o_titolari_flop} big o titolari in difficoltà, {anteprima.riepilogo.narrativa.assenti_illustri} assenti illustri
+                {' '}· continuità: {anteprima.riepilogo.narrativa.puntate_precedenti === 0
+                  ? 'nessuna puntata precedente'
+                  : `puntate precedenti (giornate ${anteprima.riepilogo.narrativa.giornate_precedenti.join(', ')})`}
+                {anteprima.riepilogo.narrativa.episodi_in_pausa > 0 && <> · {anteprima.riepilogo.narrativa.episodi_in_pausa} episodi in pausa perché usati di recente</>}
+                {Object.keys(anteprima.riepilogo.narrativa.errori || {}).length > 0 &&
+                  <span className="text-gold-400"> · sezioni non costruite: {Object.keys(anteprima.riepilogo.narrativa.errori).join(', ')}</span>}.
+              </li>
+            )}
             <li>
               Contesto fisso: {anteprima.riepilogo.contesto_fisso_blocchi} blocchi ({anteprima.riepilogo.contesto_fisso_caratteri} caratteri)
               {anteprima.riepilogo.stile_personalizzato ? ', stile personalizzato' : ', stile predefinito'}

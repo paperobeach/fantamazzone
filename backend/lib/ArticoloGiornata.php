@@ -20,6 +20,9 @@
 //   art_costruisci($conn, $s, $g, $opz) prompt completo + riepilogo (formato
 //                                       'articolo' o 'edizione', note di giornata)
 //   art_contesto_fisso($conn)           blocchi di contesto fisso, di stile e di struttura
+//   arn_costruisci(...)                 (lib/ArticoloNarrativa.php) sezioni aggiuntive del prompt:
+//                                       andamento squadre, schede partita, puntate precedenti,
+//                                       profili ed episodi a rotazione
 //   art_catalogo_immagini(...)          immagini proposte all'AI
 //   art_pagine_attese(...)              pagine di un'edizione sfogliabile
 //   art_hash($prompt)                   impronta del prompt
@@ -29,6 +32,7 @@
 // ============================================================
 
 require_once __DIR__ . "/RosaStorico.php";   // anagrafica storica (giocatori ceduti)
+require_once __DIR__ . "/ArticoloNarrativa.php";   // fonti aggiuntive: continuità, fortuna/sfortuna, sequenza, scontri diretti
 
 /** Parametro della sezione "articolo" di config_ai.php (con valore di default). */
 function art_cfg(string $chiave, $default)
@@ -295,6 +299,24 @@ function art_dati_giornata(int $stagione, int $giornata): array
     $ru = [];
     foreach ($riserveUfficio as $idSq => $n) $ru[] = ["squadra" => $nm($idSq), "riserve" => $n];
 
+    // Incontri con gli id squadra (uso interno: schede partita, collegamento episodi)
+    $incontri = [];
+    foreach ($partite as $p) {
+        $incontri[] = ["comp" => "campionato", "id_a" => $p["_id_casa"], "id_b" => $p["_id_ospite"],
+                       "fa" => $p["punteggio_casa"], "fb" => $p["punteggio_ospite"],
+                       "ga" => $p["gol_casa"], "gb" => $p["gol_ospite"]];
+    }
+    $visteCh = [];
+    foreach ($righeCh as $r) {
+        $a = (int) $r["id_a"]; $b = (int) $r["id_b"];
+        $chiave = min($a, $b) . "-" . max($a, $b);
+        if (isset($visteCh[$chiave])) continue;
+        $visteCh[$chiave] = true;
+        $incontri[] = ["comp" => "champions", "girone" => trim((string) $r["girone"]), "id_a" => $a, "id_b" => $b,
+                       "fa" => (float) $r["ftotale"], "fb" => (float) $r["ftotale_a"],
+                       "ga" => (int) $r["golf"], "gb" => (int) $r["gols"]];
+    }
+
     // Partecipanti (campionato + Champions) per profili/episodi
     $ids = [];
     foreach ($partite as $p) { $ids[$p["_id_casa"]] = true; $ids[$p["_id_ospite"]] = true; }
@@ -319,6 +341,7 @@ function art_dati_giornata(int $stagione, int $giornata): array
         "eventi"               => $eventi,
         "riserve_d_ufficio"    => $ru,
         "_partecipanti"        => $partecipanti,   // uso interno (non va nel prompt)
+        "_incontri"            => $incontri,       // uso interno: partite con id squadra (schede partita)
         "_marcatori_squadra"   => $marcatoriSquadra, // uso interno: marcatori per squadra (pagine dell'edizione)
     ];
 }
@@ -575,7 +598,8 @@ function art_pagine_attese(array $dati, array $marcatoriSquadra, bool $conChampi
  * Prompt di sistema. Opzioni ($o):
  *   formato ('articolo'|'edizione'), stile, contesto (testo, può essere vuoto),
  *   struttura (indicazioni di struttura, testo, può essere vuoto),
- *   con_immagini (bool), parole_pagina, parole_commento, max_inline
+ *   con_immagini (bool), parole_pagina, parole_commento, max_inline,
+ *   con_schede (bool: schede partita), con_memoria (bool: andamento + puntate precedenti)
  */
 function art_system_prompt(int $paroleTarget, array $o): string
 {
@@ -607,6 +631,15 @@ function art_system_prompt(int $paroleTarget, array $o): string
     $regole[] = "Se nel messaggio ci sono NOTE DELLA REDAZIONE, sono informazioni affidabili sulla giornata fornite da chi dirige il giornale: usale anche se non compaiono nei dati, senza però mai contraddire i numeri dei dati.";
     $regole[] = "L'ironia deve essere affettuosa. Puoi prendere in giro prestazioni, scelte di formazione, tormentoni e rivalità forniti. Mai insulti né battute su salute, aspetto fisico, famiglia, origini, religione, politica o altri aspetti privati o sensibili.";
     $regole[] = "Le citazioni inventate sono ammesse solo se palesemente comiche e attribuite ai fantallenatori della lega.";
+    if (!empty($o["con_schede"])) {
+        $regole[] = "Nel messaggio ci sono le SCHEDE PARTITA, costruite dal DB: scontri diretti, SEQUENZA in ordine di calendario di Serie A (parziali, sorpassi) e fatti di fortuna e sfortuna. Racconta ogni partita seguendo la sequenza: chi è partito avanti, quando c'è stato il sorpasso, quale partita di Serie A l'ha deciso (il sabato sera, il pomeriggio, il posticipo). I parziali sono somme di fantavoti SENZA i modificatori di squadra: non presentarli come punteggio finale e non contraddire mai il finale." . ($edizione ? " La scheda «PARTITA n» alimenta la pagina «@@ PARTITA n»; il RIEPILOGO DEI FATTI alimenta la pagina COMMENTO." : "");
+        $regole[] = "Per ogni partita scegli UN fatto sorprendente tra quelli delle schede (colpo di fortuna o di sfortuna, big che non rende, big titolare senza voto, assente illustre che ha giocato bene, sorpasso all'ultima partita) e fanne il perno comico del racconto con iperboli e paragoni: l'ironia nasce dai dati, e più il fatto è piccolo e capovolge l'esito, più va ingigantito. Il resto della partita è cronaca asciutta: alterna cronaca e comicità, non scherzare su tutto. Se una partita non ha fatti sorprendenti, raccontala in modo sobrio.";
+        $regole[] = "Fortuna e sfortuna: una riserva che entra al posto di un titolare e produce bonus è un colpo di fortuna spudorato (e uno sfortunato per chi aveva il titolare, se è un big); una riserva che entra e fa danni, un big che delude, un big titolare che non scende in campo o esce presto, un costoso lasciato fuori che invece segna sono materiale per un'ironia più amara. Non attribuire MAI la causa (infortunio, scelta tecnica, squalifica) se non è nei dati o nelle note della redazione: puoi solo dire che non ha giocato. Non inventare minuti, ruoli, crediti, squadre o bonus che non compaiono nelle schede.";
+    }
+    if (!empty($o["con_memoria"])) {
+        $regole[] = "ANDAMENTO DELLE SQUADRE e PUNTATE PRECEDENTI servono alla continuità della storia: dai seguito ai filoni (serie di vittorie o sconfitte, risalite, crolli, sorpassi in classifica, pagelle o promesse della puntata precedente confermate o smentite) con un riferimento esplicito e breve, ma SOLO se i fatti di questa giornata lo confermano o lo ribaltano. Ogni richiamo al passato deve avere un collegamento concreto con la partita che stai raccontando.";
+        $regole[] = "Non ripetere titoli, formule, paragoni, battute, episodi, tormentoni o profili già usati nelle PUNTATE PRECEDENTI: se un aneddoto compare lì, cambia angolo o lascialo stare. Per ogni partita al massimo UN richiamo a profilo, tormentone, episodio o bacheca; i tormentoni proposti sono una selezione a rotazione, ne basta uno e solo se calza.";
+    }
     if ($edizione) {
         $regole[] = "Lunghezza: circa " . (int) $o["parole_pagina"] . " parole per ogni pagina di partita e circa " . (int) $o["parole_commento"] . " parole per il commento generale, pagelle escluse.";
         $regole[] = "Struttura: una pagina per ogni partita elencata in PAGINE DELL'EDIZIONE, nello stesso ordine e con lo stesso numero, in cui commenti quella partita (cosa è successo, chi ha deciso, chi ha sbagliato). Punteggi e gol sono già mostrati in grafica nella pagina: non ripeterli come elenco, commentali. Poi una pagina COMMENTO con il commento generale della giornata (classifica, miglior e peggior punteggio, tendenze) e, in fondo, una sezione «PAGELLE» con un voto in decimi e un commento di una riga per ogni fantallenatore che ha giocato.";
@@ -682,26 +715,57 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
     }
 
     $partecipanti = $dati["_partecipanti"];
+    $incontri = $dati["_incontri"] ?? [];
     $marcatoriSquadra = $dati["_marcatori_squadra"] ?? [];
-    unset($dati["_partecipanti"], $dati["_marcatori_squadra"]);
+    unset($dati["_partecipanti"], $dati["_marcatori_squadra"], $dati["_incontri"]);
 
     $utenze = array_map(fn($p) => $p["utenza"], $partecipanti);
-    $profili = art_profili($conn, $utenze);
+
+    // Fonti aggiuntive (lib/ArticoloNarrativa.php): andamento delle squadre, schede partita con sequenza
+    // di Serie A e fatti di fortuna/sfortuna, puntate precedenti, profili ed episodi a rotazione.
+    // Disattivabile con "narrativa_avanzata" => false; se fallisce si torna al comportamento di base.
+    $narr = null;
+    if ((bool) art_cfg("narrativa_avanzata", true)) {
+        try {
+            $narr = arn_costruisci($conn, $stagione, $giornata, $incontri, $partecipanti, art_squadre($stagione), $formato);
+        } catch (Throwable $e) {
+            error_log("ArticoloGiornata: sezioni aggiuntive non costruite: " . $e->getMessage());
+            $narr = null;
+        }
+    }
+
     $righeProfili = [];
     $senzaProfilo = [];
-    foreach ($partecipanti as $sq) {
-        $p = $profili[mb_strtolower($sq["utenza"])] ?? null;
-        if ($p) $righeProfili[] = art_riga_profilo($sq, $p);
-        else    $senzaProfilo[] = $sq["allenatore"];
+    $righeEpisodi = [];
+    if ($narr !== null && !isset($narr["errori"]["profili"])) {
+        $righeProfili = $narr["profili"];
+        $senzaProfilo = $narr["senza_profilo"];
+    } else {
+        $profili = art_profili($conn, $utenze);
+        foreach ($partecipanti as $sq) {
+            $p = $profili[mb_strtolower($sq["utenza"])] ?? null;
+            if ($p) $righeProfili[] = art_riga_profilo($sq, $p);
+            else    $senzaProfilo[] = $sq["allenatore"];
+        }
     }
 
     $maxEpisodi = (int) art_cfg("max_episodi", 3);
-    $episodi = art_episodi($conn, $utenze, $maxEpisodi);
-    $righeEpisodi = [];
-    foreach ($episodi as $e) {
-        $data = !empty($e["data_episodio"]) ? " (" . $e["data_episodio"] . ")" : "";
-        $righeEpisodi[] = "- " . art_pulisci($e["titolo"], 150) . $data . ": " . art_pulisci($e["descrizione"], 800);
+    if ($narr !== null && !isset($narr["errori"]["episodi"])) {
+        $episodi = $narr["episodi"];
+        foreach ($episodi as $e) {
+            $data = !empty($e["data_episodio"]) ? " (" . $e["data_episodio"] . ")" : "";
+            $righeEpisodi[] = "- " . art_pulisci($e["titolo"], 150) . $data . ": " . art_pulisci($e["descrizione"], 800)
+                            . " [collegamento: " . $e["_come"] . "]";
+        }
+    } else {
+        $episodi = art_episodi($conn, $utenze, $maxEpisodi);
+        foreach ($episodi as $e) {
+            $data = !empty($e["data_episodio"]) ? " (" . $e["data_episodio"] . ")" : "";
+            $righeEpisodi[] = "- " . art_pulisci($e["titolo"], 150) . $data . ": " . art_pulisci($e["descrizione"], 800);
+        }
     }
+    $conSchede  = $narr !== null && trim($narr["schede"]) !== "";
+    $conMemoria = $narr !== null && (trim($narr["memoria"]) !== "" || trim($narr["forma"]) !== "");
 
     // Contesto fisso e stile (modificabili da "Profili ed episodi" → "Contesto fisso")
     $fisso = art_contesto_fisso($conn);
@@ -747,17 +811,33 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         "formato" => $formato, "stile" => $stile, "contesto" => $contestoFisso,
         "struttura" => $struttura, "con_immagini" => $conImmagini, "parole_pagina" => $parolePagina,
         "parole_commento" => $paroleCommento, "max_inline" => $maxInline,
+        "con_schede" => $conSchede, "con_memoria" => $conMemoria,
     ]);
 
     $testo  = ($formato === "edizione"
         ? "Scrivi l'edizione per la giornata $giornata della stagione $stagione.\n\n"
         : "Scrivi l'articolo per la giornata $giornata della stagione $stagione.\n\n");
     $testo .= "DATI DELLA GIORNATA (JSON):\n" . json_encode($dati, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
+    if ($narr !== null && trim($narr["forma"]) !== "") {
+        $testo .= "ANDAMENTO DELLE SQUADRE (classifica prima e dopo la giornata, ultimi risultati, serie in corso; dati dal DB):\n"
+               . $narr["forma"] . "\n\n";
+    }
+    if ($conSchede) {
+        $testo .= "SCHEDE PARTITA (dati dal DB: scontri diretti, sequenza in ordine di calendario di Serie A, fortuna e sfortuna):\n"
+               . $narr["schede"] . "\n\n";
+        if (trim($narr["fatti"]) !== "") {
+            $testo .= "RIEPILOGO DEI FATTI PIÙ FORTI DELLA GIORNATA (per il commento generale):\n" . $narr["fatti"] . "\n\n";
+        }
+    }
     $testo .= "PROFILI DEI FANTALLENATORI:\n";
     $testo .= $righeProfili ? implode("\n", $righeProfili) : "(nessun profilo disponibile)";
     if ($senzaProfilo) $testo .= "\nSenza profilo (usa solo i dati): " . implode(", ", $senzaProfilo) . ".";
-    $testo .= "\n\nEPISODI STORICI DELLA LEGA (da richiamare solo se pertinenti):\n";
+    $testo .= "\n\nEPISODI STORICI DELLA LEGA (da richiamare solo se il collegamento indicato è concreto):\n";
     $testo .= $righeEpisodi ? implode("\n", $righeEpisodi) : "(nessun episodio disponibile)";
+    if ($narr !== null && trim($narr["memoria"]) !== "") {
+        $testo .= "\n\nPUNTATE PRECEDENTI (ultime uscite della stagione: dai continuità ai filoni, ma NON ripetere battute, paragoni, titoli o aneddoti già usati):\n"
+               . $narr["memoria"];
+    }
     if ($contestoGiornata !== "") {
         $testo .= "\n\nNOTE DELLA REDAZIONE SULLA GIORNATA (informazioni affidabili, da tenere in considerazione):\n" . $contestoGiornata;
     }
@@ -804,6 +884,20 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
             "immagini_catalogo"         => count($catalogo["ids"]),
             "immagini_attive"           => $catalogo["attive"],
             "immagini_senza_descrizione" => $catalogo["senza_descrizione"],
+            "narrativa"                 => $narr === null ? null : [
+                "schede_partita"        => $narr["stat"]["schede"],
+                "slot_serie_a"          => $narr["stat"]["slot"],
+                "subentri_fortuna"      => $narr["stat"]["subentri"],
+                "big_o_titolari_flop"   => $narr["stat"]["big_flop"],
+                "assenti_illustri"      => $narr["stat"]["assenti"],
+                "scontri_con_storico"   => $narr["stat"]["scontri_con_storico"],
+                "puntate_precedenti"    => $narr["stat"]["memoria_articoli"],
+                "giornate_precedenti"   => $narr["stat"]["memoria_giornate"],
+                "episodi_in_pausa"      => $narr["stat"]["episodi_in_pausa"],
+                "tormentoni_proposti"   => $narr["stat"]["tormentoni_proposti"],
+                "con_andamento"         => trim($narr["forma"]) !== "",
+                "errori"                => $narr["errori"],
+            ],
         ],
     ];
 }

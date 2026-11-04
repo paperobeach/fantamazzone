@@ -11,14 +11,19 @@
 //
 // NON usa NEW_API_MAPPING_GIOCATORI (ne' alcun dato API-Football).
 //
-// REGOLE DI COLLEGAMENTO AUTOMATICO (stagione S rispetto alla precedente P,
-// cioe' la piu' recente stagione con giocatori prima di S):
-//   - nome non presente in P                         -> nuova persona
-//   - nome presente piu' volte in S o in P (omonimi) -> nuova persona,
-//                                                       da_verificare = 'Y'
-//   - nome unico in S e in P, stessa nazione         -> collegato
-//   - nome unico in S e in P, nazione diversa/assente-> collegato,
-//                                                       da_verificare = 'Y'
+// REGOLE DI COLLEGAMENTO AUTOMATICO (stagione S rispetto a P, cioe' la
+// stagione PIU' RECENTE precedente a S in cui compare lo stesso nome: non
+// serve che sia consecutiva, cosi' si agganciano anche i giocatori assenti
+// per una o piu' stagioni):
+//   - nome non presente in nessuna stagione precedente -> nuova persona
+//   - nome presente piu' volte in S o in P (omonimi)   -> nuova persona,
+//                                                         da_verificare = 'Y'
+//   - nome unico in S e in P, stessa nazione           -> collegato
+//   - nome unico in S e in P, nazione diversa/assente  -> collegato,
+//                                                         da_verificare = 'Y'
+//   - P non e' la stagione immediatamente precedente   -> collegato,
+//     (salto di stagione)                                 da_verificare = 'Y'
+//                                                         se RG_VERIFICA_SALTO
 // Il ruolo e la squadra Serie A NON bloccano il collegamento (cambiano
 // spesso): sono solo informazioni per chi verifica a mano.
 // Un giocatore assente per una stagione intera, o che cambia nome
@@ -42,6 +47,10 @@ require_once __DIR__ . "/RosaStorico.php";
 
 const RG_T_ANAG = "NEW_GIOCATORI_ANAGRAFICA";
 const RG_T_RACC = "NEW_GIOCATORI_RACCORDO";
+
+// true = i collegamenti con salto di stagione (giocatore assente in una o piu'
+// stagioni intermedie) sono segnati da verificare; false = collegati e basta.
+const RG_VERIFICA_SALTO = true;
 
 // ── Utilita' ─────────────────────────────────────────────────
 
@@ -172,16 +181,19 @@ function rg_allinea(int $stagione): array
     }
     $esito["rimossi"] = (int) mysqli_affected_rows($conn);
 
-    // 2. Stagione precedente (allineata per prima se serve)
-    $prec = rg_stagione_precedente($stagione);
-    $precGioc = [];
-    $precPersona = [];   // id_giocatore (precedente) => id_anagrafica
-    if ($prec !== null) {
-        $precGioc = rg_giocatori_stagione($prec);
-        $n = query_one("SELECT COUNT(*) AS n FROM " . RG_T_RACC . " WHERE stagione = $prec");
-        if ($precGioc && (int) $n["n"] < count($precGioc)) rg_allinea($prec);
-        foreach (query_all("SELECT id_giocatore, id_anagrafica FROM " . RG_T_RACC . " WHERE stagione = $prec") as $r) {
-            $precPersona[(int) $r["id_giocatore"]] = (int) $r["id_anagrafica"];
+    // 2. Stagioni precedenti (tutte, non solo la consecutiva): allineate per prime se serve
+    $precStagioni = [];
+    foreach (rg_stagioni() as $sp) if ($sp < $stagione) $precStagioni[] = $sp;
+    $prec = $precStagioni ? end($precStagioni) : null;   // stagione immediatamente precedente
+    $gioc = [];          // stagione => giocatori
+    $persona = [];       // stagione => [id_giocatore => id_anagrafica]
+    foreach ($precStagioni as $sp) {
+        $gioc[$sp] = rg_giocatori_stagione($sp);
+        $n = query_one("SELECT COUNT(*) AS n FROM " . RG_T_RACC . " WHERE stagione = $sp");
+        if ($gioc[$sp] && (int) $n["n"] < count($gioc[$sp])) rg_allinea($sp);
+        $persona[$sp] = [];
+        foreach (query_all("SELECT id_giocatore, id_anagrafica FROM " . RG_T_RACC . " WHERE stagione = $sp") as $r) {
+            $persona[$sp][(int) $r["id_giocatore"]] = (int) $r["id_anagrafica"];
         }
     }
 
@@ -193,11 +205,15 @@ function rg_allinea(int $stagione): array
     $esito["gia_collegati"] = count($collegati);
     $personeUsate = array_flip($collegati);   // id_anagrafica gia' presenti nella stagione
 
-    // 4. Indici dei nomi nella stagione e nella precedente
+    // 4. Indici dei nomi: nella stagione e, per ogni nome, l'ultima stagione precedente in cui compare
     $perNomeS = [];
     foreach ($giocatori as $g) $perNomeS[rg_norm($g["nome"])][] = $g["id"];
-    $perNomeP = [];
-    foreach ($precGioc as $g) $perNomeP[rg_norm($g["nome"])][] = $g["id"];
+    $ultimo = [];        // nome => ["stagione" => S, "ids" => [id, ...]]  (stagione piu' recente)
+    foreach ($precStagioni as $sp) {                       // ordine crescente: l'ultima sovrascrive
+        $tmp = [];
+        foreach ($gioc[$sp] as $g) $tmp[rg_norm($g["nome"])][] = $g["id"];
+        foreach ($tmp as $k => $ids) $ultimo[$k] = ["stagione" => $sp, "ids" => $ids];
+    }
 
     // 5. Nuovi collegamenti
     $righe = [];
@@ -205,11 +221,13 @@ function rg_allinea(int $stagione): array
         if (isset($collegati[$id])) continue;
 
         $chiave = rg_norm($g["nome"]);
-        $cand   = $perNomeP[$chiave] ?? [];
+        $stPrec = $ultimo[$chiave]["stagione"] ?? null;    // stagione in cui il nome compare l'ultima volta
+        $cand   = $ultimo[$chiave]["ids"] ?? [];
+        $pPers  = $stPrec !== null ? $persona[$stPrec] : [];
         $nS     = count($perNomeS[$chiave]);
         // Persone distinte tra i candidati della stagione precedente (piu' id
         // della stessa persona, es. cessione/acquisto, contano una volta sola)
-        $personeCand = array_values(array_unique(array_map(fn($i) => $precPersona[$i] ?? 0, $cand)));
+        $personeCand = array_values(array_unique(array_map(fn($i) => $pPers[$i] ?? 0, $cand)));
         $idPers = 0;
         $verif  = "N";
         $nota   = null;
@@ -229,17 +247,17 @@ function rg_allinea(int $stagione): array
             $idPers = rg_nuova_persona($g["nome"]);
             $verif  = "Y";
             $nota   = "Omonimia: $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
-                    . ", " . count($personeCand) . " persone in $prec";
+                    . ", " . count($personeCand) . " persone in $stPrec";
             $esito["nuove_persone"]++;
             $esito["omonimi"]++;
         } else {
             $idPrec = $personeCand[0];
-            $rif    = $precGioc[max($cand)];
+            $rif    = $gioc[$stPrec][max($cand)];
             if ($idPrec <= 0 || isset($personeUsate[$idPrec])) {
                 // Persona precedente non raccordata o gia' collegata a un altro giocatore
                 $idPers = rg_nuova_persona($g["nome"]);
                 $verif  = "Y";
-                $nota   = $idPrec <= 0 ? "Persona della stagione $prec non raccordata"
+                $nota   = $idPrec <= 0 ? "Persona della stagione $stPrec non raccordata"
                                        : "Persona gia' collegata a un altro giocatore della stagione";
                 $esito["nuove_persone"]++;
             } else {
@@ -249,6 +267,11 @@ function rg_allinea(int $stagione): array
                 if ($nazS === "" || $nazP === "" || $nazS !== $nazP) {
                     $verif = "Y";
                     $nota  = "Nazione diversa o mancante (" . ($rif["nazione"] ?: "?") . " -> " . ($g["nazione"] ?: "?") . ")";
+                }
+                if (RG_VERIFICA_SALTO && $stPrec !== $prec) {
+                    // Il giocatore manca in una o piu' stagioni intermedie
+                    $verif = "Y";
+                    $nota  = "Salto di stagione: ultima presenza nel $stPrec" . ($nota !== null ? "; " . $nota : "");
                 }
                 $esito["collegati"]++;
             }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ClipboardList, Swords, Star, ThumbsDown, Home, Plane, Target, BarChart3, Hash, Shield, X, MousePointerClick,
 } from 'lucide-react'
@@ -6,7 +6,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { getDashboardStatistiche } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
 import {
-  Section, Vuoto, Indicatore, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
+  Section, Vuoto, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
 } from './shared'
 import AreaRuoli from './AreaRuoli'
 import { NomeConBandiera } from '../Bandiera'
@@ -52,16 +52,59 @@ const NAV = [
 
 const vaiA = id => document.getElementById(`stat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
+/**
+ * Barra delle sezioni: resta agganciata sotto l'intestazione della squadra mentre si scorre
+ * (la posizione segue l'altezza dell'intestazione, vedi --barra-squadra-h in HeaderSquadra)
+ * e evidenzia la sezione attualmente in vista.
+ */
 function BarraNavigazione() {
+  const [attiva, setAttiva] = useState(NAV[0].id)
+  const barraRef = useRef(null)
+
+  useEffect(() => {
+    let raf = 0
+    const calcola = () => {
+      raf = 0
+      const soglia = (barraRef.current?.getBoundingClientRect().bottom ?? 0) + 24
+      let corrente = NAV[0].id
+      NAV.forEach(n => {
+        const el = document.getElementById(`stat-${n.id}`)
+        if (el && el.getBoundingClientRect().top <= soglia) corrente = n.id
+      })
+      // In fondo alla pagina l'ultima sezione può non raggiungere la soglia
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+        const ultima = [...NAV].reverse().find(n => document.getElementById(`stat-${n.id}`))
+        if (ultima) corrente = ultima.id
+      }
+      setAttiva(corrente)
+    }
+    const richiedi = () => { if (!raf) raf = requestAnimationFrame(calcola) }
+    window.addEventListener('scroll', richiedi, { passive: true })
+    window.addEventListener('resize', richiedi)
+    calcola()
+    return () => {
+      window.removeEventListener('scroll', richiedi)
+      window.removeEventListener('resize', richiedi)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [])
+
   return (
-    <div className="overflow-x-auto -mx-1 px-1">
-      <div className="flex gap-1.5 w-max">
-        {NAV.map(n => (
-          <button key={n.id} type="button" onClick={() => vaiA(n.id)}
-                  className="px-3 py-1.5 rounded-full border border-white/10 text-xs text-slate-400 hover:text-white hover:border-white/25 transition-colors whitespace-nowrap">
-            {n.label}
-          </button>
-        ))}
+    <div ref={barraRef}
+         className="nav-sezioni-sticky sticky z-[15] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2
+                    bg-pitch-950/90 backdrop-blur supports-[backdrop-filter]:bg-pitch-950/70">
+      <div className="overflow-x-auto -mx-1 px-1">
+        <div className="flex gap-1.5 w-max">
+          {NAV.map(n => (
+            <button key={n.id} type="button" onClick={() => vaiA(n.id)} aria-current={attiva === n.id ? 'true' : undefined}
+                    className={`px-3 py-1.5 rounded-full border text-xs transition-colors whitespace-nowrap ${
+                      attiva === n.id
+                        ? 'border-grass-500/50 text-grass-300 bg-grass-500/10'
+                        : 'border-white/10 text-slate-400 hover:text-white hover:border-white/25'}`}>
+              {n.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -83,25 +126,10 @@ function Intro({ ctx }) {
 
 function SezioneRisultati({ s, ctx }) {
   const [nForma, setNForma] = useState(5)
-  const r = s.riepilogo
   const forma = s.forma.slice(0, nForma)
-  const diffTono = r.diff_reti > 0 ? 'text-green-400' : r.diff_reti < 0 ? 'text-red-400' : 'text-white'
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Indicatore label={s.posizione?.etichetta ?? 'Posizione'}
-                    value={s.posizione ? `${s.posizione.posizione}°` : '–'}
-                    sub={s.posizione ? `su ${s.posizione.squadre}` : undefined} tono="text-grass-400" />
-        <Indicatore label="Giocate" value={r.giocate} />
-        <CardMetrica k="punti" ctx={ctx} />
-        <CardMetrica k="punti_partita" ctx={ctx} label="Punti / partita" />
-        <CardMetrica k="vittorie" ctx={ctx} tono="text-green-400" />
-        <CardMetrica k="pareggi" ctx={ctx} tono="text-yellow-400" />
-        <CardMetrica k="sconfitte" ctx={ctx} tono="text-red-400" />
-        <CardMetrica k="diff_reti" ctx={ctx} label="Diff. reti" tono={diffTono} sub={`${r.golf} fatti · ${r.gols} subiti`} />
-      </div>
-
       <Section title="Fantapunti" icon={BarChart3} right="tocca per selezionare">
         <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <CardMetrica k="fanta_media" ctx={ctx} label="Media fantapunti" tono="text-grass-400" />
@@ -322,7 +350,7 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
       <BarraNavigazione />
       <Intro ctx={ctx} />
 
-      <div id="stat-risultati" className="scroll-mt-4 space-y-3">
+      <div id="stat-risultati" className="sezione-scroll space-y-3">
         <h2 className="text-xs uppercase tracking-widest text-slate-500">Risultati</h2>
         {caricamento ? <LoadingState label="Calcolo statistiche..." />
           : error ? <ErrorState message={error} onRetry={refetch} />
@@ -332,19 +360,19 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
 
       {s && !nessunaPartita && (
         <>
-          <div id="stat-gol" className="scroll-mt-4 space-y-3">
+          <div id="stat-gol" className="sezione-scroll space-y-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-500">Gol</h2>
             <SezioneGol s={s} ctx={ctx} />
           </div>
         </>
       )}
 
-      <div id="stat-reparti" className="scroll-mt-4 space-y-3">
+      <div id="stat-reparti" className="sezione-scroll space-y-3">
         <h2 className="text-xs uppercase tracking-widest text-slate-500">Reparti</h2>
         <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} />
       </div>
 
-      <div id="stat-giocatori" className="scroll-mt-4 space-y-3">
+      <div id="stat-giocatori" className="sezione-scroll space-y-3">
         <h2 className="text-xs uppercase tracking-widest text-slate-500">Top / Flop 11</h2>
         <TopFlopPropri
           top={champ ? d.champions.top11 : d.campionato.top11}

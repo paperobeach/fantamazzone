@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend,
+  ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
 } from 'recharts'
 import { Goal, Activity, Users, Gauge, Grid3x3, SlidersHorizontal } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
@@ -8,6 +8,7 @@ import { getDashboardRuoli } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, TabBar } from '../ui'
 import { Section, Vuoto, Indicatore, BarraPerc, fmt } from './shared'
 import { Bandiera } from '../Bandiera'
+import { GraficoZoom, LegendaInterattiva, useEvidenzia, asse } from './GraficiUtil'
 
 const REPARTI = [
   { value: '1', label: 'Portieri' },
@@ -22,7 +23,6 @@ const VISTE = [
 ]
 
 const TOOLTIP_STYLE = { background: '#0f1f2e', border: '1px solid #ffffff1a', borderRadius: 8, fontSize: 12 }
-const ASSE = { stroke: '#64748b', tick: { fontSize: 11 } }
 
 const fmtMod = v => (v > 0 ? `+${fmt(v, 1)}` : fmt(v, 1))
 const fmtGiornata = g => `G${g}`
@@ -30,64 +30,86 @@ const fmtGiornata = g => `G${g}`
 // ── Grafici ──────────────────────────────────────────────────
 
 /** Istogramma semplice: data = [{ etichetta, n }] */
-function Istogramma({ data, colore = '#4ade80', unita = 'partite', altezza = 'h-52' }) {
+function Istogramma({ data, titolo, colore = '#4ade80', unita = 'partite', altezza = 'h-52' }) {
   if (!data?.length) return <Vuoto>Nessun dato.</Vuoto>
   return (
-    <div className={`p-4 ${altezza}`}>
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-          <CartesianGrid stroke="#ffffff10" vertical={false} />
-          <XAxis dataKey="etichetta" {...ASSE} interval={0} />
-          <YAxis allowDecimals={false} {...ASSE} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#ffffff08' }} formatter={v => [v, unita]} />
-          <Bar dataKey="n" fill={colore} radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficoZoom titolo={titolo} altezza={altezza}>
+      {zoom => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+            <CartesianGrid stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="etichetta" {...asse(zoom)} interval={0} />
+            <YAxis allowDecimals={false} {...asse(zoom)} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#ffffff08' }} formatter={v => [v, unita]} />
+            <Bar dataKey="n" fill={colore} radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </GraficoZoom>
   )
 }
 
 /** Barre per giornata; con `segno` colora in verde i valori positivi e in rosso i negativi. */
-function BarreGiornata({ giornate, campo, nome, colore = '#4ade80', segno = false }) {
+function BarreGiornata({ giornate, campo, nome, titolo, colore = '#4ade80', segno = false }) {
   if (!giornate?.length) return <Vuoto>Nessuna partita.</Vuoto>
   const dati = giornate.map(g => ({ giornata: g.giornata, valore: g[campo] }))
   return (
-    <div className="p-4 h-56">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={dati} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
-          <CartesianGrid stroke="#ffffff10" vertical={false} />
-          <XAxis dataKey="giornata" {...ASSE} tickFormatter={fmtGiornata} />
-          <YAxis allowDecimals={segno} {...ASSE} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#ffffff08' }}
-                   labelFormatter={g => `Giornata ${g}`} formatter={v => [segno ? fmtMod(v) : v, nome]} />
-          <Bar dataKey="valore" fill={colore} radius={[4, 4, 0, 0]}>
-            {segno && dati.map((d, i) => (
-              <Cell key={i} fill={d.valore > 0 ? '#4ade80' : d.valore < 0 ? '#f87171' : '#64748b'} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficoZoom titolo={titolo ?? nome} altezza="h-56">
+      {zoom => (
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={dati} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+            <CartesianGrid stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={fmtGiornata} />
+            <YAxis allowDecimals={segno} {...asse(zoom)} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#ffffff08' }}
+                     labelFormatter={g => `Giornata ${g}`} formatter={v => [segno ? fmtMod(v) : v, nome]} />
+            <Bar dataKey="valore" fill={colore} radius={[4, 4, 0, 0]}>
+              {segno && dati.map((d, i) => (
+                <Cell key={i} fill={d.valore > 0 ? '#4ade80' : d.valore < 0 ? '#f87171' : '#64748b'} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </GraficoZoom>
   )
 }
 
-function LineaVoti({ giornate }) {
+const LINEE_VOTI = [
+  { key: 'media_voto',      nome: 'Voto',      colore: '#4ade80' },
+  { key: 'media_fantavoto', nome: 'Fantavoto', colore: '#fbbf24' },
+]
+
+function LineaVoti({ giornate, titolo = 'Media voto del reparto per giornata' }) {
+  const { evid, toggle, reset } = useEvidenzia(LINEE_VOTI.map(l => l.key))
   if (!giornate?.length) return <Vuoto>Nessuna partita.</Vuoto>
+  // La serie evidenziata è disegnata per ultima, quindi sopra l'altra
+  const ordinate = [...LINEE_VOTI].sort((x, y) => (x.key === evid ? 1 : 0) - (y.key === evid ? 1 : 0))
   return (
-    <div className="p-4 h-60">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={giornate} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-          <CartesianGrid stroke="#ffffff10" vertical={false} />
-          <XAxis dataKey="giornata" {...ASSE} tickFormatter={fmtGiornata} />
-          <YAxis domain={['auto', 'auto']} {...ASSE} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
-                   formatter={(v, n) => [fmt(v, 2), n]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          <Line type="monotone" name="Voto" dataKey="media_voto" stroke="#4ade80" strokeWidth={2.5} dot={{ r: 3 }} />
-          <Line type="monotone" name="Fantavoto" dataKey="media_fantavoto" stroke="#fbbf24" strokeWidth={2.5} dot={{ r: 3 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficoZoom titolo={titolo} altezza="h-60"
+                 legenda={zoom => <LegendaInterattiva voci={LINEE_VOTI} evid={evid} onToggle={toggle} onReset={reset} zoom={zoom} />}>
+      {zoom => (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={giornate} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
+            <CartesianGrid stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={fmtGiornata} />
+            <YAxis domain={['auto', 'auto']} {...asse(zoom)} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
+                     formatter={(v, n) => [fmt(v, 2), n]} />
+            {ordinate.map(l => {
+              const scelta = evid === l.key
+              const spenta = evid !== null && !scelta
+              return (
+                <Line key={l.key} type="monotone" name={l.nome} dataKey={l.key} stroke={l.colore}
+                      strokeWidth={scelta ? 4 : 2.5} strokeOpacity={spenta ? 0.12 : 1}
+                      dot={spenta ? false : { r: zoom ? 4 : 3, fill: l.colore }}
+                      activeDot={spenta ? false : { r: 5 }} isAnimationActive={false} />
+              )
+            })}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </GraficoZoom>
   )
 }
 
@@ -178,10 +200,10 @@ function Reparto({ r, ruolo, vista }) {
       {/* Gol per giornata */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Section title={`${nomeGol} per giornata`} icon={Goal} right="totale del reparto">
-          <BarreGiornata giornate={r.giornate} campo="gol" nome={nomeGol} colore={portiere ? '#f87171' : '#4ade80'} />
+          <BarreGiornata giornate={r.giornate} campo="gol" nome={nomeGol} titolo={`${nomeGol} per giornata`} colore={portiere ? '#f87171' : '#4ade80'} />
         </Section>
         <Section title={`Partite per numero di ${nomeGol.toLowerCase()}`} icon={Goal}>
-          <Istogramma data={distGol} colore={portiere ? '#f87171' : '#4ade80'} />
+          <Istogramma data={distGol} titolo={`Partite per numero di ${nomeGol.toLowerCase()}`} colore={portiere ? '#f87171' : '#4ade80'} />
         </Section>
       </div>
 
@@ -198,10 +220,10 @@ function Reparto({ r, ruolo, vista }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Section title="Partite per fascia di media voto" icon={Gauge}>
-          <Istogramma data={fasce(r.fasce_voto)} colore="#4ade80" />
+          <Istogramma data={fasce(r.fasce_voto)} titolo="Partite per fascia di media voto" colore="#4ade80" />
         </Section>
         <Section title="Partite per fascia di media fantavoto" icon={Gauge}>
-          <Istogramma data={fasce(r.fasce_fantavoto)} colore="#fbbf24" />
+          <Istogramma data={fasce(r.fasce_fantavoto)} titolo="Partite per fascia di media fantavoto" colore="#fbbf24" />
         </Section>
       </div>
 
@@ -210,7 +232,7 @@ function Reparto({ r, ruolo, vista }) {
         <Section title={rosa ? 'Giocatori con voto e media voto' : 'Giocatori schierati e media voto'} icon={Users}
                  right="partite per numero di giocatori">
           <div className="grid grid-cols-1 lg:grid-cols-2">
-            <Istogramma data={distN} colore="#38bdf8" />
+            <Istogramma data={distN} titolo={rosa ? 'Partite per numero di giocatori con voto' : 'Partite per numero di giocatori schierati'} colore="#38bdf8" />
             <div className="overflow-x-auto p-4">
               <table className="fanta-table">
                 <thead>
@@ -252,10 +274,10 @@ function Reparto({ r, ruolo, vista }) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Section title="Modificatore per giornata" icon={SlidersHorizontal} right="verde = favorevole">
                 <BarreGiornata giornate={r.giornate.filter(g => g.modificatore !== null)} campo="modificatore"
-                               nome="Modificatore" segno />
+                               nome="Modificatore" titolo="Modificatore per giornata" segno />
               </Section>
               <Section title="Partite per valore del modificatore" icon={SlidersHorizontal}>
-                <Istogramma data={distMod} colore="#a78bfa" />
+                <Istogramma data={distMod} titolo="Partite per valore del modificatore" colore="#a78bfa" />
                 <div className="px-4 pb-4 space-y-1.5">
                   <BarraPerc label="Positivo" valore={m.positivi} totale={m.campione} colore="bg-green-500" />
                   <BarraPerc label="Nullo"    valore={m.nulli}    totale={m.campione} colore="bg-slate-500" />

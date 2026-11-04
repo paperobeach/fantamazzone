@@ -310,3 +310,13 @@
   .gz-scroller { display: block; box-shadow: none; }
   .gz-page { break-after: page; min-height: 0; }
 }
+
+/* ── Dashboard squadra: pulsanti di sezione agganciati sotto la barra della squadra ──
+   --barra-squadra-h / --barra-squadra-hmax sono impostate da HeaderSquadra.jsx.
+   Mobile: 3.5rem = altezza della barra superiore del sito. */
+.nav-sezioni-sticky { top: calc(3.5rem + var(--barra-squadra-h, 0px)); }
+.sezione-scroll     { scroll-margin-top: calc(3.5rem + var(--barra-squadra-hmax, 0px) + 3.5rem); }
+@media (min-width: 1024px) {
+  .nav-sezioni-sticky { top: var(--barra-squadra-h, 0px); }
+  .sezione-scroll     { scroll-margin-top: calc(var(--barra-squadra-hmax, 0px) + 3.5rem); }
+}

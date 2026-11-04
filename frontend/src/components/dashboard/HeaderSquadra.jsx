@@ -131,6 +131,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
   const [compressa, setCompressa] = useState(compressaIniziale)
   const [pannelloVisibile, setPannelloVisibile] = useState(true)
   const pannelloRef = useRef(null)
+  const barraRef = useRef(null)
   const live = useLiveSquadra(stagione, idSquadra)
 
   const imposta = (valore) => {
@@ -149,6 +150,29 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
     obs.observe(pannelloRef.current)
     return () => obs.disconnect()
   }, [compressa])
+
+  // Pubblica l'altezza della barra agganciata come variabile CSS, così altri elementi agganciati
+  // (es. i pulsanti delle sezioni nelle Statistiche) si posizionano subito sotto di essa.
+  //   --barra-squadra-h     ingombro attuale (0 finché la barra non è comparsa)
+  //   --barra-squadra-hmax  altezza che avrà quando è visibile (per l'offset di scorrimento)
+  useEffect(() => {
+    const el = barraRef.current
+    if (!el) return undefined
+    const root = document.documentElement
+    const misura = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height)
+      root.style.setProperty('--barra-squadra-hmax', `${h}px`)
+      root.style.setProperty('--barra-squadra-h', compressa || !pannelloVisibile ? `${h}px` : '0px')
+    }
+    misura()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(misura) : null
+    ro?.observe(el)
+    return () => {
+      ro?.disconnect()
+      root.style.removeProperty('--barra-squadra-h')
+      root.style.removeProperty('--barra-squadra-hmax')
+    }
+  }, [compressa, pannelloVisibile])
 
   const f = d.formazione
   const ap = d.appuntamenti
@@ -231,7 +255,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
 
   if (compressa) {
     return (
-      <div className={`sticky top-14 lg:top-0 z-20 ${bleed} pt-2 pb-3 ${sfondoBarra}`}>{barra}</div>
+      <div ref={barraRef} className={`sticky top-14 lg:top-0 z-20 ${bleed} pt-2 pb-3 ${sfondoBarra}`}>{barra}</div>
     )
   }
 
@@ -317,7 +341,7 @@ export default function HeaderSquadra({ d, stagione, idSquadra }) {
       {/* Barra sintetica agganciata: compare solo quando il pannello è scorso fuori dallo schermo.
           Altezza zero nel flusso, quindi non sposta il contenuto quando appare. */}
       <div className={`sticky top-14 lg:top-0 z-20 h-0 ${bleed}`} aria-hidden={pannelloVisibile}>
-        <div className={`absolute inset-x-0 top-0 ${bleed} pt-2 pb-3 ${sfondoBarra} transition-all duration-200 ${
+        <div ref={barraRef} className={`absolute inset-x-0 top-0 ${bleed} pt-2 pb-3 ${sfondoBarra} transition-all duration-200 ${
           pannelloVisibile ? 'opacity-0 -translate-y-2 pointer-events-none' : 'opacity-100 translate-y-0'}`}>
           {barra}
         </div>

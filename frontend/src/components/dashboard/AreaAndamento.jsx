@@ -4,16 +4,15 @@
 // ============================================================
 import { useState } from 'react'
 import {
-  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import { TrendingUp, Activity } from 'lucide-react'
 import { Section, Vuoto } from './shared'
+import { GraficoZoom, LegendaInterattiva, useEvidenzia, asse } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState, TabBar } from '../ui'
 import { SelettoreMetriche } from './SelezioneMetriche'
 import ConfrontoSquadre, { coloreSquadra } from './ConfrontoSquadre'
 import { mappaDef, serieModo, mediaSerie, fmtVal, MODI_ANDAMENTO, TOOLTIP_STYLE } from './metriche'
-
-const ASSE = { stroke: '#64748b', tick: { fontSize: 11 } }
 
 // ── Andamento in classifica ──────────────────────────────────
 
@@ -22,17 +21,20 @@ function AndamentoPosizione({ andamento, nSquadre }) {
   const n = Math.max(nSquadre || 8, ...andamento.map(a => a.posizione))
   const ticks = Array.from({ length: n }, (_, i) => i + 1)
   return (
-    <div className="p-4 h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={andamento} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-          <CartesianGrid stroke="#ffffff10" vertical={false} />
-          <XAxis dataKey="giornata" {...ASSE} tickFormatter={g => `G${g}`} />
-          <YAxis reversed domain={[1, n]} ticks={ticks} allowDecimals={false} {...ASSE} tickFormatter={p => `${p}°`} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`} formatter={v => [`${v}°`, 'Posizione']} />
-          <Line type="monotone" dataKey="posizione" stroke="#4ade80" strokeWidth={2.5} dot={{ r: 3, fill: '#4ade80' }} activeDot={{ r: 5 }} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficoZoom titolo="Andamento in classifica">
+      {zoom => (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={andamento} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
+            <CartesianGrid stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={g => `G${g}`} />
+            <YAxis reversed domain={[1, n]} ticks={ticks} allowDecimals={false} {...asse(zoom)} tickFormatter={p => `${p}°`} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`} formatter={v => [`${v}°`, 'Posizione']} />
+            <Line type="monotone" dataKey="posizione" stroke="#4ade80" strokeWidth={2.5}
+                  dot={{ r: zoom ? 4 : 3, fill: '#4ade80' }} activeDot={{ r: 5 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </GraficoZoom>
   )
 }
 
@@ -40,6 +42,11 @@ function AndamentoPosizione({ andamento, nSquadre }) {
 
 function GraficoMetrica({ def, data, me, conf, modo }) {
   const { giornate, squadre } = data
+
+  // Serie presenti nel grafico: servono prima di ogni return anticipato (regole degli hook)
+  const chiavi = ['me', ...(conf.bench ? ['bench'] : []), ...conf.ids.filter(id => id !== me).map(id => `s${id}`)]
+  const { evid, toggle, reset } = useEvidenzia(chiavi)
+
   if (!giornate.length) return <Vuoto>Nessuna giornata chiusa.</Vuoto>
 
   const serieDi = id => serieModo(def, data.serie[def.key]?.[id] ?? giornate.map(() => null), modo)
@@ -56,27 +63,43 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
   const vuoto = righe.every(r => Object.entries(r).every(([k, v]) => k === 'giornata' || v === null))
   if (vuoto) return <Vuoto>Nessun dato per questa statistica.</Vuoto>
 
+  // Definizione di ogni linea (la chiave coincide con il dataKey delle righe)
+  const tu = { key: 'me', nome: 'Tu', colore: '#4ade80', spessore: 3, punti: true }
+  const altre = [
+    ...(bench ? [{ key: 'bench', nome: 'Media lega', colore: '#fbbf24', spessore: 2, tratteggio: true }] : []),
+    ...confrontate.map(c => ({ key: `s${c.id}`, nome: c.nome, colore: coloreSquadra(squadre, me, c.id), spessore: 1.75 })),
+  ]
+  const voci = [tu, ...altre]
+  // La serie evidenziata viene disegnata per ultima, quindi sopra le altre
+  const ordinate = [...altre, tu].sort((x, y) => (x.key === evid ? 1 : 0) - (y.key === evid ? 1 : 0))
+
   return (
-    <div className="p-4 h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={righe} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
-          <CartesianGrid stroke="#ffffff10" vertical={false} />
-          <XAxis dataKey="giornata" {...ASSE} tickFormatter={g => `G${g}`} />
-          <YAxis domain={['auto', 'auto']} {...ASSE} tickFormatter={v => fmtVal({ ...def, unita: '' }, v)} />
-          <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
-                   formatter={(v, n) => [fmtVal(def, v), n]} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          {bench && <Line type="monotone" name="Media lega" dataKey="bench" stroke="#fbbf24" strokeWidth={2}
-                          strokeDasharray="5 4" dot={false} connectNulls />}
-          {confrontate.map(c => (
-            <Line key={c.id} type="monotone" name={c.nome} dataKey={`s${c.id}`} stroke={coloreSquadra(squadre, me, c.id)}
-                  strokeWidth={1.75} dot={false} connectNulls />
-          ))}
-          <Line type="monotone" name="Tu" dataKey="me" stroke="#4ade80" strokeWidth={3}
-                dot={{ r: 3, fill: '#4ade80' }} activeDot={{ r: 5 }} connectNulls />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <GraficoZoom titolo={def.label}
+                 legenda={zoom => <LegendaInterattiva voci={voci} evid={evid} onToggle={toggle} onReset={reset} zoom={zoom} />}>
+      {zoom => (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={righe} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
+            <CartesianGrid stroke="#ffffff10" vertical={false} />
+            <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={g => `G${g}`} />
+            <YAxis domain={['auto', 'auto']} {...asse(zoom)} tickFormatter={v => fmtVal({ ...def, unita: '' }, v)} />
+            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
+                     formatter={(v, n) => [fmtVal(def, v), n]} />
+            {ordinate.map(l => {
+              const scelta = evid === l.key
+              const spenta = evid !== null && !scelta
+              return (
+                <Line key={l.key} type="monotone" name={l.nome} dataKey={l.key} stroke={l.colore}
+                      strokeWidth={scelta ? l.spessore + 1.5 : l.spessore} strokeOpacity={spenta ? 0.12 : 1}
+                      strokeDasharray={l.tratteggio ? '5 4' : undefined}
+                      dot={!spenta && (l.punti || scelta) ? { r: zoom ? 4 : 3, fill: l.colore } : false}
+                      activeDot={spenta ? false : { r: 5 }}
+                      connectNulls isAnimationActive={false} />
+              )
+            })}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </GraficoZoom>
   )
 }
 
@@ -107,7 +130,7 @@ export default function AreaAndamento({ d, competizione, ctx }) {
       <SelettoreMetriche ctx={ctx} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
-        <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} mostraTutte={false} />
+        <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} />
         <div className="rounded-xl border border-white/5 bg-pitch-900 p-3 space-y-2 min-w-0">
           <p className="text-[10px] uppercase tracking-widest text-slate-500">Valore mostrato</p>
           <div className="overflow-x-auto"><TabBar tabs={MODI_ANDAMENTO} active={modo} onChange={setModo} /></div>
@@ -130,6 +153,7 @@ export default function AreaAndamento({ d, competizione, ctx }) {
             Per giornata: il valore della singola partita. Progressivo: il valore di stagione dopo ogni giornata
             (somma, media o record a seconda della statistica). Media mobile: media delle ultime 5 partite con dato.
             La media lega è calcolata sulle serie di tutte le squadre, la tua compresa.
+            Tocca una voce della legenda per evidenziare la serie (le altre si attenuano); tocca di nuovo per ripristinare.
           </p>
         </>
       )}

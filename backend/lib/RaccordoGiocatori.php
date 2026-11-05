@@ -24,6 +24,15 @@
 //   - P non e' la stagione immediatamente precedente   -> collegato,
 //     (salto di stagione)                                 da_verificare = 'Y'
 //                                                         se RG_VERIFICA_SALTO
+// NORMALIZZAZIONE DEL NOME (rg_norm): maiuscolo, senza accenti (MARTINEZ =
+// MARTINEZ con accento), apostrofi eliminati (D'AMBROSIO = D’AMBROSIO =
+// DAMBROSIO), punti e trattini trattati come spazi.
+// INIZIALI: se in una stagione il nome e' abbreviato ("MARTINEZ L.") e in
+// un'altra e' esteso ("MARTINEZ LAUTARO"), i due nomi si collegano quando il
+// cognome coincide e l'iniziale corrisponde, ma SEMPRE con da_verificare = 'Y'
+// (RG_VERIFICA_INIZIALI). Il confronto per iniziali scatta solo se il nome
+// esatto non e' presente in nessuna stagione precedente e almeno uno dei due
+// nomi e' abbreviato (due nomi estesi diversi non si collegano mai).
 // Il ruolo e la squadra Serie A NON bloccano il collegamento (cambiano
 // spesso): sono solo informazioni per chi verifica a mano.
 // Un giocatore assente per una stagione intera, o che cambia nome
@@ -51,6 +60,10 @@ const RG_T_RACC = "NEW_GIOCATORI_RACCORDO";
 // true = i collegamenti con salto di stagione (giocatore assente in una o piu'
 // stagioni intermedie) sono segnati da verificare; false = collegati e basta.
 const RG_VERIFICA_SALTO = true;
+
+// true = i collegamenti trovati tramite iniziale (nome abbreviato in una delle
+// due stagioni) sono segnati da verificare; false = collegati e basta.
+const RG_VERIFICA_INIZIALI = true;
 
 // ── Utilita' ─────────────────────────────────────────────────
 
@@ -86,11 +99,117 @@ function rg_esc(string $s): string
     return mysqli_real_escape_string($conn, $s);
 }
 
-/** Nome (o nazione) normalizzato per i confronti: spazi compattati, maiuscolo. */
+/** Nome (o nazione) normalizzato per i confronti: maiuscolo, senza accenti,
+ *  apostrofi eliminati, punti e trattini come spazi, spazi compattati. */
 function rg_norm(?string $s): string
 {
-    $s = trim(preg_replace('/\s+/', ' ', (string) $s));
-    return function_exists('mb_strtoupper') ? mb_strtoupper($s, 'UTF-8') : strtoupper($s);
+    $s = (string) $s;
+    // Testo non UTF-8 (es. latin1 letto senza conversione): lo porto in UTF-8
+    if ($s !== "" && !preg_match('//u', $s)) {
+        $s = function_exists('mb_convert_encoding') ? mb_convert_encoding($s, 'UTF-8', 'ISO-8859-1') : utf8_encode($s);
+    }
+    $s = function_exists('mb_strtoupper') ? mb_strtoupper($s, 'UTF-8') : strtoupper($s);
+    // Accenti e lettere speciali piu' comuni nei nomi dei calciatori
+    $s = strtr($s, [
+        'À' => 'A', 'Á' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A', 'Å' => 'A', 'Ā' => 'A', 'Ă' => 'A', 'Ą' => 'A',
+        'Ç' => 'C', 'Ć' => 'C', 'Č' => 'C',
+        'Ď' => 'D', 'Đ' => 'D', 'Ð' => 'D',
+        'È' => 'E', 'É' => 'E', 'Ê' => 'E', 'Ë' => 'E', 'Ē' => 'E', 'Ę' => 'E', 'Ě' => 'E',
+        'Ğ' => 'G',
+        'Ì' => 'I', 'Í' => 'I', 'Î' => 'I', 'Ï' => 'I', 'İ' => 'I', 'Ī' => 'I',
+        'Ł' => 'L', 'Ľ' => 'L',
+        'Ñ' => 'N', 'Ń' => 'N', 'Ň' => 'N',
+        'Ò' => 'O', 'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O', 'Ø' => 'O', 'Ő' => 'O',
+        'Ř' => 'R',
+        'Ś' => 'S', 'Š' => 'S', 'Ş' => 'S', 'Ș' => 'S',
+        'Ť' => 'T', 'Ţ' => 'T', 'Ț' => 'T',
+        'Ù' => 'U', 'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U', 'Ů' => 'U', 'Ű' => 'U',
+        'Ý' => 'Y', 'Ÿ' => 'Y',
+        'Ź' => 'Z', 'Ž' => 'Z', 'Ż' => 'Z',
+        'à' => 'A',
+        'á' => 'A',
+        'â' => 'A',
+        'ã' => 'A',
+        'ä' => 'A',
+        'å' => 'A',
+        'ā' => 'A',
+        'ă' => 'A',
+        'ą' => 'A',
+        'ç' => 'C',
+        'ć' => 'C',
+        'č' => 'C',
+        'ď' => 'D',
+        'đ' => 'D',
+        'ð' => 'D',
+        'è' => 'E',
+        'é' => 'E',
+        'ê' => 'E',
+        'ë' => 'E',
+        'ē' => 'E',
+        'ę' => 'E',
+        'ě' => 'E',
+        'ğ' => 'G',
+        'ì' => 'I',
+        'í' => 'I',
+        'î' => 'I',
+        'ï' => 'I',
+        'i̇' => 'I',
+        'ī' => 'I',
+        'ł' => 'L',
+        'ľ' => 'L',
+        'ñ' => 'N',
+        'ń' => 'N',
+        'ň' => 'N',
+        'ò' => 'O',
+        'ó' => 'O',
+        'ô' => 'O',
+        'õ' => 'O',
+        'ö' => 'O',
+        'ø' => 'O',
+        'ő' => 'O',
+        'ř' => 'R',
+        'ś' => 'S',
+        'š' => 'S',
+        'ş' => 'S',
+        'ș' => 'S',
+        'ť' => 'T',
+        'ţ' => 'T',
+        'ț' => 'T',
+        'ù' => 'U',
+        'ú' => 'U',
+        'û' => 'U',
+        'ü' => 'U',
+        'ů' => 'U',
+        'ű' => 'U',
+        'ý' => 'Y',
+        'ÿ' => 'Y',
+        'ź' => 'Z',
+        'ž' => 'Z',
+        'ż' => 'Z',
+        'æ' => 'AE',
+        'œ' => 'OE',
+        'ß' => 'SS', 'Æ' => 'AE', 'Œ' => 'OE',
+    ]);
+    // Apostrofi (di ogni tipo): eliminati
+    $s = str_replace(["'", "’", "‘", "`", "´", "ʼ"], "", $s);
+    // Punti, trattini e altra punteggiatura: spazio
+    $s = preg_replace('/[.\-–—_,;:]+/u', ' ', $s);
+    return trim(preg_replace('/\s+/u', ' ', $s));
+}
+
+/**
+ * Chiave "abbreviata" del nome: tutti i token tranne l'ultimo + la sola
+ * iniziale dell'ultimo. "MARTINEZ L" e "MARTINEZ LAUTARO" -> "MARTINEZ L".
+ * $iniziale = true se l'ultimo token del nome e' gia' una sola lettera.
+ * Nomi di un solo token: nessuna chiave (stringa vuota).
+ */
+function rg_chiave_abbreviata(string $nome, ?bool &$iniziale = null): string
+{
+    $t = explode(" ", rg_norm($nome));
+    if (count($t) < 2) { $iniziale = false; return ""; }
+    $ultimo = array_pop($t);
+    $iniziale = (strlen($ultimo) === 1);
+    return implode(" ", $t) . " " . substr($ultimo, 0, 1);
 }
 
 /** Stagioni con giocatori, in ordine crescente. */
@@ -215,6 +334,15 @@ function rg_allinea(int $stagione): array
         foreach ($tmp as $k => $ids) $ultimo[$k] = ["stagione" => $sp, "ids" => $ids];
     }
 
+    // Indice per nome abbreviato: chiave => [[stagione, id, e_iniziale], ...]
+    $perAbbr = [];
+    foreach ($precStagioni as $sp) {
+        foreach ($gioc[$sp] as $g) {
+            $kk = rg_chiave_abbreviata($g["nome"], $ini);
+            if ($kk !== "") $perAbbr[$kk][] = [$sp, $g["id"], $ini];
+        }
+    }
+
     // 5. Nuovi collegamenti
     $righe = [];
     foreach ($giocatori as $id => $g) {
@@ -223,6 +351,23 @@ function rg_allinea(int $stagione): array
         $chiave = rg_norm($g["nome"]);
         $stPrec = $ultimo[$chiave]["stagione"] ?? null;    // stagione in cui il nome compare l'ultima volta
         $cand   = $ultimo[$chiave]["ids"] ?? [];
+        $viaIniziali = false;
+        if (!$cand) {
+            // Nessun nome identico: provo con le iniziali (MARTINEZ L. <-> MARTINEZ LAUTARO).
+            // Serve che almeno uno dei due nomi sia abbreviato.
+            $kk = rg_chiave_abbreviata($g["nome"], $iniG);
+            if ($kk !== "" && isset($perAbbr[$kk])) {
+                $trovati = [];   // stagione => [id, ...]
+                foreach ($perAbbr[$kk] as [$spA, $idA, $iniA]) {
+                    if ($iniG || $iniA) $trovati[$spA][] = $idA;
+                }
+                if ($trovati) {
+                    $stPrec = max(array_keys($trovati));
+                    $cand   = $trovati[$stPrec];
+                    $viaIniziali = true;
+                }
+            }
+        }
         $pPers  = $stPrec !== null ? $persona[$stPrec] : [];
         $nS     = count($perNomeS[$chiave]);
         // Persone distinte tra i candidati della stagione precedente (piu' id
@@ -246,7 +391,7 @@ function rg_allinea(int $stagione): array
             }
             $idPers = rg_nuova_persona($g["nome"]);
             $verif  = "Y";
-            $nota   = "Omonimia: $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
+            $nota   = ($viaIniziali ? "Iniziale ambigua" : "Omonimia") . ": $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
                     . ", " . count($personeCand) . " persone in $stPrec";
             $esito["nuove_persone"]++;
             $esito["omonimi"]++;
@@ -268,10 +413,16 @@ function rg_allinea(int $stagione): array
                     $verif = "Y";
                     $nota  = "Nazione diversa o mancante (" . ($rif["nazione"] ?: "?") . " -> " . ($g["nazione"] ?: "?") . ")";
                 }
+                if ($viaIniziali) {
+                    // Nome abbreviato in una delle due stagioni
+                    $nomeP = $rif["nome"];
+                    if (RG_VERIFICA_INIZIALI) $verif = "Y";
+                    $nota  = "Iniziale: " . $nomeP . " (" . $stPrec . ")" . ($nota !== null ? "; " . $nota : "");
+                }
                 if (RG_VERIFICA_SALTO && $stPrec !== $prec) {
                     // Il giocatore manca in una o piu' stagioni intermedie
                     $verif = "Y";
-                    $nota  = "Salto di stagione: ultima presenza nel $stPrec" . ($nota !== null ? "; " . $nota : "");
+                    $nota  = "Salto: ultima presenza " . $stPrec . ($nota !== null ? "; " . $nota : "");
                 }
                 $esito["collegati"]++;
             }

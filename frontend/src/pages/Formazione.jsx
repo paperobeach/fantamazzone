@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
-import { getSquadra, getGiornataCorrente, getFormazione, getFormazioneContesto, getFormazioneStato, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
+import { getSquadra, getGiornataCorrente, getAllStarGameContesto, getFormazione, getFormazioneContesto, getFormazioneStato, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
 import { PageHeader, LoadingState, ErrorState, TabBar, RoleBadge } from '../components/ui'
 import { FormationBuilder } from '../components/FormationBuilder'
+import { FormazioneAllStarGame } from '../components/FormazioneAllStarGame'
 import { OrdineRigoristi, ordinaSecondo as ordinaRig } from '../components/OrdineRigoristi'
 import { ROLE_LABEL, MODULI_VALIDI, conteggioAtteso, getSlotsForModulo, ordinaPerRuoloDefault } from '../lib/pitchLayout'
 import { CalendarDays, CheckCircle2, AlertTriangle, Save, Loader2, Lock, Info, EyeOff, Armchair } from 'lucide-react'
@@ -134,7 +135,7 @@ function costruisciStato(fonte, rosa) {
  * rosa e la giornata di riferimento: la corrispondenza id-squadra ↔
  * id-utente, infatti, è garantita solo all'interno della stessa stagione.
  */
-export default function Formazione() {
+function FormazioneClassica() {
   const { utente, ultimaStagione } = useApp()
 
   const idSquadra = utente?.id ?? null
@@ -663,6 +664,67 @@ export default function Formazione() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Pagina "Inserimento formazione". Nella giornata configurata per l'ALL STAR GAME
+ * (parametro ASG_GIORNATA) compare anche la scheda "All Star Game", con l'inserimento
+ * condiviso della formazione Est/Ovest (vedi FormazioneAllStarGame). Nelle altre giornate
+ * la pagina è la formazione tradizionale, invariata.
+ */
+export default function Formazione() {
+  const { utente, ultimaStagione } = useApp()
+  const idSquadra = utente?.id ?? null
+  const [scheda, setScheda] = useState('CLASSICA')
+
+  const { data: giornataInfo } = useFetch(
+    ultimaStagione !== null ? () => getGiornataCorrente(ultimaStagione) : null, [ultimaStagione])
+  const giornata = giornataInfo?.giornata ?? null
+
+  // Un errore sul contesto non blocca la pagina: semplicemente non compare la scheda
+  const { data: asg, refetch } = useFetch(
+    idSquadra !== null && ultimaStagione !== null && giornata !== null
+      ? () => getAllStarGameContesto(ultimaStagione, giornata, idSquadra)
+      : null,
+    [ultimaStagione, idSquadra, giornata]
+  )
+  const asgAttivo = !!asg?.attivo
+
+  if (!asgAttivo) return <FormazioneClassica />
+
+  return (
+    <div>
+      <div className="mb-4">
+        <TabBar
+          tabs={[
+            { value: 'CLASSICA', label: 'Formazione' },
+            { value: 'ASG', label: 'All Star Game' },
+          ]}
+          active={scheda}
+          onChange={setScheda}
+        />
+      </div>
+      {scheda === 'CLASSICA'
+        ? <FormazioneClassica />
+        : (
+          <div className="animate-fade-up">
+            <PageHeader
+              label="Gestione squadra"
+              title="All Star Game"
+              subtitle={`${asg.nome_lato} · stagione ${ultimaStagione}/${ultimaStagione + 1} · giornata ${giornata}`}
+            />
+            <FormazioneAllStarGame
+              stagione={ultimaStagione}
+              giornata={giornata}
+              idSquadra={idSquadra}
+              ctx={asg}
+              onReload={refetch}
+            />
+          </div>
+        )}
     </div>
   )
 }

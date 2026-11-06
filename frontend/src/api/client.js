@@ -253,6 +253,24 @@ export const saveFormazione = (stagione, giornata, id_squadra, giocatori, compet
 export const getRigoristi = (stagione, giornata, id_squadra) =>
   get('formazioni.php', { stagione, giornata, id_squadra, modo: 'rigoristi', id_richiedente: idRichiedente() })
 
+// ── All Star Game (Est contro Ovest) ─────────────────────────
+// Dati della pagina: { stato: non_configurato|da_giocare|in_corso|giocata, giornata, compagini:[...], risultato }
+export const getAllStarGame = (stagione) =>
+  get('all_star_game.php', { stagione, modo: 'pagina', id_richiedente: idRichiedente() })
+
+// Dettaglio voti della partita (solo a giornata chiusa / stagioni storiche)
+export const getAllStarGameDettaglio = (stagione) =>
+  get('all_star_game.php', { stagione, modo: 'dettaglio' })
+
+// Contesto di inserimento formazione per il fantallenatore id_squadra:
+// { attivo, giornata_asg, nome_lato, compagni, rosa, formazione, rigoristi, inviata, tutti_ok, modificabile, ... }
+export const getAllStarGameContesto = (stagione, giornata, id_squadra) =>
+  get('all_star_game.php', { stagione, giornata, id_squadra, modo: 'contesto' })
+
+// azione: 'salva' (giocatori, rigoristi) | 'ok' | 'revoca_ok' | 'invia'
+export const azioneAllStarGame = (stagione, giornata, id_squadra, azione, extra = {}) =>
+  post('all_star_game.php', { stagione, giornata, id_squadra, azione, ...extra })
+
 // ── Penalità ─────────────────────────────────────────────────
 
 export const getPenalita = (stagione) => get('penalita.php', { stagione })

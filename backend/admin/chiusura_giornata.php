@@ -37,6 +37,7 @@
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/AggiornamentiGiornata.php";
 require_once __DIR__ . "/../lib/FormazioniChampions.php";
+require_once __DIR__ . "/../lib/AllStarGame.php";
 require_once __DIR__ . "/../lib/MercatoRiparazione.php";
 
 // ------------------------------------------------------------
@@ -82,6 +83,25 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
                     WHERE stagione = $stagione AND giornata = $giornata");
     $champCalcolate = intdiv((int) $r['n'], 2);
 
+    // All Star Game: se la giornata lo ospita, va calcolato prima della chiusura
+    $asgAttese = asg_in_giornata($stagione, $giornata) ? 1 : 0;
+    $asgCalcolate = 0;
+    $asgFormazioni = null;
+    if ($asgAttese) {
+        try {
+            $asgFormazioni = [];
+            foreach ([ASG_ID_EST => 'est', ASG_ID_OVEST => 'ovest'] as $idL => $k) {
+                $asgFormazioni[$k] = [
+                    'inviata'  => asg_stato_lato($stagione, $giornata, $idL)['inviata'],
+                    'completa' => asg_formazione_completa(asg_formazione($stagione, $giornata, $idL)),
+                ];
+            }
+            $r = query_one("SELECT COUNT(*) AS n FROM " . ASG_TAB_RISULTATI . "
+                            WHERE stagione = $stagione AND giornata = $giornata");
+            $asgCalcolate = intdiv((int) ($r['n'] ?? 0), 2);
+        } catch (Throwable $e) { $asgCalcolate = 0; }
+    }
+
     $r = query_one("SELECT COUNT(*) AS n FROM NEW_VOTI_SERIE_A
                     WHERE stagione = $stagione AND giornata = $giornata");
     $votiSerieA = (int) $r['n'];
@@ -107,6 +127,9 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
         if ($champCalcolate < $champAttese) {
             $blocchi[] = "Calcolo Champions non completo: $champCalcolate partite calcolate su $champAttese (eseguire la fase 2)";
         }
+        if ($asgCalcolate < $asgAttese) {
+            $blocchi[] = "Calcolo All Star Game non completo: partita non calcolata (eseguire la fase 2; servono le formazioni Est e Ovest)";
+        }
     }
 
     $avvisi = [];
@@ -127,6 +150,9 @@ function stato_chiusura($conn, int $stagione, ?int $giornata): array
         "partite_calcolate"  => $partiteCalcolate,
         "champions_attese"   => $champAttese,
         "champions_calcolate" => $champCalcolate,
+        "all_star_game_attesa"    => $asgAttese,
+        "all_star_game_calcolata" => $asgCalcolate,
+        "all_star_game_formazioni" => $asgFormazioni,
         "senza_contributo"   => $senzaContributo,
         "chiudibile"         => empty($blocchi),
         "motivi_blocco"      => $blocchi,

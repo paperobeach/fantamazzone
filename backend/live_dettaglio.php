@@ -25,18 +25,25 @@ require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/PanchinaDettaglio.php";
+require_once __DIR__ . "/lib/AllStarGame.php";
 
 $stagione   = param_int("stagione");
 $id_squadra = param_int("id_squadra");
 $fonte      = param_str("fonte", false) ?: "auto";
 if (!in_array($fonte, ["auto", "reale", "simulazione"], true)) api_error("Parametro fonte non valido", 400);
 $comp = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
-if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Parametro competizione non valido (CAMP o CHAMP)", 400);
+if (!in_array($comp, ["CAMP", "CHAMP", "ASG"], true)) api_error("Parametro competizione non valido (CAMP, CHAMP o ASG)", 400);
 $champ = $comp === "CHAMP";
 
 $stato = sg_stato_corrente($stagione);
 if (!$stato["in_corso"]) api_success(null);
 $giornata = $stato["giornata"];
+
+// All Star Game: dettaglio della partita Est - Ovest (id_squadra = Est)
+if ($comp === "ASG") {
+    if (!asg_in_giornata($stagione, $giornata)) api_success(null);
+    api_success(asg_dettaglio($stagione, $giornata, $fonte));
+}
 
 // auto: se la partita ha dati su NEW_RISULTATI si usano quelli,
 // altrimenti la simulazione

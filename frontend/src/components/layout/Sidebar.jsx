@@ -15,6 +15,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/squadre',      icon: Users,     label: 'Squadre'       },
       { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
+      { to: '/all-star-game', icon: Sparkles, label: 'All Star Game' },
       { to: '/gazzetta',     icon: Newspaper, label: 'La Gazzetta'   },
       { to: '/albo-oro',     icon: Award,     label: "Albo d'oro"   },
     ],

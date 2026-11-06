@@ -81,6 +81,10 @@ function bks_tabelle_backup(): array
         "NEW_FORMAZIONI"            => "Formazioni inserite",
         "NEW_FORMAZIONI_CHAMP"      => "Formazioni Champions (se diverse dal campionato)",
         "NEW_RIGORISTI_CHAMP"       => "Ordine rigoristi Champions",
+        "NEW_FORMAZIONI_ASG"        => "Formazioni All Star Game",
+        "NEW_RIGORISTI_ASG"         => "Ordine rigoristi All Star Game",
+        "NEW_ASG_STATO"             => "All Star Game: stato formazioni",
+        "NEW_ASG_OK"                => "All Star Game: ok dei fantallenatori",
         "NEW_FORMAZIONI_NASCOSTE"   => "Formazioni nascoste",
         "NEW_FORMAZIONI_CK"         => "Conferme formazioni",
         // mercato di riparazione
@@ -96,6 +100,8 @@ function bks_tabelle_backup(): array
         "NEW_VOTI_CHAMP"            => "Voti dei giocatori (Champions)",
         "NEW_RISULTATI"             => "Risultati partite",
         "NEW_RISULTATI_CHAMP"       => "Risultati Champions",
+        "NEW_VOTI_ASG"              => "Voti dei giocatori (All Star Game)",
+        "NEW_RISULTATI_ASG"         => "Risultati All Star Game",
         "NEW_GENERALE"              => "Classifica generale",
         "NEW_GENERALE_CHAMP"        => "Classifica Champions",
         "NEW_STATISTICHE"           => "Statistiche giocatori",
@@ -119,6 +125,8 @@ function bks_tabelle_non_salvate(): array
         "NEW_SIMULAZIONE_RISULTATI" => "Simulazione LIVE: risultati",
         "NEW_SIMULAZIONE_VOTI_CHAMP"      => "Simulazione LIVE Champions: voti",
         "NEW_SIMULAZIONE_RISULTATI_CHAMP" => "Simulazione LIVE Champions: risultati",
+        "NEW_SIMULAZIONE_VOTI_ASG"      => "Simulazione LIVE All Star Game: voti",
+        "NEW_SIMULAZIONE_RISULTATI_ASG" => "Simulazione LIVE All Star Game: risultati",
         "NEW_SIMULAZIONE_EDIT"      => "Simulazione LIVE: modifiche manuali",
         "NEW_ACCESSI"               => "Registro accessi",
     ];

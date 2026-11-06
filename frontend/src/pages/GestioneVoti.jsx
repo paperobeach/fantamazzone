@@ -166,7 +166,8 @@ export default function GestioneVoti() {
       <div className="flex flex-wrap gap-3 max-w-2xl mb-6">
         {[
           { n: 1, label: 'Caricamento voti Serie A', done: votiPresenti > 0 },
-          { n: 2, label: 'Calcolo voti fantacalcio', done: !!stato && stato.partite_attese > 0 && stato.partite_calcolate >= stato.partite_attese },
+          { n: 2, label: 'Calcolo voti fantacalcio', done: !!stato && stato.partite_attese > 0 && stato.partite_calcolate >= stato.partite_attese
+              && (!stato.all_star_game_attesa || stato.all_star_game_calcolata >= stato.all_star_game_attesa) },
           { n: 3, label: 'Chiusura giornata',        done: giaChiusa },
         ].map(f => (
           <div
@@ -431,14 +432,15 @@ export default function GestioneVoti() {
                   <span className="font-medium text-sm">
                     {calcRisultato.partite_elaborate} partite calcolate per la giornata {calcRisultato.giornata}
                     {calcRisultato.champions_elaborate > 0 && ` (più ${calcRisultato.champions_elaborate} di Champions)`}
+                    {calcRisultato.all_star_game_elaborata > 0 && ' e l\'All Star Game'}
                   </span>
                 </div>
 
-                {(calcRisultato.partite_saltate?.length > 0 || calcRisultato.champions_saltate?.length > 0) && (
+                {(calcRisultato.partite_saltate?.length > 0 || calcRisultato.champions_saltate?.length > 0 || calcRisultato.all_star_game_saltata?.length > 0) && (
                   <div className="rounded-lg px-4 py-3 bg-red-500/5 border border-red-500/20 text-red-200 text-sm mb-2">
                     <p className="font-medium mb-1">Partite non calcolate:</p>
                     <ul className="list-disc list-inside space-y-0.5">
-                      {[...(calcRisultato.partite_saltate ?? []), ...(calcRisultato.champions_saltate ?? [])].map((m, i) => <li key={i}>{m}</li>)}
+                      {[...(calcRisultato.partite_saltate ?? []), ...(calcRisultato.champions_saltate ?? []), ...(calcRisultato.all_star_game_saltata ?? [])].map((m, i) => <li key={i}>{m}</li>)}
                     </ul>
                   </div>
                 )}
@@ -468,7 +470,7 @@ export default function GestioneVoti() {
               <div className="flex justify-center py-4"><Spinner size="sm" /></div>
             ) : (
               <>
-                <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center mb-4">
                   <div>
                     <p className="text-display text-2xl font-bold text-grass-400">{stato.voti_serie_a}</p>
                     <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Voti Serie A</p>
@@ -477,11 +479,37 @@ export default function GestioneVoti() {
                     <p className="text-display text-2xl font-bold text-grass-400">{stato.partite_calcolate}/{stato.partite_attese}</p>
                     <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Partite calcolate</p>
                   </div>
+                  {stato.all_star_game_attesa > 0 && (
+                    <div>
+                      <p className={`text-display text-2xl font-bold ${stato.all_star_game_calcolata >= stato.all_star_game_attesa ? 'text-grass-400' : 'text-gold-400'}`}>
+                        {stato.all_star_game_calcolata}/{stato.all_star_game_attesa}
+                      </p>
+                      <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">All Star Game</p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-display text-2xl font-bold text-grass-400">{stato.senza_contributo}</p>
                     <p className="text-[10px] text-mono uppercase tracking-widest text-slate-600 mt-1">Titolari senza voto</p>
                   </div>
                 </div>
+
+                {stato.all_star_game_attesa > 0 && stato.all_star_game_calcolata < stato.all_star_game_attesa && stato.all_star_game_formazioni && (
+                  (() => {
+                    const lati = [['est', 'Est'], ['ovest', 'Ovest']]
+                    const avv = lati.flatMap(([k, nome]) => {
+                      const x = stato.all_star_game_formazioni[k]
+                      if (!x?.completa) return [`All Star Game: formazione ${nome} assente, la partita non potrà essere calcolata`]
+                      if (!x.inviata) return [`All Star Game: formazione ${nome} non inviata, il calcolo userà l'ultima bozza salvata`]
+                      return []
+                    })
+                    return avv.length > 0 && (
+                      <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">
+                        <AlertTriangle className="w-4 h-4 text-gold-400 flex-shrink-0 mt-0.5" />
+                        <ul className="space-y-0.5">{avv.map((a, i) => <li key={i}>{a}</li>)}</ul>
+                      </div>
+                    )
+                  })()
+                )}
 
                 {stato.motivi_blocco.length > 0 && (
                   <div className="rounded-lg px-4 py-3 flex gap-3 bg-gold-500/5 border border-gold-500/20 text-gold-100 text-sm mb-4">

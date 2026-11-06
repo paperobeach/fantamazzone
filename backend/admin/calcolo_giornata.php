@@ -104,6 +104,12 @@
 // L'esito è salvato nelle colonne supp_* / rig_* / passa / dett_extra di
 // NEW_RISULTATI_CHAMP; golf/gols restano i gol dei tempi regolamentari.
 //
+// ALL STAR GAME: se la giornata è quella configurata (parametro ASG_GIORNATA) si calcola
+// anche la partita Est - Ovest (lib/AllStarGame.php): formazioni di NEW_FORMAZIONI_ASG
+// (inviata, altrimenti l'ultima bozza), stessi parametri di calcolo, nessun fattore
+// casa, supplementari e rigori in caso di parità come in Champions. Voti in
+// NEW_VOTI_ASG, risultati in NEW_RISULTATI_ASG.
+//
 // Tutti i parametri di stagione non riconducibili a bonus/malus o
 // modificatori (sostituzioni, fattore casa, fasce gol) vivono in
 // NEW_PARAMETRI_STAGIONE, generica (codice => valore testuale): questo
@@ -116,6 +122,7 @@ require_once __DIR__ . "/../lib/RegoleCalcolo.php";
 require_once __DIR__ . "/../lib/RisultatoPartita.php";
 require_once __DIR__ . "/../lib/FormazioniChampions.php";
 require_once __DIR__ . "/../lib/ChampionsSupplementari.php";
+require_once __DIR__ . "/../lib/AllStarGame.php";
 
 mysqli_set_charset($conn, "utf8mb4");
 
@@ -476,6 +483,8 @@ $partiteElaborate = 0;
 $partiteSaltate    = [];
 $championsElaborate = 0;
 $championsSaltate   = [];
+$asgElaborate       = 0;
+$asgSaltate         = [];
 
 mysqli_begin_transaction($conn);
 try {
@@ -665,6 +674,90 @@ try {
         $championsElaborate++;
     }
 
+    // --------------------------------------------------------
+    // ALL STAR GAME
+    // --------------------------------------------------------
+    if (asg_in_giornata($stagione, $giornata)) {
+        $idCasa   = ASG_ID_EST;
+        $idOspite = ASG_ID_OVEST;
+        $tabAsg   = ASG_TAB_FORMAZIONI;
+        $warnAsg  = [];
+        try {
+            asg_controlla_formazione($stagione, $giornata, $idCasa);
+            asg_controlla_formazione($stagione, $giornata, $idOspite);
+            $ngCasa = []; $ngOspite = [];
+            $formazioneCasa   = carica_formazione($conn, $stagione, $giornata, $idCasa,   $warnAsg, $ngCasa,   $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio, $tabAsg);
+            $formazioneOspite = carica_formazione($conn, $stagione, $giornata, $idOspite, $warnAsg, $ngOspite, $maxSostituzioniMovimento, $maxSostituzioniPortiere, $configUfficio, $tabAsg);
+
+            foreach ([$idCasa, $idOspite] as $idL) {
+                if (!asg_stato_lato($stagione, $giornata, $idL)["inviata"]) {
+                    $warnAsg[] = "formazione " . asg_nome_lato($idL) . " non inviata: usata l'ultima bozza salvata";
+                }
+            }
+            foreach ($warnAsg as $w) $warning[] = "All Star Game - $w";
+
+            $risultato = CalcolatoreVoti::calcolaPartita($formazioneCasa, $formazioneOspite, $config);
+
+            salva_voti_squadra($conn, $stagione, $giornata, $idCasa,   $formazioneCasa,   $risultato['casa'],   ASG_TAB_VOTI);
+            salva_voti_squadra($conn, $stagione, $giornata, $idOspite, $formazioneOspite, $risultato['ospite'], ASG_TAB_VOTI);
+            salva_non_giocanti($conn, $stagione, $giornata, $idCasa,   $ngCasa,   ASG_TAB_VOTI);
+            salva_non_giocanti($conn, $stagione, $giornata, $idOspite, $ngOspite, ASG_TAB_VOTI);
+
+            // Campo neutro: nessun fattore casa
+            $fattoreCampoCasa = 0;
+            if (ASG_FATTORE_CASA_APPLICATO && $fattoreCasaValore != 0) {
+                $fattoreCampoCasa = (int) round($fattoreCasaValore);
+                $risultato['casa']['totale_squadra'] = round($risultato['casa']['totale_squadra'] + $fattoreCasaValore, 2);
+            }
+
+            $golfCasa   = gol_da_punteggio($risultato['casa']['totale_squadra'], $fasceGolPunteggio);
+            $golfOspite = gol_da_punteggio($risultato['ospite']['totale_squadra'], $fasceGolPunteggio);
+            $esitoGol = CalcolatoreVoti::applicaRegoleGolPartita(
+                $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+                $golfCasa, $golfOspite, $regoleGol
+            );
+            if ($esitoGol['regola'] !== null) {
+                $warning[] = "All Star Game - regola gol {$esitoGol['regola']} - {$esitoGol['nota']} ($golfCasa-$golfOspite → {$esitoGol['golf_casa']}-{$esitoGol['golf_ospite']})";
+            }
+            $golfCasa   = $esitoGol['golf_casa'];
+            $golfOspite = $esitoGol['golf_ospite'];
+
+            // Supplementari e rigori in caso di parità (stessa gestione della Champions)
+            $extra = null;
+            $caricaStat = fn(int $idG) => carica_stat_giocatore($conn, $stagione, $giornata, $idG);
+            try {
+                $extra = champions_valuta_extra(
+                    $stagione, $giornata, ASG_CODICE_TURNO, 1, $idCasa, $idOspite, $golfCasa, $golfOspite,
+                    $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'],
+                    $formazioneCasa, $formazioneOspite, $tabAsg, $tabAsg,
+                    $config, $caricaStat, $warning, ASG_TAB_RIGORISTI, "All Star Game"
+                );
+            } catch (Throwable $e) {
+                $warning[] = "All Star Game: supplementari/rigori non calcolati ({$e->getMessage()})";
+            }
+
+            asg_salva_riga_risultato(
+                $conn, $stagione, $giornata, $idCasa, $idOspite,
+                $risultato['casa']['totale_squadra'], $risultato['ospite']['totale_squadra'], $golfCasa, $golfOspite,
+                (int) round(-$risultato['ospite']['modificatori']['difesa']), (int) round(-$risultato['casa']['modificatori']['difesa']),
+                $risultato['casa']['modificatori']['attacco'],
+                $risultato['casa']['numero_centrocampisti'], $risultato['casa']['somma_centrocampisti'], $risultato['casa']['modificatori']['centrocampo'],
+                $fattoreCampoCasa, champions_colonne_extra($extra, $idCasa, $idOspite, $idCasa)
+            );
+            asg_salva_riga_risultato(
+                $conn, $stagione, $giornata, $idOspite, $idCasa,
+                $risultato['ospite']['totale_squadra'], $risultato['casa']['totale_squadra'], $golfOspite, $golfCasa,
+                (int) round(-$risultato['casa']['modificatori']['difesa']), (int) round(-$risultato['ospite']['modificatori']['difesa']),
+                $risultato['ospite']['modificatori']['attacco'],
+                $risultato['ospite']['numero_centrocampisti'], $risultato['ospite']['somma_centrocampisti'], $risultato['ospite']['modificatori']['centrocampo'],
+                0, champions_colonne_extra($extra, $idCasa, $idOspite, $idOspite)
+            );
+            $asgElaborate++;
+        } catch (Throwable $e) {
+            $asgSaltate[] = "All Star Game: " . $e->getMessage();
+        }
+    }
+
     mysqli_commit($conn);
 } catch (Throwable $e) {
     mysqli_rollback($conn);
@@ -679,5 +772,7 @@ api_success([
     "partite_saltate"   => $partiteSaltate,
     "champions_elaborate" => $championsElaborate,
     "champions_saltate"   => $championsSaltate,
+    "all_star_game_elaborata" => $asgElaborate,
+    "all_star_game_saltata"   => $asgSaltate,
     "warning"           => $warning,
 ]);

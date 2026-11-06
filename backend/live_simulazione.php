@@ -68,7 +68,7 @@ if (!$stagione) api_error("Parametro obbligatorio mancante: stagione", 400);
 
 // Competizione richiesta ("CAMP" | "CHAMP"); null = non indicata
 $compRaw = strtoupper(trim((string) ($metodo === "POST" ? ($input["competizione"] ?? "") : (param_str("competizione", false) ?? ""))));
-if ($compRaw !== "" && !in_array($compRaw, ["CAMP", "CHAMP"], true)) api_error("Competizione non valida (CAMP o CHAMP)", 400);
+if ($compRaw !== "" && !in_array($compRaw, ["CAMP", "CHAMP", "ASG"], true)) api_error("Competizione non valida (CAMP, CHAMP o ASG)", 400);
 $comp = $compRaw !== "" ? $compRaw : null;
 
 $stato = sg_stato_corrente($stagione);
@@ -86,7 +86,8 @@ if (sg_giornata_chiusa($stagione, $giornata)) {
 if ($metodo === "GET") {
     $idSquadra = param_int("id_squadra");
 
-    $tabForm = $comp === "CHAMP" ? formazione_tabella_champions($stagione, $giornata, $idSquadra) : "NEW_FORMAZIONI";
+    $tabForm = $comp === "ASG" ? ASG_TAB_FORMAZIONI
+             : ($comp === "CHAMP" ? formazione_tabella_champions($stagione, $giornata, $idSquadra) : "NEW_FORMAZIONI");
     $righe = query_all("SELECT f.ID_GIOCATORE AS id_giocatore, f.MAGLIA AS maglia, g.ruolo, g.descrizione
                         FROM $tabForm f
                         JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
@@ -157,7 +158,9 @@ try {
         // Una singola partita: della competizione indicata (default campionato);
         // l'intera giornata: campionato + turno di Champions
         $res = $solo !== null
-            ? sim_esegui($conn, $stagione, $giornata, $solo, $utente, $comp ?? "CAMP")
+            ? ($comp === "ASG"
+                ? sim_esegui_giornata($conn, $stagione, $giornata, ASG_ID_EST, $utente)
+                : sim_esegui($conn, $stagione, $giornata, $solo, $utente, $comp ?? "CAMP"))
             : sim_esegui_giornata($conn, $stagione, $giornata, null, $utente);
         $rilascia();
         api_success(array_merge(["ok" => true, "stagione" => $stagione, "giornata" => $giornata], $res));
@@ -173,6 +176,11 @@ try {
                         WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_GIOCATORE = $idG");
         if ($f === null && formazione_champions_separata_attiva($stagione)) {
             $f = query_one("SELECT ID_SQUADRA AS sq FROM " . FORMAZIONE_TAB_CHAMPIONS . "
+                            WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_GIOCATORE = $idG");
+        }
+        if ($f === null) {
+            // Schierato solo nell'All Star Game
+            $f = query_one("SELECT ID_SQUADRA AS sq FROM " . ASG_TAB_FORMAZIONI . "
                             WHERE STAGIONE = $stagione AND GIORNATA = $giornata AND ID_GIOCATORE = $idG");
         }
         $squadraG = (int) ($f["sq"] ?? 0);

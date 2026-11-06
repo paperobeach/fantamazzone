@@ -18,6 +18,7 @@ const SquadraDetail = lazy(() => import('./pages/SquadraDetail'))
 const Giocatore   = lazy(() => import('./pages/Giocatore'))
 const TopFlop     = lazy(() => import('./pages/TopFlop'))
 const Champions   = lazy(() => import('./pages/Champions'))
+const AllStarGame = lazy(() => import('./pages/AllStarGame'))
 const AlboOro     = lazy(() => import('./pages/AlboOro'))
 const MercatoRiparazione = lazy(() => import('./pages/MercatoRiparazione'))
 const MercatoSecondaFinestra = lazy(() => import('./pages/MercatoSecondaFinestra'))
@@ -150,6 +151,7 @@ function AppShell() {
                   <Route path="/statistiche"  element={<Navigate to="/" replace />} />
                   <Route path="/top-flop"     element={<TopFlop />} />
                   <Route path="/champions"    element={<Champions />} />
+                  <Route path="/all-star-game" element={<AllStarGame />} />
                   <Route path="/champions/top-flop" element={<TopFlop key="champ" competizione="CHAMP" />} />
                   <Route path="/albo-oro"     element={<AlboOro />} />
                   <Route path="/mercato"               element={<Navigate to="/mercato/prima-finestra" replace />} />

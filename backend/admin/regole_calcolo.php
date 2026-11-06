@@ -177,6 +177,8 @@ function parametri_default(): array
         ['codice' => 'GIORNATA_SERIE_A_INIZIO',      'etichetta' => 'Giornata di Serie A di partenza',              'valore' => '4'],
         ['codice' => 'FORMAZIONE_CHAMPIONS_DIVERSA', 'etichetta' => 'Formazione Champions diversa da quella di campionato (1 = sì, 0 = no)', 'valore' => '1'],
         ['codice' => 'BLOCCO_FORMAZIONE_ATTIVO',     'etichetta' => 'Blocco inserimento formazione a 1 minuto dalla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
+        // All Star Game (lib/AllStarGame.php): giornata in cui si gioca, vuoto = disattivato
+        ['codice' => 'ASG_GIORNATA', 'etichetta' => 'All Star Game: giornata di fantacampionato in cui si gioca (vuoto = disattivato)', 'valore' => ''],
         ['codice' => 'NASCONDI_FORMAZIONE_CONSENTITO', 'etichetta' => 'Consenti di nascondere la formazione fino alla prima partita di Serie A (1 = sì, 0 = no)', 'valore' => '0'],
         // Mercato di riparazione - prima finestra (vedi lib/MercatoRiparazione.php).
         // MERCATO_GIORNATA_INIZIO vuoto = mercato disattivato.
@@ -340,6 +342,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $champ = [];
         $maxGiornate = null;
         $mercatoG0 = null;
+        $asgG = null;
         foreach ($input['parametri'] as $p) {
             $cod = trim((string) ($p['codice'] ?? ''));
             $val = trim((string) ($p['valore'] ?? ''));
@@ -361,6 +364,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 api_error("Tempo limite e intervallo solleciti del mercato devono essere interi >= 1 (ore)", 400);
             }
             if ($cod === 'MERCATO_GIORNATA_INIZIO' && $val !== '') $mercatoG0 = (int) $val;
+            if ($cod === 'ASG_GIORNATA' && $val !== '') {
+                if (!ctype_digit($val) || (int) $val < 1) {
+                    api_error("La giornata dell'All Star Game deve essere un intero >= 1 (vuoto = disattivato)", 400);
+                }
+                $asgG = (int) $val;
+            }
             if ($cod === 'GIORNATA_SERIE_A_INIZIO' && (!ctype_digit($val) || (int) $val < 1)) {
                 api_error("La giornata di Serie A di partenza deve essere un intero >= 1", 400);
             }
@@ -392,6 +401,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if ($cod === 'NUMERO_GIORNATE' && ctype_digit(trim((string) ($p['valore'] ?? '')))) {
                 $maxGiornate = (int) $p['valore'];
             }
+        }
+        if ($asgG !== null && $maxGiornate !== null && $asgG > $maxGiornate) {
+            api_error("La giornata dell'All Star Game non può superare il numero di giornate ($maxGiornate)", 400);
         }
         // Le 4 sessioni del mercato terminano all'inizio della giornata G0+4: deve esistere
         if ($mercatoG0 !== null && $maxGiornate !== null && $mercatoG0 + 4 > $maxGiornate) {

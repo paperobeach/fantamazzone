@@ -153,7 +153,7 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
   // Senza calcolo né simulazione: si mostra la sola formazione inserita
   const { data: form, loading: loadingForm, error: errorForm } = useFetch(
     () => (open && !fonte)
-      ? getDettaglioPartita(Number(stagione), giornata, casa.id, competizione, ospite.id)
+      ? (competizione === 'ASG' ? Promise.resolve(null) : getDettaglioPartita(Number(stagione), giornata, casa.id, competizione, ospite.id))
       : Promise.resolve(null),
     [open, fonte, stagione, giornata, casa.id, ospite.id, competizione]
   )
@@ -280,7 +280,9 @@ function MatchRow({ partita, giornata, stagione, versione, onChanged, competizio
               : <>
                   <MatchDetailPanel casa={formMatch?.casa} ospite={formMatch?.ospite} loading={loadingForm} error={errorForm} />
                   <p className="px-4 py-2 text-center text-[11px] text-slate-600 border-t border-white/5">
-                    Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".
+                    {competizione === 'ASG'
+                      ? 'Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata" (servono le formazioni Est e Ovest).'
+                      : 'Nessun calcolo disponibile: usare "Simula partita" o "Simula giornata".'}
                   </p>
                 </>}
             {!isReale && editing && (
@@ -330,7 +332,7 @@ export default function LiveGiornata() {
   if (error) return <ErrorState message={error} onRetry={refetch} />
   if (!data) return null
 
-  const { stato, partite, champions, classifiche } = data
+  const { stato, partite, champions, classifiche, all_star_game: allStar } = data
 
   if (!stato.in_corso) {
     return (
@@ -363,6 +365,7 @@ export default function LiveGiornata() {
           <p className="flex items-center gap-2 text-green-400">
             <CheckCircle2 className="w-4 h-4" /> Simulazione completata: {esito.partite_elaborate} partite di campionato
             {esito.champions_elaborate > 0 && ` e ${esito.champions_elaborate} di Champions`}
+            {esito.asg_elaborate > 0 && `${esito.champions_elaborate > 0 ? ' e' : ','} l'All Star Game`}
             {esito.provvisori > 0 && `, ${esito.provvisori} voti provvisori`}
             {esito.manuali > 0 && `, ${esito.manuali} manuali`}.
           </p>
@@ -450,6 +453,22 @@ export default function LiveGiornata() {
               Riposa: {champions.riposa.map(r => `${r.nome}${r.girone ? ` (girone ${r.girone})` : ''}`).join(', ')}
             </p>
           )}
+        </div>
+      )}
+
+      {/* All Star Game: Est contro Ovest, stesse funzioni delle altre partite */}
+      {allStar?.partita && (
+        <div className="card overflow-hidden mt-6">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h2 className="text-sm font-semibold text-slate-300">All Star Game — Giornata {stato.giornata}</h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Est contro Ovest · in caso di parità supplementari e rigori
+              {' · '}Est: {allStar.formazioni?.est?.inviata ? 'formazione inviata' : allStar.formazioni?.est?.completa ? 'bozza' : 'formazione assente'}
+              {' · '}Ovest: {allStar.formazioni?.ovest?.inviata ? 'formazione inviata' : allStar.formazioni?.ovest?.completa ? 'bozza' : 'formazione assente'}
+            </p>
+          </div>
+          <MatchRow partita={allStar.partita} giornata={stato.giornata} stagione={stagione}
+            versione={versione} onChanged={aggiorna} competizione="ASG" />
         </div>
       )}
       </div>

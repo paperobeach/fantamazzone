@@ -378,7 +378,7 @@ const DEFAULT_PARAMETRI = {
   GOL_DISTACCO_MIN_PUNTI: ['3', 'Punti di scarto minimo in fasce diverse'],
   GOL_SOGLIA_PAREGGIO: ['66', 'Scarto minimo 1 a 0'],
   GOL_SOGLIA_OMAGGIO: ['59', 'Punteggio minimo al di sotto del quale scatta 1 gol per avversario'],
-  // MERCATO_GIORNATA_INIZIO non ha default: vuoto = mercato disattivato
+  // MERCATO_GIORNATA_INIZIO e ASG_GIORNATA non hanno default: vuoto = funzione disattivata
   MERCATO_PREZZO_PORTIERE: ['5', 'Mercato di riparazione: prezzo portiere (crediti)'],
   MERCATO_PREZZO_DIFENSORE: ['5', 'Mercato di riparazione: prezzo difensore (crediti)'],
   MERCATO_PREZZO_CENTROCAMPISTA: ['10', 'Mercato di riparazione: prezzo centrocampista (crediti)'],
@@ -778,6 +778,22 @@ export default function GestisciRegoleCalcolo() {
                             />
                           </div>
                         ))}
+                      </div>
+                    </Sottosezione>
+
+                    <Sottosezione
+                      titolo="All Star Game"
+                      descrizione="Partita singola tra la formazione Est (squadre con id dispari) e la formazione Ovest (id pari), con supplementari e rigori in caso di parità. Lascia vuota la giornata per disattivarlo."
+                    >
+                      <div className="max-w-[16rem]">
+                        <label className="text-xs text-slate-600 mb-1 block">Giornata di fantacampionato</label>
+                        <input
+                          type="number" min="1" max={numeroGiornate} step="1"
+                          value={getValoreParametro('ASG_GIORNATA', '')}
+                          onChange={e => setValoreParametro('ASG_GIORNATA', e.target.value, 'All Star Game: giornata di fantacampionato in cui si gioca (vuoto = disattivato)')}
+                          className="fanta-input w-28"
+                        />
+                        <p className="text-[11px] text-slate-700 mt-1">In quella giornata gli allenatori inseriscono la formazione dell'All Star Game da "Inserimento formazione".</p>
                       </div>
                     </Sottosezione>
 

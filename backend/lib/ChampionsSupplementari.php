@@ -137,20 +137,21 @@ function champions_punti_supplementari_squadra(
 
 /**
  * Lista ordinata dei rigoristi di UNA squadra.
- * Ordine inserito dall'allenatore (NEW_RIGORISTI_CHAMP) se presente: prima i
+ * Ordine inserito dall'allenatore (NEW_RIGORISTI_CHAMP, oppure la tabella indicata in
+ * $tabRigoristi: NEW_RIGORISTI_ASG per l'All Star Game) se presente: prima i
  * titolari (maglia 1-11) poi i panchinari; chi non è nell'ordine inserito
  * (formazione cambiata dopo) segue per numero di maglia. Senza lista:
  * ordine di maglia, cioè si parte dal portiere.
  *
  * @return array [ ['id', 'nome', 'ruolo', 'maglia'], ... ]
  */
-function champions_lista_rigoristi(string $tabella, int $stagione, int $giornata, int $idSquadra): array
+function champions_lista_rigoristi(string $tabella, int $stagione, int $giornata, int $idSquadra, string $tabRigoristi = "NEW_RIGORISTI_CHAMP"): array
 {
     $righe = query_all("SELECT f.ID_GIOCATORE AS id, f.MAGLIA AS maglia, g.ruolo, g.descrizione AS nome,
                                r.ORDINE AS ordine
                         FROM $tabella f
                         JOIN NEW_GIOCATORI g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
-                        LEFT JOIN NEW_RIGORISTI_CHAMP r ON r.STAGIONE = f.STAGIONE AND r.GIORNATA = f.GIORNATA
+                        LEFT JOIN $tabRigoristi r ON r.STAGIONE = f.STAGIONE AND r.GIORNATA = f.GIORNATA
                                                        AND r.ID_SQUADRA = f.ID_SQUADRA AND r.ID_GIOCATORE = f.ID_GIOCATORE
                         WHERE f.STAGIONE = $stagione AND f.ID_SQUADRA = $idSquadra AND f.GIORNATA = $giornata
                         ORDER BY f.MAGLIA");
@@ -275,7 +276,8 @@ function champions_valuta_extra(
     int $idCasa, int $idOspite,
     int $golfCasa, int $golfOspite, float $ftotCasa, float $ftotOspite,
     array $fCasa, array $fOspite, string $tabCasa, string $tabOspite,
-    array $config, callable $caricaStat, array &$warning
+    array $config, callable $caricaStat, array &$warning,
+    string $tabRigoristi = "NEW_RIGORISTI_CHAMP", string $etichetta = "Champions"
 ): ?array {
     $gruppo = strtoupper(trim($gruppo));
     $andata = null;
@@ -287,7 +289,7 @@ function champions_valuta_extra(
         if ($giornataChamp < 2) return null;
         $andata = champions_golf_andata($stagione, $gruppo, $idCasa, $idOspite);
         if ($andata === null) {
-            $warning[] = "Champions - $gruppo (giornata $giornata): partita di andata non calcolata, "
+            $warning[] = "$etichetta - $gruppo (giornata $giornata): partita di andata non calcolata, "
                        . "impossibile valutare supplementari e rigori";
             return null;
         }
@@ -320,7 +322,7 @@ function champions_valuta_extra(
         "casa"   => ["punti" => $sc["punti"], "gol" => $gC, "giocatori" => $sc["giocatori"]],
         "ospite" => ["punti" => $so["punti"], "gol" => $gO, "giocatori" => $so["giocatori"]],
     ];
-    $warning[] = "Champions - squadre $idCasa-$idOspite (giornata $giornata): parità, si giocano i supplementari "
+    $warning[] = "$etichetta - squadre $idCasa-$idOspite (giornata $giornata): parità, si giocano i supplementari "
                . "({$sc['punti']} punti = $gC gol, {$so['punti']} punti = $gO gol)";
 
     $aggC += $gC;
@@ -331,8 +333,8 @@ function champions_valuta_extra(
     }
 
     // 3) calci di rigore
-    $lc = champions_esito_rigoristi(champions_lista_rigoristi($tabCasa,   $stagione, $giornata, $idCasa),   $caricaStat);
-    $lo = champions_esito_rigoristi(champions_lista_rigoristi($tabOspite, $stagione, $giornata, $idOspite), $caricaStat);
+    $lc = champions_esito_rigoristi(champions_lista_rigoristi($tabCasa,   $stagione, $giornata, $idCasa,   $tabRigoristi), $caricaStat);
+    $lo = champions_esito_rigoristi(champions_lista_rigoristi($tabOspite, $stagione, $giornata, $idOspite, $tabRigoristi), $caricaStat);
     $rig = champions_simula_rigori($lc, $lo);
     $rig["fallback"] = false;
 
@@ -343,12 +345,12 @@ function champions_valuta_extra(
         $pO = $ftotOspite + $so["punti"];
         $rig["vincitore"] = $pO > $pC ? "ospite" : "casa";
         $rig["fallback"]  = true;
-        $warning[] = "Champions - squadre $idCasa-$idOspite (giornata $giornata): rigori ancora in parità dopo "
+        $warning[] = "$etichetta - squadre $idCasa-$idOspite (giornata $giornata): rigori ancora in parità dopo "
                    . CHAMP_RIGORI_MAX_OLTRANZA . " giri di oltranza, passa la squadra con più punti";
     }
     $out["rig"]   = $rig;
     $out["passa"] = $rig["vincitore"] === "casa" ? $idCasa : $idOspite;
-    $warning[] = "Champions - squadre $idCasa-$idOspite (giornata $giornata): calci di rigore {$rig['casa']}-{$rig['ospite']}"
+    $warning[] = "$etichetta - squadre $idCasa-$idOspite (giornata $giornata): calci di rigore {$rig['casa']}-{$rig['ospite']}"
                . ($rig["oltranza"] ? " (ad oltranza)" : "");
     return $out;
 }

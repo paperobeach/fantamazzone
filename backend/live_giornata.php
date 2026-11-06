@@ -29,12 +29,13 @@ require_once __DIR__ . "/connect.php";
 require_once __DIR__ . "/lib/StatoGiornata.php";
 require_once __DIR__ . "/lib/FormazioniChampions.php";
 require_once __DIR__ . "/lib/ClassificheLive.php";
+require_once __DIR__ . "/lib/AllStarGame.php";
 
 $stagione = param_int("stagione");
 $stato    = sg_stato_corrente($stagione);
 
 if (!$stato["in_corso"]) {
-    api_success(["stato" => $stato, "partite" => [], "champions" => null, "classifiche" => null, "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
+    api_success(["stato" => $stato, "partite" => [], "champions" => null, "all_star_game" => null, "classifiche" => null, "simulazione_calcolata_il" => null, "provvisori" => 0, "manuali" => 0]);
 }
 $giornata = $stato["giornata"];
 
@@ -201,6 +202,19 @@ if (!empty($pc["partite"]) || !empty($pc["riposa"])) {
 }
 
 // ------------------------------------------------------------
+// ALL STAR GAME: partita Est - Ovest, se la giornata la ospita
+// ------------------------------------------------------------
+$allStar = null;
+try {
+    $allStar = asg_blocco_live($stagione, $giornata);
+    if ($allStar !== null && !empty($allStar["calcolato_il"]) && ($calcolatoIl === null || $allStar["calcolato_il"] > $calcolatoIl)) {
+        $calcolatoIl = $allStar["calcolato_il"];
+    }
+} catch (Throwable $e) {
+    $allStar = null;
+}
+
+// ------------------------------------------------------------
 // CLASSIFICHE LIVE: classifica ufficiale + risultati calcolati/simulati della giornata
 // ------------------------------------------------------------
 $classifiche = ["campionato" => null, "champions" => null, "errore" => null];
@@ -238,6 +252,7 @@ api_success([
     "stato"                    => $stato,
     "partite"                  => $out,
     "champions"                => $champions,
+    "all_star_game"            => $allStar,
     "classifiche"              => $classifiche,
     "simulazione_calcolata_il" => $calcolatoIl,
     "provvisori"               => (int) ($tot["p"] ?? 0) + (int) ($totC["p"] ?? 0),

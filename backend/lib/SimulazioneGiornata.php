@@ -68,12 +68,14 @@ require_once __DIR__ . "/CalcolatoreVoti.php";
 require_once __DIR__ . "/RegoleCalcolo.php";
 require_once __DIR__ . "/FormazioniChampions.php";
 require_once __DIR__ . "/ChampionsSupplementari.php";
+require_once __DIR__ . "/AllStarGame.php";
 
 const SIM_VOTO_PROVVISORIO = 6.0;
 
 // Tabelle di simulazione per competizione ('CAMP' | 'CHAMP')
 function sim_tabelle(string $competizione): array
 {
+    if ($competizione === 'ASG') return ['voti' => ASG_TAB_SIM_VOTI, 'ris' => ASG_TAB_SIM_RISULTATI];
     return $competizione === 'CHAMP'
         ? ['voti' => 'NEW_SIMULAZIONE_VOTI_CHAMP', 'ris' => 'NEW_SIMULAZIONE_RISULTATI_CHAMP']
         : ['voti' => 'NEW_SIMULAZIONE_VOTI',       'ris' => 'NEW_SIMULAZIONE_RISULTATI'];
@@ -901,21 +903,47 @@ function sim_esegui($conn, int $stagione, int $giornata, ?int $soloSquadra = nul
 // ------------------------------------------------------------
 function sim_esegui_giornata($conn, int $stagione, int $giornata, ?int $soloSquadra = null, ?string $utente = null): array
 {
+    // Solo All Star Game (pseudo id di una compagine)
+    if ($soloSquadra !== null && asg_e_compagine($soloSquadra)) {
+        $a = asg_sim_esegui($conn, $stagione, $giornata, $utente);
+        $a['champions_elaborate'] = 0;
+        $a['asg_elaborate'] = $a['partite_elaborate'];
+        $a['partite_elaborate'] = 0;
+        return $a;
+    }
+
     $res = sim_esegui($conn, $stagione, $giornata, $soloSquadra, $utente, 'CAMP');
     $res['champions_elaborate'] = 0;
 
-    if ($soloSquadra !== null && !champions_squadra_gioca_in_giornata($stagione, $giornata, $soloSquadra)) {
-        return $res;
+    if ($soloSquadra === null || champions_squadra_gioca_in_giornata($stagione, $giornata, $soloSquadra)) {
+        $ch = sim_esegui($conn, $stagione, $giornata, $soloSquadra, $utente, 'CHAMP');
+        $res['champions_elaborate'] = $ch['partite_elaborate'];
+        $res['partite_saltate']     = array_merge($res['partite_saltate'], $ch['partite_saltate']);
+        $res['warning']             = array_merge($res['warning'], $ch['warning']);
+        $res['provvisori']         += $ch['provvisori'];
+        $res['manuali']            += $ch['manuali'];
+        $res['api']                += $ch['api'];
+        $res['parziali']           += $ch['parziali'];
     }
-    $ch = sim_esegui($conn, $stagione, $giornata, $soloSquadra, $utente, 'CHAMP');
 
-    $res['champions_elaborate'] = $ch['partite_elaborate'];
-    $res['partite_saltate']     = array_merge($res['partite_saltate'], $ch['partite_saltate']);
-    $res['warning']             = array_merge($res['warning'], $ch['warning']);
-    $res['provvisori']         += $ch['provvisori'];
-    $res['manuali']            += $ch['manuali'];
-    $res['api']                += $ch['api'];
-    $res['parziali']           += $ch['parziali'];
+    // All Star Game: si ricalcola sempre nella sua giornata (i giocatori possono
+    // essere schierati anche in campionato: una modifica li riguarda comunque).
+    // Un errore (es. tabelle non ancora create) non deve bloccare il resto.
+    $res['asg_elaborate'] = 0;
+    if (asg_in_giornata($stagione, $giornata)) {
+        try {
+            $a = asg_sim_esegui($conn, $stagione, $giornata, $utente);
+            $res['asg_elaborate']   = $a['partite_elaborate'];
+            $res['partite_saltate'] = array_merge($res['partite_saltate'], $a['partite_saltate']);
+            $res['warning']         = array_merge($res['warning'], $a['warning']);
+            $res['provvisori']     += $a['provvisori'];
+            $res['manuali']        += $a['manuali'];
+            $res['api']            += $a['api'];
+            $res['parziali']       += $a['parziali'];
+        } catch (Throwable $e) {
+            $res['warning'][] = 'All Star Game non simulato: ' . $e->getMessage();
+        }
+    }
     return $res;
 }
 
@@ -964,6 +992,7 @@ function sim_partita_di_squadra(int $stagione, int $giornata, int $idSquadra, st
 // ------------------------------------------------------------
 function sim_elimina_partita($conn, int $stagione, int $giornata, int $idSquadra, string $competizione = 'CAMP'): int
 {
+    if ($competizione === 'ASG') return asg_sim_elimina($conn, $stagione, $giornata);
     $p = sim_partita_di_squadra($stagione, $giornata, $idSquadra, $competizione);
     if ($p === null) throw new Exception("La squadra $idSquadra non gioca alla giornata $giornata");
     [$casa, $ospite] = $p;

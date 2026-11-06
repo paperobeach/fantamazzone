@@ -17,11 +17,6 @@ const REPARTI = [
   { value: '4', label: 'Attaccanti' },
 ]
 
-const VISTE = [
-  { value: 'SCHIERATI', label: 'Schierati' },
-  { value: 'ROSA', label: 'Tutta la rosa' },
-]
-
 const TOOLTIP_STYLE = { background: '#0f1f2e', border: '1px solid #ffffff1a', borderRadius: 8, fontSize: 12 }
 
 const fmtMod = v => (v > 0 ? `+${fmt(v, 1)}` : fmt(v, 1))
@@ -307,10 +302,9 @@ function Reparto({ r, ruolo, vista }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-export default function AreaRuoli({ stagione, idSquadra, competizione, repartoFisso = null }) {
+export default function AreaRuoli({ stagione, idSquadra, competizione, vista = 'ROSA', repartoFisso = null }) {
   const [repartoScelto, setReparto] = useState('1')
   const reparto = repartoFisso ? String(repartoFisso) : repartoScelto
-  const [vista, setVista] = useState('SCHIERATI')
   const { data: r, loading, error, refetch } = useFetch(
     () => getDashboardRuoli(stagione, idSquadra, Number(reparto), competizione, vista),
     [stagione, idSquadra, reparto, competizione, vista]
@@ -324,9 +318,6 @@ export default function AreaRuoli({ stagione, idSquadra, competizione, repartoFi
             <TabBar tabs={REPARTI} active={reparto} onChange={setReparto} />
           </div>
         )}
-        <div className="overflow-x-auto lg:ml-auto">
-          <TabBar tabs={VISTE} active={vista} onChange={setVista} />
-        </div>
       </div>
       <p className="text-xs text-slate-500 -mt-3">
         {vista === 'ROSA'

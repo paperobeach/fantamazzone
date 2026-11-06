@@ -29,12 +29,11 @@ function costruisciTop11(rosa, modulo, metrica, minPres) {
   return { titolari, mancanti, somma }
 }
 
-export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisponibile = null }) {
+export default function PreparaTop11({ rosa: rosaBase, competizione, vista = 'ROSA', rosaNonDisponibile = null }) {
   const { ultimaStagione } = useApp()
   const [metrica, setMetrica] = useState('media_voto')
   const [modulo, setModulo] = useState('4-3-3')
   const [minPres, setMinPres] = useState(1)
-  const [vista, setVista] = useState('SCHIERATI')
 
   // Base dati: SCHIERATI = solo le giornate in cui il giocatore ha concorso al punteggio;
   // ROSA = tutte le giornate in cui era in rosa con un voto, schierato o no
@@ -65,14 +64,7 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, rosaNonDisp
   return (
     <div className="space-y-6">
       {/* Controlli */}
-      <div className="card p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <label className="space-y-1.5">
-          <span className="text-[10px] uppercase tracking-widest text-slate-500">Giocatori considerati</span>
-          <Select value={vista} onChange={setVista} options={[
-            { value: 'SCHIERATI', label: 'Solo schierati' },
-            { value: 'ROSA', label: 'Tutta la rosa' },
-          ]} />
-        </label>
+      <div className="card p-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
         <label className="space-y-1.5">
           <span className="text-[10px] uppercase tracking-widest text-slate-500">Voto</span>
           <Select value={metrica} onChange={setMetrica} options={[

@@ -1,12 +1,13 @@
 // ============================================================
 // Area "Andamento": le statistiche selezionate giornata per giornata, con
-// benchmark di lega e altre squadre. In cima l'andamento in classifica.
+// benchmark di lega e altre squadre. All'ingresso propone la posizione in classifica
+// (metrica "posizione", solo campionato).
 // ============================================================
 import { useState } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
-import { TrendingUp, Activity } from 'lucide-react'
+import { Activity } from 'lucide-react'
 import { Section, Vuoto } from './shared'
 import { GraficoZoom, LegendaInterattiva, useEvidenzia, asse } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState, TabBar } from '../ui'
@@ -14,37 +15,13 @@ import { SelettoreMetriche } from './SelezioneMetriche'
 import ConfrontoSquadre, { coloreSquadra } from './ConfrontoSquadre'
 import { mappaDef, serieModo, mediaSerie, fmtVal, MODI_ANDAMENTO, TOOLTIP_STYLE } from './metriche'
 
-// ── Andamento in classifica ──────────────────────────────────
-
-function AndamentoPosizione({ andamento, nSquadre }) {
-  if (!andamento?.length) return <Vuoto>Nessuna giornata chiusa.</Vuoto>
-  const n = Math.max(nSquadre || 8, ...andamento.map(a => a.posizione))
-  const ticks = Array.from({ length: n }, (_, i) => i + 1)
-  return (
-    <GraficoZoom titolo="Andamento in classifica">
-      {zoom => (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={andamento} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-            <CartesianGrid stroke="#ffffff10" vertical={false} />
-            <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={g => `G${g}`} />
-            <YAxis reversed domain={[1, n]} ticks={ticks} allowDecimals={false} {...asse(zoom)} tickFormatter={p => `${p}°`} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`} formatter={v => [`${v}°`, 'Posizione']} />
-            <Line type="monotone" dataKey="posizione" stroke="#4ade80" strokeWidth={2.5}
-                  dot={{ r: zoom ? 4 : 3, fill: '#4ade80' }} activeDot={{ r: 5 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-    </GraficoZoom>
-  )
-}
-
 // ── Grafico di una metrica ───────────────────────────────────
 
 function GraficoMetrica({ def, data, me, conf, modo }) {
   const { giornate, squadre } = data
 
   // Serie presenti nel grafico: servono prima di ogni return anticipato (regole degli hook)
-  const chiavi = ['me', ...(conf.bench ? ['bench'] : []), ...conf.ids.filter(id => id !== me).map(id => `s${id}`)]
+  const chiavi = ['me', ...(conf.bench && def.key !== 'posizione' ? ['bench'] : []), ...conf.ids.filter(id => id !== me).map(id => `s${id}`)]
   const { evid, toggle, reset } = useEvidenzia(chiavi)
 
   if (!giornate.length) return <Vuoto>Nessuna giornata chiusa.</Vuoto>
@@ -52,7 +29,9 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
   const serieDi = id => serieModo(def, data.serie[def.key]?.[id] ?? giornate.map(() => null), modo)
   const mia = serieDi(me)
   const confrontate = conf.ids.filter(id => id !== me).map(id => ({ id, nome: squadre.find(s => s.id === id)?.nome ?? `#${id}`, serie: serieDi(id) }))
-  const bench = conf.bench ? mediaSerie(squadre.map(s => serieDi(s.id))) : null
+  // La media di lega della posizione in classifica è sempre la stessa: non ha senso tracciarla
+  const classifica = def.key === 'posizione'
+  const bench = conf.bench && !classifica ? mediaSerie(squadre.map(s => serieDi(s.id))) : null
 
   const righe = giornate.map((g, i) => {
     const r = { giornata: g, me: mia[i] }
@@ -81,9 +60,13 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
           <LineChart data={righe} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
             <CartesianGrid stroke="#ffffff10" vertical={false} />
             <XAxis dataKey="giornata" {...asse(zoom)} tickFormatter={g => `G${g}`} />
-            <YAxis domain={['auto', 'auto']} {...asse(zoom)} tickFormatter={v => fmtVal({ ...def, unita: '' }, v)} />
+            {classifica
+              ? <YAxis reversed domain={[1, Math.max(squadre.length, 2)]} allowDecimals={false}
+                       ticks={Array.from({ length: Math.max(squadre.length, 2) }, (_, i) => i + 1)}
+                       {...asse(zoom)} tickFormatter={p => `${p}°`} />
+              : <YAxis domain={['auto', 'auto']} {...asse(zoom)} tickFormatter={v => fmtVal({ ...def, unita: '' }, v)} />}
             <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={g => `Giornata ${g}`}
-                     formatter={(v, n) => [fmtVal(def, v), n]} />
+                     formatter={(v, n) => [classifica ? `${v}°` : fmtVal(def, v), n]} />
             {ordinate.map(l => {
               const scelta = evid === l.key
               const spenta = evid !== null && !scelta
@@ -105,42 +88,36 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-export default function AreaAndamento({ d, competizione, ctx }) {
-  const champ = competizione === 'CHAMP'
-  const nSquadre = d.classifica?.squadre
+export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-disable-line no-unused-vars
   const [modo, setModo] = useState('partita')
   const [conf, setConf] = useState({ bench: true, ids: [] })
 
-  const posizione = !champ && (
-    <Section title="Andamento in classifica" icon={TrendingUp} right="posizione per giornata">
-      <AndamentoPosizione andamento={d.campionato.andamento} nSquadre={nSquadre} />
-    </Section>
-  )
-
-  if (ctx.errore) return <div className="space-y-6">{posizione}<ErrorState message={ctx.errore} onRetry={ctx.riprova} /></div>
-  if (!ctx.data) return <div className="space-y-6">{posizione}<LoadingState label="Calcolo degli andamenti..." /></div>
+  if (ctx.errore) return <ErrorState message={ctx.errore} onRetry={ctx.riprova} />
+  if (!ctx.data) return <LoadingState label="Calcolo degli andamenti..." />
 
   const defs = mappaDef(ctx.data)
   const selezionate = ctx.sel.chiavi.map(k => defs[k]).filter(Boolean)
 
   return (
     <div className="space-y-6">
-      {posizione}
+      {/* Selezione e confronto comprimibili, per lasciare più spazio ai grafici */}
+      <div id="and-selezione" className="sezione-scroll space-y-6">
+        <SelettoreMetriche ctx={ctx} comprimibile apertoIniziale={false} />
 
-      <SelettoreMetriche ctx={ctx} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
-        <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} />
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
+          <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} comprimibile apertoIniziale={false} />
         <div className="rounded-xl border border-white/5 bg-pitch-900 p-3 space-y-2 min-w-0">
           <p className="text-[10px] uppercase tracking-widest text-slate-500">Valore mostrato</p>
           <div className="overflow-x-auto"><TabBar tabs={MODI_ANDAMENTO} active={modo} onChange={setModo} /></div>
         </div>
+        </div>
       </div>
 
+      <div id="and-grafici" className="sezione-scroll">
       {selezionate.length === 0 ? (
         <EmptyState label="Seleziona una o più statistiche per vederne l'andamento." />
       ) : (
-        <>
+        <div className="space-y-6">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {selezionate.map(def => (
               <Section key={def.key} title={def.label} icon={Activity}
@@ -155,8 +132,9 @@ export default function AreaAndamento({ d, competizione, ctx }) {
             La media lega è calcolata sulle serie di tutte le squadre, la tua compresa.
             Tocca una voce della legenda per evidenziare la serie (le altre si attenuano); tocca di nuovo per ripristinare.
           </p>
-        </>
+        </div>
       )}
+      </div>
     </div>
   )
 }

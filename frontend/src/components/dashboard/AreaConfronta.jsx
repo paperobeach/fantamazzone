@@ -1,10 +1,12 @@
 // ============================================================
 // Area "Confronta": le statistiche selezionate, messe a confronto con altre
-// squadre e/o con il benchmark di lega. In fondo, la matrice degli scontri.
+// squadre e/o con il benchmark di lega. Il valore della squadra loggata resta sempre
+// in primo piano (riga "Tu" mai attenuata e linea di riferimento su ogni barra).
+// Gli scontri con le altre squadre sono nella sezione Statistiche.
 // ============================================================
 import { useState } from 'react'
-import { Swords, BarChart3 } from 'lucide-react'
-import { Section, MatriceScontri, LogoCompatto } from './shared'
+import { BarChart3 } from 'lucide-react'
+import { Section, LogoCompatto } from './shared'
 import { GraficoZoom } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState } from '../ui'
 import { SelettoreMetriche } from './SelezioneMetriche'
@@ -60,7 +62,8 @@ function CardConfronto({ def, data, me, conf }) {
         const sinistra = r.valore === null ? 0 : ((Math.min(r.valore, 0) - lo) / span) * 100
         const larghezza = r.valore === null ? 0 : (Math.abs(r.valore) / span) * 100
         const sel = evid === r.id
-        const spenta = evid !== null && !sel
+        // La riga della squadra loggata non viene mai attenuata: è il riferimento del confronto
+        const spenta = evid !== null && !sel && r.tipo !== 'me'
         return (
           <div key={r.id} role="button" tabIndex={0} aria-pressed={sel}
                title={sel ? 'Tocca per mostrare di nuovo tutte le righe' : 'Tocca per evidenziare questa riga'}
@@ -78,6 +81,10 @@ function CardConfronto({ def, data, me, conf }) {
             <div className={`relative flex-1 ${zoom ? 'h-5' : 'h-3'} rounded-full bg-pitch-800 overflow-hidden min-w-0`}>
               <div className={`absolute top-0 h-full rounded-full ${colore}`}
                    style={{ left: `${sinistra}%`, width: `${Math.max(larghezza, r.valore === null ? 0 : 1)}%`, ...stile }} />
+              {mio !== null && r.tipo !== 'me' && (
+                <div className="absolute top-0 h-full w-0.5 bg-white/80 pointer-events-none" title={`Tuo valore: ${fmtVal(def, mio)}`}
+                     style={{ left: `${((mio - lo) / span) * 100}%` }} />
+              )}
             </div>
             <span className={`${zoom ? 'w-20 text-base' : 'w-14 text-sm'} text-right font-mono flex-shrink-0 ${r.tipo === 'me' ? 'text-white font-bold' : 'text-slate-300'}`}>
               {fmtVal(def, r.valore)}
@@ -105,9 +112,7 @@ function CardConfronto({ def, data, me, conf }) {
   )
 }
 
-export default function AreaConfronta({ d, competizione, ctx }) {
-  const champ = competizione === 'CHAMP'
-  const matrice = champ ? d.champions.matrice : d.campionato.matrice
+export default function AreaConfronta({ ctx }) {
   const [conf, setConf] = useState({ bench: true, ids: [] })
 
   if (ctx.errore) return <ErrorState message={ctx.errore} onRetry={ctx.riprova} />
@@ -119,9 +124,12 @@ export default function AreaConfronta({ d, competizione, ctx }) {
 
   return (
     <div className="space-y-6">
-      <SelettoreMetriche ctx={ctx} />
-      <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} />
+      <div id="conf-selezione" className="sezione-scroll space-y-6">
+        <SelettoreMetriche ctx={ctx} />
+        <ConfrontoSquadre squadre={ctx.data.squadre} me={ctx.me} conf={conf} setConf={setConf} />
+      </div>
 
+      <div id="conf-grafici" className="sezione-scroll">
       {selezionate.length === 0 ? (
         <EmptyState label="Seleziona una o più statistiche per confrontarle con la lega." />
       ) : (
@@ -135,15 +143,12 @@ export default function AreaConfronta({ d, competizione, ctx }) {
           <p className="text-[11px] text-slate-600">
             Le righe sono ordinate dalla migliore alla peggiore. Lo scarto a destra è il tuo valore meno quello della riga:
             verde se a tuo favore, rosso se a favore dell’altra. Benchmark = media delle squadre della lega, la tua inclusa.
+            La linea bianca su ogni barra indica il tuo valore; la riga «Tu» resta sempre visibile.
             Tocca una riga per evidenziarla (le altre si attenuano); tocca di nuovo per ripristinare.
           </p>
         </>
       )}
-
-      <Section title={champ ? 'Scontri Champions con le altre squadre' : 'Scontri con le altre squadre'}
-               icon={Swords} right="stagione in corso">
-        <MatriceScontri matrice={matrice} vuota={champ ? 'Mai affrontata' : 'Non ancora giocato'} />
-      </Section>
+      </div>
     </div>
   )
 }

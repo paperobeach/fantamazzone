@@ -26,38 +26,10 @@ function Chips({ giocatori, allinea }) {
   )
 }
 
-export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
-  const conPartita = rosa.filter(g => g.avversaria)
-  const inCasa = conPartita.filter(g => g.casa).length
-  const inTrasf = conPartita.length - inCasa
-  const senza = rosa.length - conPartita.length
-
-  // raggruppamento per squadra avversaria
-  const perAvversaria = useMemo(() => {
-    const m = new Map()
-    for (const g of conPartita) {
-      if (!m.has(g.avversaria)) m.set(g.avversaria, { avversaria: g.avversaria, casa: g.casa, giocatori: [] })
-      m.get(g.avversaria).giocatori.push(g)
-    }
-    return [...m.values()].sort((a, b) => b.giocatori.length - a.giocatori.length || a.avversaria.localeCompare(b.avversaria))
-  }, [conPartita])
-
-  // per ruolo: giocatori ordinati
-  const perRuolo = useMemo(() => [1, 2, 3, 4].map(r => ({ ruolo: r, lista: rosa.filter(g => g.ruolo === r) })), [rosa])
-
-  if (!rosa.length) return <Vuoto>Nessun giocatore in rosa.</Vuoto>
-
+/** Partite di Serie A della giornata con i giocatori della rosa schierabili da ciascun lato. */
+export function IncontriSerieA({ incontri, giornataSerieA }) {
   return (
-    <div className="space-y-6">
-      {/* Sintesi casa / trasferta */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Indicatore label="Rosa" value={rosa.length} />
-        <Indicatore label="Squadra di Serie A in casa" value={inCasa} tono="text-grass-400" />
-        <Indicatore label="Squadra di Serie A in trasferta" value={inTrasf} tono="text-sky-400" />
-        <Indicatore label="Senza partita" value={senza} sub="riposo o squadra non determinata" />
-      </div>
-
-      {/* Incontri */}
+    <>
       <Section title="Incontri di Serie A" icon={Calendar} right={giornataSerieA ? `${giornataSerieA}ª giornata` : undefined}>
         {incontri.length === 0 ? <Vuoto>Calendario Serie A non disponibile per questa giornata.</Vuoto> : (
           incontri.map(p => (
@@ -78,8 +50,23 @@ export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
           ))
         )}
       </Section>
+    </>
+  )
+}
 
-      {/* Distribuzione per avversaria */}
+/** Giocatori della rosa raggruppati per squadra avversaria di Serie A. */
+export function GiocatoriPerAvversaria({ rosa }) {
+  const conPartita = useMemo(() => rosa.filter(g => g.avversaria), [rosa])
+  const perAvversaria = useMemo(() => {
+    const m = new Map()
+    for (const g of conPartita) {
+      if (!m.has(g.avversaria)) m.set(g.avversaria, { avversaria: g.avversaria, casa: g.casa, giocatori: [] })
+      m.get(g.avversaria).giocatori.push(g)
+    }
+    return [...m.values()].sort((a, b) => b.giocatori.length - a.giocatori.length || a.avversaria.localeCompare(b.avversaria))
+  }, [conPartita])
+  return (
+    <>
       <Section title="Giocatori per squadra avversaria" icon={Users} right="casa / trasferta della squadra di Serie A">
         {perAvversaria.length === 0 ? <Vuoto>Nessun tuo giocatore ha una partita in questa giornata.</Vuoto> : (
           <div className="p-4 space-y-4">
@@ -109,6 +96,34 @@ export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
           </div>
         )}
       </Section>
+    </>
+  )
+}
+
+export default function PreparaSerieA({ rosa, incontri, giornataSerieA }) {
+  const conPartita = rosa.filter(g => g.avversaria)
+  const inCasa = conPartita.filter(g => g.casa).length
+  const inTrasf = conPartita.length - inCasa
+  const senza = rosa.length - conPartita.length
+
+  // per ruolo: giocatori ordinati
+  const perRuolo = useMemo(() => [1, 2, 3, 4].map(r => ({ ruolo: r, lista: rosa.filter(g => g.ruolo === r) })), [rosa])
+
+  if (!rosa.length) return <Vuoto>Nessun giocatore in rosa.</Vuoto>
+
+  return (
+    <div className="space-y-6">
+      {/* Sintesi casa / trasferta */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <Indicatore label="Rosa" value={rosa.length} />
+        <Indicatore label="Squadra di Serie A in casa" value={inCasa} tono="text-grass-400" />
+        <Indicatore label="Squadra di Serie A in trasferta" value={inTrasf} tono="text-sky-400" />
+        <Indicatore label="Senza partita" value={senza} sub="riposo o squadra non determinata" />
+      </div>
+
+      <IncontriSerieA incontri={incontri} giornataSerieA={giornataSerieA} />
+
+      <GiocatoriPerAvversaria rosa={rosa} />
 
       {/* Avversaria di ciascun giocatore */}
       <Section title="Avversaria di ogni giocatore" icon={ListChecks}>

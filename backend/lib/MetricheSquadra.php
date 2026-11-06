@@ -41,10 +41,15 @@ function ms_def(string $key, string $label, string $gruppo, string $agg, string 
 }
 
 /** Catalogo completo, nell'ordine in cui la UI lo presenta. */
-function ms_catalogo(): array
+function ms_catalogo(bool $champ = false): array
 {
     $c = [];
     $G = "Risultati";
+    // Posizione in classifica: solo campionato (la Champions ha gironi, non una classifica unica)
+    if (!$champ) {
+        $c[] = ms_def("posizione", "Posizione in classifica", $G, "last", "down", "", 0,
+                      "Posizione dopo ogni giornata (classifica ricostruita dai risultati: punti, gol fatti, gol subiti; senza penalità)");
+    }
     $c[] = ms_def("punti",         "Punti",            $G, "sum",  "up",      "", 0);
     $c[] = ms_def("punti_partita", "Punti a partita",  $G, "mean", "up",      "", 2);
     $c[] = ms_def("vittorie",      "Vittorie",         $G, "sum",  "up",      "", 0);
@@ -118,6 +123,40 @@ function ms_benchmark(array $valori): array
         "min"     => round($v[0], 2),
         "max"     => round($v[$n - 1], 2),
     ];
+}
+
+// ── Posizione in classifica ──────────────────────────────────
+
+/**
+ * Posizione in classifica di ogni squadra dopo ogni giornata pubblica del campionato:
+ * id_squadra => [giornata => posizione]. Stesso ordinamento di generale.php
+ * (punti, gol fatti, gol subiti); non considera le penalità.
+ */
+function ms_posizioni(int $stagione, callable $pub): array
+{
+    $perGiornata = [];
+    foreach (query_all("SELECT giornata, id_squadra, punti, golf, gols
+                        FROM NEW_RISULTATI WHERE stagione = $stagione ORDER BY giornata") as $r) {
+        if (!$pub((int) $r["giornata"])) continue;
+        $perGiornata[(int) $r["giornata"]][] = $r;
+    }
+    ksort($perGiornata);
+    $tot = [];
+    $out = [];
+    foreach ($perGiornata as $g => $righe) {
+        foreach ($righe as $r) {
+            $id = (int) $r["id_squadra"];
+            if (!isset($tot[$id])) $tot[$id] = ["id" => $id, "punti" => 0, "golf" => 0, "gols" => 0];
+            $tot[$id]["punti"] += (int) $r["punti"];
+            $tot[$id]["golf"]  += (int) $r["golf"];
+            $tot[$id]["gols"]  += (int) $r["gols"];
+        }
+        $ord = array_values($tot);
+        usort($ord, fn($a, $b) => [$b["punti"], $b["golf"], $b["gols"], $a["id"]]
+                              <=> [$a["punti"], $a["golf"], $a["gols"], $b["id"]]);
+        foreach ($ord as $pos => $t) $out[$t["id"]][$g] = $pos + 1;
+    }
+    return $out;
 }
 
 // ── Valori per partita ───────────────────────────────────────
@@ -219,7 +258,8 @@ function ms_voti_reparti(int $stagione, bool $champ, callable $pub): array
  */
 function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre): array
 {
-    $catalogo = ms_catalogo();
+    $catalogo = ms_catalogo($champ);
+    $posizioni = $champ ? [] : ms_posizioni($stagione, $pub);
 
     $perSq = [];
     $giornateSet = [];
@@ -247,6 +287,8 @@ function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre): 
                 foreach ($perSq[$id]["_giornate"] as $g) {
                     $perG[$g] = $reparti[$id][(int) $m[1]][$g][$campo] ?? null;
                 }
+            } elseif ($k === "posizione") {
+                foreach ($perSq[$id]["_giornate"] as $g) $perG[$g] = $posizioni[$id][$g] ?? null;
             } else {
                 $perG = $perSq[$id][$k] ?? [];
             }

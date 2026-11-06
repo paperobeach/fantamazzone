@@ -9,7 +9,7 @@
 // `ctx` = { data, me, sel } (data = risposta di dashboard_metriche.php)
 // ============================================================
 import { useState } from 'react'
-import { CheckCircle2, Circle, X, Swords, TrendingUp, Plus, ChevronUp, Sparkles } from 'lucide-react'
+import { CheckCircle2, Circle, X, Swords, TrendingUp, Plus, ChevronUp, ChevronDown, Sparkles } from 'lucide-react'
 import { Section } from './shared'
 import {
   infoMetrica, fmtVal, fmtDelta, tonoDelta, gruppiMetriche, mappaDef, METRICHE_SUGGERITE,
@@ -161,9 +161,11 @@ export function BarraSelezione({ ctx, onConfronta, onAndamento }) {
 
 // ── Selettore per Confronta e Andamento ──────────────────────
 
-export function SelettoreMetriche({ ctx, titolo = 'Statistiche da analizzare' }) {
+export function SelettoreMetriche({ ctx, titolo = 'Statistiche da analizzare', comprimibile = false, apertoIniziale = true }) {
   const { chiavi, toggle, aggiungi, svuota } = ctx.sel
   const [aperto, setAperto] = useState(chiavi.length === 0)
+  const [espanso, setEspanso] = useState(apertoIniziale)
+  const corpoVisibile = !comprimibile || espanso
   const defs = mappaDef(ctx.data)
   const gruppi = gruppiMetriche(ctx.data)
 
@@ -171,15 +173,30 @@ export function SelettoreMetriche({ ctx, titolo = 'Statistiche da analizzare' })
     <Section title={titolo} icon={Sparkles}
              right={
                <span className="inline-flex items-center gap-3">
-                 {chiavi.length > 0 && (
+                 {corpoVisibile && chiavi.length > 0 && (
                    <button type="button" onClick={svuota} className="text-slate-500 hover:text-slate-300">Svuota</button>
                  )}
-                 <button type="button" onClick={() => setAperto(a => !a)}
-                         className="inline-flex items-center gap-1 text-grass-400 hover:text-grass-300">
-                   {aperto ? <><ChevronUp className="w-3.5 h-3.5" /> Chiudi</> : <><Plus className="w-3.5 h-3.5" /> Aggiungi</>}
-                 </button>
+                 {corpoVisibile && (
+                   <button type="button" onClick={() => setAperto(a => !a)}
+                           className="inline-flex items-center gap-1 text-grass-400 hover:text-grass-300">
+                     {aperto ? <><ChevronUp className="w-3.5 h-3.5" /> Chiudi</> : <><Plus className="w-3.5 h-3.5" /> Aggiungi</>}
+                   </button>
+                 )}
+                 {comprimibile && (
+                   <button type="button" onClick={() => setEspanso(e => !e)} aria-expanded={espanso}
+                           aria-label={espanso ? 'Comprimi' : 'Espandi'} className="text-slate-400 hover:text-white">
+                     {espanso ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                   </button>
+                 )}
                </span>
              }>
+      {!corpoVisibile ? (
+        <div className="px-4 py-3 flex flex-wrap gap-1.5">
+          {chiavi.length > 0
+            ? chiavi.map(k => defs[k] && <ChipSelezionata key={k} def={defs[k]} onRemove={() => toggle(k)} />)
+            : <p className="text-sm text-slate-500">Nessuna statistica selezionata.</p>}
+        </div>
+      ) : (
       <div className="p-4 space-y-4">
         {chiavi.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
@@ -225,6 +242,7 @@ export function SelettoreMetriche({ ctx, titolo = 'Statistiche da analizzare' })
           </div>
         )}
       </div>
+      )}
     </Section>
   )
 }

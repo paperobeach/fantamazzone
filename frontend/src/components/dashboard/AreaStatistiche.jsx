@@ -41,75 +41,6 @@ function BloccoCasaTrasferta({ titolo, icona: Icona, r, chips }) {
   )
 }
 
-// ── Pagina unica: sezioni ────────────────────────────────────
-
-const NAV = [
-  { id: 'risultati', label: 'Risultati' },
-  { id: 'gol',       label: 'Gol' },
-  { id: 'reparti',   label: 'Reparti' },
-  { id: 'giocatori', label: 'Top / Flop' },
-]
-
-const vaiA = id => document.getElementById(`stat-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-
-/**
- * Barra delle sezioni: resta agganciata sotto l'intestazione della squadra mentre si scorre
- * (la posizione segue l'altezza dell'intestazione, vedi --barra-squadra-h in HeaderSquadra)
- * e evidenzia la sezione attualmente in vista.
- */
-function BarraNavigazione() {
-  const [attiva, setAttiva] = useState(NAV[0].id)
-  const barraRef = useRef(null)
-
-  useEffect(() => {
-    let raf = 0
-    const calcola = () => {
-      raf = 0
-      const soglia = (barraRef.current?.getBoundingClientRect().bottom ?? 0) + 24
-      let corrente = NAV[0].id
-      NAV.forEach(n => {
-        const el = document.getElementById(`stat-${n.id}`)
-        if (el && el.getBoundingClientRect().top <= soglia) corrente = n.id
-      })
-      // In fondo alla pagina l'ultima sezione può non raggiungere la soglia
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
-        const ultima = [...NAV].reverse().find(n => document.getElementById(`stat-${n.id}`))
-        if (ultima) corrente = ultima.id
-      }
-      setAttiva(corrente)
-    }
-    const richiedi = () => { if (!raf) raf = requestAnimationFrame(calcola) }
-    window.addEventListener('scroll', richiedi, { passive: true })
-    window.addEventListener('resize', richiedi)
-    calcola()
-    return () => {
-      window.removeEventListener('scroll', richiedi)
-      window.removeEventListener('resize', richiedi)
-      if (raf) cancelAnimationFrame(raf)
-    }
-  }, [])
-
-  return (
-    <div ref={barraRef}
-         className="nav-sezioni-sticky sticky z-[15] -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2
-                    bg-pitch-950/90 backdrop-blur supports-[backdrop-filter]:bg-pitch-950/70">
-      <div className="overflow-x-auto -mx-1 px-1">
-        <div className="flex gap-1.5 w-max">
-          {NAV.map(n => (
-            <button key={n.id} type="button" onClick={() => vaiA(n.id)} aria-current={attiva === n.id ? 'true' : undefined}
-                    className={`px-3 py-1.5 rounded-full border text-xs transition-colors whitespace-nowrap ${
-                      attiva === n.id
-                        ? 'border-grass-500/50 text-grass-300 bg-grass-500/10'
-                        : 'border-white/10 text-slate-400 hover:text-white hover:border-white/25'}`}>
-              {n.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function Intro({ ctx }) {
   return (
     <div className="flex items-start gap-3 rounded-xl border border-white/5 bg-pitch-900/60 px-4 py-3 text-xs text-slate-500">
@@ -266,9 +197,19 @@ function CardReparto({ reparto, ctx, aperto, onDettaglio }) {
   )
 }
 
-function SezioneReparti({ ctx, stagione, idSquadra, competizione }) {
+function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
   const [aperto, setAperto] = useState(null)
+  const dettaglioRef = useRef(null)
   const rep = REPARTI.find(r => r.ruolo === aperto)
+
+  // Il dettaglio compare sotto le quattro card: lo si porta in vista, altrimenti
+  // (soprattutto da mobile) sembra che il pulsante non faccia nulla.
+  useEffect(() => {
+    if (aperto === null) return
+    const t = setTimeout(() => dettaglioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+    return () => clearTimeout(t)
+  }, [aperto])
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -282,16 +223,19 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione }) {
         come media delle medie di partita.
       </p>
       {rep && (
-        <Section title={`Dettaglio ${rep.nome.toLowerCase()}`} icon={Shield}
-                 right={
-                   <button type="button" onClick={() => setAperto(null)} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-300">
-                     <X className="w-3.5 h-3.5" /> Chiudi
-                   </button>
-                 }>
-          <div className="p-4">
-            <AreaRuoli stagione={stagione} idSquadra={idSquadra} competizione={competizione} repartoFisso={rep.ruolo} />
-          </div>
-        </Section>
+        <div ref={dettaglioRef} className="sezione-scroll">
+          <Section title={`Dettaglio ${rep.nome.toLowerCase()}`} icon={Shield}
+                   right={
+                     <button type="button" onClick={() => setAperto(null)} className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-300">
+                       <X className="w-3.5 h-3.5" /> Chiudi
+                     </button>
+                   }>
+            <div className="p-4">
+              <AreaRuoli key={rep.ruolo} stagione={stagione} idSquadra={idSquadra} competizione={competizione}
+                         vista={vista} repartoFisso={rep.ruolo} />
+            </div>
+          </Section>
+        </div>
       )}
     </div>
   )
@@ -335,7 +279,7 @@ function TopFlopPropri({ top, flop }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-export default function AreaStatistiche({ d, stagione, idSquadra, competizione, ctx }) {
+export default function AreaStatistiche({ d, stagione, idSquadra, competizione, vista = 'ROSA', ctx }) {
   const champ = competizione === 'CHAMP'
   const { data: s, loading, error, refetch } = useFetch(
     () => getDashboardStatistiche(stagione, idSquadra, competizione),
@@ -347,7 +291,6 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
 
   return (
     <div className="space-y-6">
-      <BarraNavigazione />
       <Intro ctx={ctx} />
 
       <div id="stat-risultati" className="sezione-scroll space-y-3">
@@ -369,7 +312,7 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
 
       <div id="stat-reparti" className="sezione-scroll space-y-3">
         <h2 className="text-xs uppercase tracking-widest text-slate-500">Reparti</h2>
-        <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} />
+        <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} />
       </div>
 
       <div id="stat-giocatori" className="sezione-scroll space-y-3">

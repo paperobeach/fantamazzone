@@ -12,6 +12,9 @@
 //   forma_avversario   ultime 10 partite dell'avversario nella stessa
 //                      competizione (la UI mostra le ultime 5 o 10)
 //   moduli_avversario  moduli schierati dall'avversario nella stagione
+//   storico            scontri diretti con l'avversario del match (campionato
+//                      E Champions, tutte le stagioni), calcolati sull'avversario
+//                      della competizione selezionata; null se non c'e' match
 //   formazioni         formazione propria e dell'avversario per questo match,
 //                      se inserite (null altrimenti)
 //   rosa               ogni giocatore della rosa con: squadra di Serie A,
@@ -85,7 +88,7 @@ if (!query_one("SELECT id FROM NEW_SQUADRE WHERE id = $idSquadra AND stagione = 
 
 $vuoto = [
     "stagione" => $stagione, "competizione" => $comp, "conclusa" => $conclusa,
-    "match" => null, "forma_avversario" => [], "moduli_avversario" => null,
+    "match" => null, "forma_avversario" => [], "moduli_avversario" => null, "storico" => null,
     "formazioni" => ["mia" => null, "mia_nascosta" => false, "avversario" => null, "avversario_nascosta" => false],
     "giornata_serie_a" => null, "rosa" => [], "incontri_serie_a" => [],
 ];
@@ -228,6 +231,21 @@ if ($match) {
     }
 }
 
+// ── Storico scontri diretti con l'avversario del match ───────
+// Calcolato sull'avversario della competizione selezionata (in Champions e'
+// quello del girone/turno, non quello di campionato: le due squadre si
+// incontrano in Champions solo se sono nello stesso gruppo).
+$storico = null;
+if ($match) {
+    $storico = ["campionato" => null, "champions" => null];
+    $uMe  = query_one("SELECT utenza FROM NEW_UTENZE WHERE stagione = $stagione AND id = $idSquadra LIMIT 1");
+    $uAvv = query_one("SELECT utenza FROM NEW_UTENZE WHERE stagione = $stagione AND id = " . (int) $match["avversario"]["id"] . " LIMIT 1");
+    if ($uMe && $uAvv && $uMe["utenza"] !== null && $uAvv["utenza"] !== null) {
+        $storico["campionato"] = ds_storico("NEW_RISULTATI",       "id_squadra", false, $stagione, $uMe["utenza"], $uAvv["utenza"], $pub);
+        $storico["champions"]  = ds_storico("NEW_RISULTATI_CHAMP", "squadra",    true,  $stagione, $uMe["utenza"], $uAvv["utenza"], $pub);
+    }
+}
+
 // ── Rosa: Serie A, avversarie, medie voto ────────────────────
 
 $tabVoti = $champ ? "NEW_VOTI_CHAMP" : "NEW_VOTI";
@@ -320,6 +338,7 @@ api_success([
     "match"             => $match,
     "forma_avversario"  => $forma,
     "moduli_avversario" => $moduli,
+    "storico"           => $storico,
     "formazioni"        => $formazioni,
     "giornata_serie_a"  => $giornataSerieA,
     "rosa"              => $rosa,

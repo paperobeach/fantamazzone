@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
-  BarChart3, Target, Clock3, TrendingUp, Swords, Dices, History, Wallet, Trophy, Crown,
+  BarChart3, Target, Clock3, TrendingUp, Swords, Dices, History, Wallet,
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
@@ -11,40 +12,12 @@ import AreaStatistiche from '../components/dashboard/AreaStatistiche'
 import AreaPrepara from '../components/dashboard/AreaPrepara'
 import AreaAndamento from '../components/dashboard/AreaAndamento'
 import AreaConfronta from '../components/dashboard/AreaConfronta'
+import { BarraSezioni, SEZIONI_AREA, CONFIG_DEFAULT } from '../components/dashboard/NavSezioni'
 import { BarraSelezione } from '../components/dashboard/SelezioneMetriche'
 import { useSelezioneMetriche } from '../components/dashboard/metriche'
 import {
   AreaStoria, AreaUltimaPartita, AreaInArrivo,
 } from '../components/dashboard/AreeMinori'
-
-// ── Competizione (filtro valido per tutte le aree) ───────────
-
-const COMPETIZIONI = [
-  { value: 'CAMP',  label: 'Campionato', icon: Trophy },
-  { value: 'CHAMP', label: 'Champions',  icon: Crown },
-]
-
-function FiltroCompetizione({ value, onChange }) {
-  return (
-    <div className="inline-flex gap-1 p-1 bg-pitch-900 rounded-xl border border-white/5" role="tablist" aria-label="Competizione">
-      {COMPETIZIONI.map(({ value: v, label, icon: Icon }) => (
-        <button
-          key={v}
-          role="tab"
-          aria-selected={value === v}
-          onClick={() => onChange(v)}
-          className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-            value === v
-              ? v === 'CHAMP' ? 'bg-sky-500 text-pitch-950' : 'bg-grass-500 text-pitch-950'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Icon className="w-4 h-4" /> {label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── Aree ─────────────────────────────────────────────────────
 
@@ -81,13 +54,46 @@ function NavAree({ value, onChange }) {
   )
 }
 
+// ── Configurazione di visualizzazione (rotellina della barra) ──
+// Persistita nella sessione, così tornando indietro da un'altra pagina resta quella scelta.
+
+const CHIAVE_CONFIG = 'fanta_dashboard_config'
+
+function leggiConfig() {
+  try {
+    const c = JSON.parse(sessionStorage.getItem(CHIAVE_CONFIG) || 'null')
+    return {
+      competizione: c?.competizione === 'CHAMP' ? 'CHAMP' : CONFIG_DEFAULT.competizione,
+      vista: c?.vista === 'SCHIERATI' ? 'SCHIERATI' : CONFIG_DEFAULT.vista,
+    }
+  } catch { return CONFIG_DEFAULT }
+}
+
+// Statistiche proposte all'ingresso in Confronta / Andamento quando non ne è stata scelta nessuna
+const DEFAULT_CONFRONTA = ['punti', 'fanta_media', 'fanta_subiti']
+
 // ── Pagina ───────────────────────────────────────────────────
 
 export default function DashboardSquadra() {
   const { utente, ultimaStagione } = useApp()
   const idSquadra = utente?.id ?? null
-  const [area, setArea] = useState('statistiche')
-  const [competizione, setCompetizione] = useState('CAMP')
+
+  // L'area è nell'URL (?area=...): il tasto indietro del browser torna all'area precedente
+  const [params, setParams] = useSearchParams()
+  const areaUrl = params.get('area')
+  const area = AREE.some(a => a.value === areaUrl) ? areaUrl : 'statistiche'
+  const setArea = useCallback(v => {
+    setParams(v === 'statistiche' ? {} : { area: v })   // nuova voce di cronologia
+  }, [setParams])
+  useEffect(() => { window.scrollTo(0, 0) }, [area])
+
+  const [config, setConfigState] = useState(leggiConfig)
+  const setConfig = useCallback(c => {
+    setConfigState(c)
+    try { sessionStorage.setItem(CHIAVE_CONFIG, JSON.stringify(c)) } catch { /* storage non disponibile */ }
+  }, [])
+  const competizione = config.competizione
+  const vista = config.vista
 
   const { data: d, loading, error, refetch } = useFetch(
     ultimaStagione && idSquadra ? () => getDashboardSquadra(ultimaStagione, idSquadra) : null,
@@ -109,6 +115,18 @@ export default function DashboardSquadra() {
     sel,
   }
 
+  // Proposte di default: Andamento = posizione in classifica (solo campionato);
+  // Confronta = punti, fantapunti e fantapunti subiti rispetto al benchmark di lega.
+  useEffect(() => {
+    if (area !== 'andamento' && area !== 'confronta') return
+    const champ = competizione === 'CHAMP'
+    const vuota = sel.chiavi.length === 0 || (champ && sel.chiavi.every(k => k === 'posizione'))
+    if (!vuota) return
+    if (sel.chiavi.length) sel.svuota()
+    if (area === 'confronta') DEFAULT_CONFRONTA.forEach(sel.aggiungi)
+    else sel.aggiungi(champ ? 'punti' : 'posizione')
+  }, [area, competizione]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (loading || (!d && !error)) return <LoadingState label="Caricamento dashboard..." />
   if (error) return <ErrorState message={error} onRetry={refetch} />
 
@@ -118,20 +136,19 @@ export default function DashboardSquadra() {
     <div className="animate-fade-up min-w-0 max-w-full [&_.grid>*]:min-w-0">
       <HeaderSquadra d={d} stagione={d.stagione} idSquadra={idSquadra} />
 
-      <div className="mt-4 flex flex-col lg:flex-row lg:items-center gap-3 mb-6">
-        <FiltroCompetizione value={competizione} onChange={setCompetizione} />
-        <div className="lg:flex-1 min-w-0">
-          <NavAree value={area} onChange={setArea} />
-        </div>
+      <div className="mt-4 mb-3">
+        <NavAree value={area} onChange={setArea} />
       </div>
 
+      <BarraSezioni sezioni={SEZIONI_AREA[area] ?? []} config={config} onConfig={setConfig} />
+
       {area === 'statistiche' && (
-        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} ctx={ctx} />
+        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} ctx={ctx} />
       )}
       {area === 'statistiche' && (
         <BarraSelezione ctx={ctx} onConfronta={() => setArea('confronta')} onAndamento={() => setArea('andamento')} />
       )}
-      {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} />}
+      {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} />}
       {area === 'ultima'    && <AreaUltimaPartita d={d} competizione={competizione} />}
       {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} ctx={ctx} />}
       {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} ctx={ctx} />}

@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { Trophy, Crown, ClipboardList, Swords, Home, Plane, EyeOff, LayoutGrid, Timer } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardPrepara } from '../../api/client'
-import { LoadingState, ErrorState, EmptyState, RoleBadge, TabBar } from '../ui'
+import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
 import TeamLogo from '../TeamLogo'
 import { NomeConBandiera } from '../Bandiera'
 import { useApp } from '../../context/AppContext'
 import { PitchLineup } from '../PitchLineup'
 import PreparaTop11 from './PreparaTop11'
-import PreparaSerieA from './PreparaSerieA'
+import PreparaSerieA, { IncontriSerieA, GiocatoriPerAvversaria } from './PreparaSerieA'
 import {
   Section, Vuoto, BarraPerc, PallinoForma, RigaRisultato, EsitoIcon, CoachPhoto, fmt, fmtDataOra,
 } from './shared'
@@ -228,7 +228,17 @@ function SezioneAvversario({ p, d, champ }) {
         <ModuliAvversario moduli={p.moduli_avversario} nome={a.nome} />
       </div>
 
+      <IncontriSerieA incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />
+      <GiocatoriPerAvversaria rosa={p.rosa} />
+
       <FormazioniScontro p={p} m={m} d={d} />
+
+      {p.storico && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <StoricoScontri dati={p.storico.campionato} titolo="Storico in campionato" icona={Trophy} />
+          <StoricoScontri dati={p.storico.champions}  titolo="Storico in Champions"  icona={Crown} />
+        </div>
+      )}
 
       {pr && (
         <>
@@ -238,10 +248,6 @@ function SezioneAvversario({ p, d, champ }) {
               ? <Lineup giocatori={uf.giocatori} conVoti />
               : <Vuoto>Nessuna formazione disponibile.</Vuoto>}
           </Section>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <StoricoScontri dati={pr.storico.campionato} titolo="Storico in campionato" icona={Trophy} />
-            <StoricoScontri dati={pr.storico.champions}  titolo="Storico in Champions"  icona={Crown} />
-          </div>
         </>
       )}
     </div>
@@ -249,15 +255,18 @@ function SezioneAvversario({ p, d, champ }) {
 }
 
 // ── Area "Prepara la prossima partita" ───────────────────────
+// Una sola pagina con le sezioni L'avversario, Top 11 e Serie A (navigabili dalla barra fissa).
 
-const SEZIONI = [
-  { value: 'avversario', label: "L'avversario" },
-  { value: 'top11',      label: 'Top 11' },
-  { value: 'serie_a',    label: 'Serie A' },
-]
+function BloccoSezione({ id, titolo, children }) {
+  return (
+    <div id={id} className="sezione-scroll space-y-3">
+      <h2 className="text-xs uppercase tracking-widest text-slate-500">{titolo}</h2>
+      {children}
+    </div>
+  )
+}
 
-export default function AreaPrepara({ d, stagione, idSquadra, competizione }) {
-  const [sezione, setSezione] = useState('avversario')
+export default function AreaPrepara({ d, stagione, idSquadra, competizione, vista = 'ROSA' }) {
   const champ = competizione === 'CHAMP'
   const { data: p, loading, error, refetch } = useFetch(
     () => getDashboardPrepara(stagione, idSquadra, competizione),
@@ -266,23 +275,20 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione }) {
 
   if (d.formazione.stagione_conclusa) return <EmptyState label="Campionato concluso: nessuna prossima partita." />
 
+  if (loading || (!p && !error) || (p && p.competizione !== competizione)) return <LoadingState label="Preparazione della partita..." />
+  if (error) return <ErrorState message={error} onRetry={refetch} />
+
   return (
     <div className="space-y-6">
-      <div className="overflow-x-auto">
-        <TabBar tabs={SEZIONI} active={sezione} onChange={setSezione} />
-      </div>
-      {loading || (!p && !error) ? <LoadingState label="Preparazione della partita..." />
-        : error ? <ErrorState message={error} onRetry={refetch} />
-        : p.competizione !== competizione ? <LoadingState label="Preparazione della partita..." />
-        : (
-          <>
-            {sezione === 'avversario' && <SezioneAvversario p={p} d={d} champ={champ} />}
-            {sezione === 'top11' && <PreparaTop11 rosa={p.rosa} competizione={competizione} rosaNonDisponibile={p.rosa_non_disponibile} />}
-            {sezione === 'serie_a' && (
-              <PreparaSerieA rosa={p.rosa} incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />
-            )}
-          </>
-        )}
+      <BloccoSezione id="prep-avversario" titolo="L'avversario">
+        <SezioneAvversario p={p} d={d} champ={champ} />
+      </BloccoSezione>
+      <BloccoSezione id="prep-top11" titolo="Top 11">
+        <PreparaTop11 rosa={p.rosa} competizione={competizione} vista={vista} rosaNonDisponibile={p.rosa_non_disponibile} />
+      </BloccoSezione>
+      <BloccoSezione id="prep-serie_a" titolo="Serie A">
+        <PreparaSerieA rosa={p.rosa} incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />
+      </BloccoSezione>
     </div>
   )
 }

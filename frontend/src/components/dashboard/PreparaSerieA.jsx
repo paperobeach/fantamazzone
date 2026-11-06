@@ -27,10 +27,10 @@ function Chips({ giocatori, allinea }) {
 }
 
 /** Partite di Serie A della giornata con i giocatori della rosa schierabili da ciascun lato. */
-export function IncontriSerieA({ incontri, giornataSerieA }) {
+export function IncontriSerieA({ incontri, giornataSerieA, titolo = 'Incontri di Serie A' }) {
   return (
     <>
-      <Section title="Incontri di Serie A" icon={Calendar} right={giornataSerieA ? `${giornataSerieA}ª giornata` : undefined}>
+      <Section title={titolo} icon={Calendar} right={giornataSerieA ? `${giornataSerieA}ª giornata` : undefined}>
         {incontri.length === 0 ? <Vuoto>Calendario Serie A non disponibile per questa giornata.</Vuoto> : (
           incontri.map(p => (
             <div key={p.n_partita} className="px-4 py-3 border-b border-white/[0.03] last:border-0">
@@ -55,7 +55,7 @@ export function IncontriSerieA({ incontri, giornataSerieA }) {
 }
 
 /** Giocatori della rosa raggruppati per squadra avversaria di Serie A. */
-export function GiocatoriPerAvversaria({ rosa }) {
+export function GiocatoriPerAvversaria({ rosa, titolo = 'Giocatori per squadra avversaria', vuoto = 'Nessun tuo giocatore ha una partita in questa giornata.' }) {
   const conPartita = useMemo(() => rosa.filter(g => g.avversaria), [rosa])
   const perAvversaria = useMemo(() => {
     const m = new Map()
@@ -67,8 +67,8 @@ export function GiocatoriPerAvversaria({ rosa }) {
   }, [conPartita])
   return (
     <>
-      <Section title="Giocatori per squadra avversaria" icon={Users} right="casa / trasferta della squadra di Serie A">
-        {perAvversaria.length === 0 ? <Vuoto>Nessun tuo giocatore ha una partita in questa giornata.</Vuoto> : (
+      <Section title={titolo} icon={Users} right="casa / trasferta della squadra di Serie A">
+        {perAvversaria.length === 0 ? <Vuoto>{vuoto}</Vuoto> : (
           <div className="p-4 space-y-4">
             {perAvversaria.map(a => (
               <div key={a.avversaria}>

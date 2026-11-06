@@ -228,8 +228,11 @@ function SezioneAvversario({ p, d, champ }) {
         <ModuliAvversario moduli={p.moduli_avversario} nome={a.nome} />
       </div>
 
-      <IncontriSerieA incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />
-      <GiocatoriPerAvversaria rosa={p.rosa} />
+      <IncontriSerieA incontri={p.incontri_avversario ?? []} giornataSerieA={p.giornata_serie_a}
+                      titolo={`Incontri di Serie A · giocatori di ${a.nome}`} />
+      <GiocatoriPerAvversaria rosa={p.rosa_avversario ?? []}
+                              titolo={`Giocatori di ${a.nome} per squadra avversaria`}
+                              vuoto={`Nessun giocatore di ${a.nome} ha una partita in questa giornata.`} />
 
       <FormazioniScontro p={p} m={m} d={d} />
 

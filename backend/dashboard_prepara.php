@@ -31,6 +31,10 @@
 //                      mancanti), altrimenti null
 //   incontri_serie_a   partite di Serie A della giornata, con i giocatori
 //                      della rosa schierabili da ciascun lato
+//   rosa_avversario    giocatori della rosa dell'AVVERSARIO del match (squadra di
+//                      Serie A, avversaria della giornata, casa/trasferta);
+//                      [] se non c'e' match
+//   incontri_avversario  come incontri_serie_a, ma con i giocatori dell'avversario
 //
 // Giornata di Serie A = giornata di fantacampionato + GIORNATA_SERIE_A_INIZIO
 // - 1 (vedi ds_inizio_giornata). Per la Champions si usa la giornata del match.
@@ -91,6 +95,7 @@ $vuoto = [
     "match" => null, "forma_avversario" => [], "moduli_avversario" => null, "storico" => null,
     "formazioni" => ["mia" => null, "mia_nascosta" => false, "avversario" => null, "avversario_nascosta" => false],
     "giornata_serie_a" => null, "rosa" => [], "incontri_serie_a" => [],
+    "rosa_avversario" => [], "incontri_avversario" => [],
 ];
 if ($conclusa) api_success($vuoto);
 
@@ -331,6 +336,47 @@ $incontri = array_map(fn($p) => [
     "giocatori_ospite" => $perNome[dp_norm($p["squadra_ospite"])] ?? [],
 ], $partiteSerieA);
 
+// ── Rosa dell'avversario e suoi giocatori negli incontri di Serie A ──
+
+$rosaAvv = [];
+if ($match) {
+    $idAvvRosa = (int) $match["avversario"]["id"];
+    foreach (query_all("SELECT id, descrizione, ruolo FROM NEW_GIOCATORI
+                        WHERE stagione = $stagione AND squadra = $idAvvRosa
+                        ORDER BY ruolo, descrizione") as $g) {
+        $id = (int) $g["id"];
+        if (isset($fuoriLista[$id])) continue;
+        $sa  = $squadreSerieA[$id] ?? null;
+        $inc = $sa !== null ? ($perSquadraSerieA[dp_norm($sa)] ?? null) : null;
+        $rosaAvv[] = [
+            "id_giocatore" => $id,
+            "nome"         => $g["descrizione"],
+            "ruolo"        => (int) $g["ruolo"],
+            "serie_a"      => $sa !== null && trim($sa) !== "" ? $sa : null,
+            "avversaria"   => $inc["avversaria"] ?? null,
+            "casa"         => $inc["casa"] ?? null,
+            "data"         => $inc["data"] ?? null,
+            "ora"          => $inc["ora"] ?? null,
+        ];
+    }
+}
+$perNomeAvv = [];
+foreach ($rosaAvv as $g) {
+    if ($g["serie_a"] === null) continue;
+    $perNomeAvv[dp_norm($g["serie_a"])][] = [
+        "id_giocatore" => $g["id_giocatore"], "nome" => $g["nome"], "ruolo" => $g["ruolo"],
+    ];
+}
+$incontriAvv = array_map(fn($p) => [
+    "n_partita"      => (int) $p["n_partita"],
+    "data"           => $p["data_partita"],
+    "ora"            => $p["ora_partita"],
+    "casa"           => $p["squadra_casa"],
+    "ospite"         => $p["squadra_ospite"],
+    "giocatori_casa"   => $perNomeAvv[dp_norm($p["squadra_casa"])] ?? [],
+    "giocatori_ospite" => $perNomeAvv[dp_norm($p["squadra_ospite"])] ?? [],
+], $partiteSerieA);
+
 api_success([
     "stagione"          => $stagione,
     "competizione"      => $comp,
@@ -344,4 +390,6 @@ api_success([
     "rosa"              => $rosa,
     "rosa_non_disponibile" => $rosaNonDisponibile,
     "incontri_serie_a"  => $incontri,
+    "rosa_avversario"   => $rosaAvv,
+    "incontri_avversario" => $incontriAvv,
 ]);

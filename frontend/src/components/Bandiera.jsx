@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import TeamLogo from './TeamLogo'
 import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
@@ -67,13 +68,15 @@ export function BandieraTonda({ id, children }) {
 // valido solo nella propria stagione, il link porta con sé la stagione:
 // `stagione` (se omessa, quella scelta nell'app). `link={false}` disattiva il
 // link (es. elenchi in cui il click sul nome ha già un altro significato).
-export function NomeConBandiera({ id, nome, className = '', link = true, stagione }) {
+export function NomeConBandiera({ id, nome, className = '', link = true, stagione, logoSquadra, nomeSquadra }) {
   const { stagione: stagioneApp } = useApp()
   const st = stagione ?? stagioneApp
   const cliccabile = link && Number(id) > 0 && !!st
   return (
     <span className={`flex items-center gap-1.5 min-w-0 ${className}`}>
-      <Bandiera id={id} />
+      {logoSquadra !== undefined
+        ? <TeamLogo logo={logoSquadra} nome={nomeSquadra} size="xs" />
+        : <Bandiera id={id} />}
       {cliccabile ? (
         <Link
           to={`/giocatori/${id}?stagione=${st}`}
@@ -85,6 +88,7 @@ export function NomeConBandiera({ id, nome, className = '', link = true, stagion
       ) : (
         <span className="truncate">{nome}</span>
       )}
+      {nomeSquadra && <span className="text-[10px] text-slate-500 truncate flex-shrink-[2]">· {nomeSquadra}</span>}
     </span>
   )
 }

@@ -43,7 +43,7 @@ export function OrdineRigoristi({ rosa, titolari, panchina, ordine, onChange, re
     <li className="flex items-center gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
       <span className="w-6 text-right font-mono text-xs text-slate-500">{n}</span>
       <span className="w-5 text-center text-[10px] font-mono text-slate-500">{ROLE_LABEL[String(byId[id]?.ruolo)] ?? ''}</span>
-      <NomeConBandiera link={false} id={id} nome={byId[id]?.descrizione ?? byId[id]?.nome ?? `#${id}`} className="flex-1 text-sm text-slate-300" />
+      <NomeConBandiera link={false} id={id} nome={byId[id]?.descrizione ?? byId[id]?.nome ?? `#${id}`} className="flex-1 text-sm text-slate-300" logoSquadra={byId[id]?.logo_squadra} nomeSquadra={byId[id]?.squadra_asg} />
       {!readOnly && (
         <span className="flex items-center gap-1">
           <button type="button" disabled={idx === 0} onClick={() => sposta(lista, altra, titolariSono, idx, -1)}

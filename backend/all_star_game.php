@@ -184,6 +184,8 @@ if ($modo === "contesto") {
         "modificabile"  => $mod["ok"] && !$stato["inviata"],
         "motivo_blocco" => $mod["motivo"],
         "limite_inserimento" => $blocco["limite"],
+        "giornate_chiuse" => count(asg_giornate_chiuse($stagione)),
+        "soglia_presenze_tribuna" => ASG_SOGLIA_PRESENZE_TRIBUNA,
         "rosa"          => asg_rosa($stagione, $idLato),
         "formazione"    => $righe,
         "rigoristi"     => asg_rigoristi($stagione, $giornata, $idLato),

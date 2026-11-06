@@ -14,10 +14,19 @@ const MOTIVO_EMAIL_LABEL = {
 }
 
 // Stato locale (modulo, titolari, panchina, tribuna) dalle righe salvate (MAGLIA 1..11 titolari, 12+ panchina)
-function costruisciStato(fonte, rosa) {
+function costruisciStato(fonte, rosa, soglia) {
   const byId = Object.fromEntries(rosa.map(p => [p.id, p]))
   if (!fonte || fonte.length === 0) {
-    return { modulo: MODULO_DEFAULT, titolari: [], panchina: ordinaPerRuoloDefault(rosa.map(p => p.id), byId), tribuna: [] }
+    // Proposta iniziale: chi ha meno del X% di presenze nel fantacampionato parte in tribuna
+    // (solo se c'è già almeno una giornata chiusa su cui misurarle)
+    const pochePresenze = p => soglia != null && p.pct_presenze != null && p.pct_presenze < soglia
+    const tribuna = rosa.filter(pochePresenze).map(p => p.id)
+    const inTribuna = new Set(tribuna)
+    return {
+      modulo: MODULO_DEFAULT, titolari: [],
+      panchina: ordinaPerRuoloDefault(rosa.filter(p => !inTribuna.has(p.id)).map(p => p.id), byId),
+      tribuna,
+    }
   }
   const ordinati = [...fonte].sort((a, b) => a.maglia - b.maglia)
   const titolari = ordinati.filter(r => r.maglia <= 11).map(r => r.id_giocatore).filter(id => byId[id])
@@ -45,7 +54,8 @@ export function FormazioneAllStarGame({ stagione, giornata, idSquadra, ctx, onRe
     const perId = new Map((ctx.avversarie ?? []).map(a => [Number(a.id_giocatore), a]))
     return (ctx.rosa ?? []).map(p => {
       const a = perId.get(Number(p.id))
-      return a ? { ...p, serie_a: a.serie_a, avversaria: a.avversaria, casa: a.casa, data: a.data, ora: a.ora } : p
+      const base = { ...p, squadra_asg: p.squadra }
+      return a ? { ...base, serie_a: a.serie_a, avversaria: a.avversaria, casa: a.casa, data: a.data, ora: a.ora } : base
     })
   }, [ctx.rosa, ctx.avversarie])
 
@@ -58,7 +68,7 @@ export function FormazioneAllStarGame({ stagione, giornata, idSquadra, ctx, onRe
   // Ricarica lo stato locale quando cambia la formazione sul server
   useEffect(() => {
     if (rosa.length === 0) return
-    setForma(costruisciStato(ctx.formazione, rosa))
+    setForma(costruisciStato(ctx.formazione, rosa, ctx.giornate_chiuse > 0 ? ctx.soglia_presenze_tribuna : null))
     setRigoristi(ctx.rigoristi?.length ? ctx.rigoristi : null)
     setModificata(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,6 +132,9 @@ export function FormazioneAllStarGame({ stagione, giornata, idSquadra, ctx, onRe
           dell'{ctx.nome_lato}. La formazione è unica per la compagine: l'ok di ogni fantallenatore è una delega a decidere
           per lui. Quando tutti hanno dato l'ok, uno qualsiasi può salvare e inviare la formazione, che viene notificata
           via mail a tutti i fantallenatori. In caso di parità: supplementari e rigori.
+          {ctx.giornate_chiuse > 0 && !ctx.formazione?.length && (
+            <> Come proposta iniziale, chi ha meno del {ctx.soglia_presenze_tribuna}% di presenze nel fantacampionato è in tribuna.</>
+          )}
         </p>
       </div>
 

@@ -68,6 +68,9 @@ const ASG_ID_OVEST = 902;
 /** Codice usato come "girone" nella valutazione di supplementari e rigori. */
 const ASG_CODICE_TURNO = "AS";
 
+/** Sotto questa % di presenze nel fantacampionato il giocatore è proposto di default in tribuna. */
+const ASG_SOGLIA_PRESENZE_TRIBUNA = 20;
+
 /** Partita su campo neutro: il fattore casa non si applica. */
 const ASG_FATTORE_CASA_APPLICATO = false;
 
@@ -148,6 +151,33 @@ function asg_ids_squadre_lato(int $stagione, int $idLato): array
     return array_map(fn($s) => $s["id"], asg_squadre_lato($stagione, $idLato));
 }
 
+/** Giornate di fantacampionato chiuse della stagione. */
+function asg_giornate_chiuse(int $stagione): array
+{
+    return array_map(fn($r) => (int) $r["giornata"], query_all(
+        "SELECT giornata FROM NEW_CALENDARIO_CK WHERE stagione = $stagione AND ck_giocata = 'S'"));
+}
+
+/**
+ * Presenze nel fantacampionato: giornate chiuse in cui il giocatore ha GIOCATO (voti del
+ * fantacampionato, NEW_VOTI con giocata = 1: titolare con voto o subentrato) con la
+ * squadra che lo possiede ora o con una squadra precedente, sul totale delle giornate
+ * chiuse. Champions e All Star Game non contano; una giornata vale una sola volta.
+ * @return array<int,int> id giocatore => presenze
+ */
+function asg_presenze(int $stagione, array $chiuse): array
+{
+    if (!$chiuse) return [];
+    $out = [];
+    foreach (query_all("SELECT id_giocatore, COUNT(DISTINCT giornata) AS n FROM NEW_VOTI
+                        WHERE stagione = $stagione AND giocata = 1 AND id_giocatore > 0
+                          AND giornata IN (" . implode(",", $chiuse) . ")
+                        GROUP BY id_giocatore") as $r) {
+        $out[(int) $r["id_giocatore"]] = (int) $r["n"];
+    }
+    return $out;
+}
+
 /**
  * Rosa della compagine: unione delle rose delle sue squadre, giocatori ceduti
  * (non più nel listone) esclusi. Ogni giocatore riporta la squadra di lega di appartenenza.
@@ -157,15 +187,18 @@ function asg_rosa(int $stagione, int $idLato): array
     $ids = asg_ids_squadre_lato($stagione, $idLato);
     if (!$ids) return [];
     $fuori = lg_fuori_lista($stagione);
-    $righe = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.squadra AS id_squadra, s.nome AS squadra
+    $righe = query_all("SELECT g.id, g.descrizione, g.ruolo, g.nazione, g.squadra AS id_squadra, s.nome AS squadra, s.logo AS logo_squadra
                         FROM NEW_GIOCATORI g
                         JOIN NEW_SQUADRE s ON s.id = g.squadra AND s.stagione = g.stagione
                         WHERE g.stagione = $stagione AND g.squadra IN (" . implode(",", $ids) . ")
                         ORDER BY g.ruolo, g.descrizione");
+    $chiuse = asg_giornate_chiuse($stagione);
+    $presenze = asg_presenze($stagione, $chiuse);
     $out = [];
     foreach ($righe as $r) {
         $id = (int) $r["id"];
         if (isset($fuori[$id])) continue;
+        $n = $presenze[$id] ?? 0;
         $out[] = [
             "id"          => $id,
             "descrizione" => $r["descrizione"],
@@ -173,6 +206,9 @@ function asg_rosa(int $stagione, int $idLato): array
             "nazione"     => $r["nazione"],
             "id_squadra"  => (int) $r["id_squadra"],
             "squadra"     => $r["squadra"],
+            "logo_squadra" => (string) $r["logo_squadra"],
+            "presenze"     => $n,
+            "pct_presenze" => $chiuse ? round(100 * $n / count($chiuse), 1) : null,
         ];
     }
     return $out;

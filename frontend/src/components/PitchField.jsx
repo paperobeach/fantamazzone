@@ -3,6 +3,7 @@
 // (PitchFormation) e Dashboard squadra (PitchLineup).
 import { ROLE_LABEL } from '../lib/pitchLayout'
 import { BandieraTonda, useBandieraFile } from './Bandiera'
+import TeamLogo from './TeamLogo'
 
 /**
  * Cornice del campo con la segnaletica. I figli (gettoni, menu, ecc.) sono
@@ -73,18 +74,24 @@ export function IncontroSerieA({ player, variant = 'riga' }) {
 // Al posto del segnaposto con la lettera del ruolo mostra la bandiera del giocatore (se nota).
 export function PlayerChip({ player, selected, highlight, dragProps }) {
   const idGiocatore = player.id ?? player.id_giocatore
-  const conBandiera = !!useBandieraFile(idGiocatore)
+  const conLogo = player.logo_squadra !== undefined
+  const conBandiera = !conLogo && !!useBandieraFile(idGiocatore)
   return (
     <div {...dragProps} className="flex flex-col items-center gap-1 select-none cursor-pointer w-16 sm:w-20">
       <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[11px] font-bold border-2 shadow-lg transition-all
         ${selected ? 'ring-2 ring-grass-400 ring-offset-2 ring-offset-pitch-950' : ''}
         ${highlight && !selected ? 'ring-2 ring-gold-400/70 ring-offset-2 ring-offset-pitch-950' : ''}
         ${conBandiera ? 'bg-pitch-900 border-grass-300 overflow-hidden' : 'bg-grass-500/90 border-grass-300 text-pitch-950'}`}>
-        <BandieraTonda id={idGiocatore}>{ROLE_LABEL[String(player.ruolo)] ?? '?'}</BandieraTonda>
+        {conLogo
+          ? <TeamLogo logo={player.logo_squadra} nome={player.squadra_asg} size="xs" className="!h-full !w-full !max-w-none !rounded-full" />
+          : <BandieraTonda id={idGiocatore}>{ROLE_LABEL[String(player.ruolo)] ?? '?'}</BandieraTonda>}
       </div>
       <span className="text-[10px] leading-tight text-center text-white font-medium truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
         {player.descrizione ?? player.giocatore}
       </span>
+      {conLogo && player.squadra_asg && (
+        <span className="text-[9px] leading-none text-center text-grass-200/90 truncate w-full [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">{player.squadra_asg}</span>
+      )}
       <IncontroSerieA player={player} variant="chip" />
     </div>
   )

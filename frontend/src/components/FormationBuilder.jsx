@@ -75,7 +75,7 @@ export function RosterRow({
       <span className="text-[9px] font-mono w-5 text-slate-600 flex-shrink-0">{displayNumber}</span>
       <span className={`stat-pill ${ROLE_PILL_CLASS[player.ruolo] ?? ''}`}>{ROLE_LABEL[String(player.ruolo)]}</span>
       <div className="flex-1 min-w-0 flex flex-col">
-        <NomeConBandiera link={false} id={player.id} nome={player.descrizione} className="text-sm text-slate-300" />
+        <NomeConBandiera link={false} id={player.id} nome={player.descrizione} className="text-sm text-slate-300" logoSquadra={player.logo_squadra} nomeSquadra={player.squadra_asg} />
         <IncontroSerieA player={player} />
       </div>
 
@@ -484,7 +484,7 @@ export function FormationBuilder({
                       >
                         <span className={`stat-pill flex-shrink-0 ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
                         <span className="flex-1 min-w-0 flex flex-col">
-                          <NomeConBandiera link={false} id={p.id} nome={p.descrizione} />
+                          <NomeConBandiera link={false} id={p.id} nome={p.descrizione} logoSquadra={p.logo_squadra} nomeSquadra={p.squadra_asg} />
                           <IncontroSerieA player={p} />
                         </span>
                         {fromTribuna && (

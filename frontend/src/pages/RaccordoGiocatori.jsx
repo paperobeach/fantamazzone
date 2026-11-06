@@ -89,14 +89,17 @@ export default function RaccordoGiocatori() {
   }
 
   const ricostruisci = async () => {
-    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano.')) return
+    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano; vengono segnati "da verificare" solo quelli per cui l\'automatico propone un collegamento diverso.')) return
     const r = await chiama('ricostruisci', { azzera_auto: true })
     if (r) {
       const tot = r.stagioni.reduce((a, x) => ({
         giocatori: a.giocatori + x.giocatori, collegati: a.collegati + x.collegati,
         nuove: a.nuove + x.nuove_persone, omonimi: a.omonimi + x.omonimi, verifica: a.verifica + x.da_verificare,
       }), { giocatori: 0, collegati: 0, nuove: 0, omonimi: 0, verifica: 0 })
-      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.verifica} da verificare.`)
+      const man = r.manuali
+        ? ` Manuali esaminati: ${r.manuali.manuali}; ${r.manuali.con_differenze} segnati da verificare (${r.manuali.gruppi} persone), gli altri non sono stati toccati.`
+        : ''
+      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.verifica} da verificare.${man}`)
       caricaVerifica()
     }
   }

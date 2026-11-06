@@ -363,7 +363,7 @@ export const afMappatura = (stagione, { utenza, password, azione = 'stato', ...e
   post('admin/api_football_mapping.php', { stagione, utenza, password, azione, ...extra })
 
 // admin/raccordo_giocatori.php (raccordo per id dei giocatori tra le stagioni)
-//   azioni: stato · ricostruisci { azzera_auto? } · allinea { stagione_da_allineare }
+//   azioni: stato · ricostruisci { azzera_auto?, riesamina_manuali? } · allinea { stagione_da_allineare }
 //           verifica { limite? } · cerca { q } · persona { id_anagrafica }
 //           conferma { stagione_giocatore, id_giocatore } · unisci { id_tieni, id_assorbi }
 //           collega { stagione_giocatore, id_giocatore, id_anagrafica }  (una sola stagione)

@@ -444,18 +444,124 @@ function rg_allinea(int $stagione): array
 
 /**
  * Ricostruzione completa, dalla stagione piu' vecchia alla piu' recente.
- * Con $azzeraAuto = true i collegamenti AUTO vengono rifatti da zero; quelli
- * MANUALE (correzioni dell'amministratore) restano.
+ *
+ * - $azzeraAuto = true : i collegamenti AUTO vengono rifatti da zero; quelli
+ *   MANUALE (correzioni dell'amministratore) restano com'e'.
+ * - $riesaminaManuali = true : a ricostruzione finita, i collegamenti MANUALE
+ *   NON vengono toccati, ma quelli per cui la logica automatica propone una
+ *   persona diversa (es. nuovo possibile collegamento con salto di stagione)
+ *   vengono segnati da verificare. Vedi rg_riesamina_manuali().
+ *
+ * @param array|null $esitoManuali (out) riepilogo del riesame dei manuali,
+ *                                 null se $riesaminaManuali = false
+ * @return array esiti per stagione (come rg_allinea)
  */
-function rg_ricostruisci(bool $azzeraAuto = true): array
+function rg_ricostruisci(bool $azzeraAuto = true, bool $riesaminaManuali = true, ?array &$esitoManuali = null): array
 {
+    $esitoManuali = null;
     if ($azzeraAuto) {
         rg_esegui("DELETE FROM " . RG_T_RACC . " WHERE metodo = 'AUTO'");
         rg_pulisci_orfane();
     }
     $out = [];
     foreach (rg_stagioni() as $s) $out[] = rg_allinea($s);
+    if ($riesaminaManuali) $esitoManuali = rg_riesamina_manuali();
     return $out;
+}
+
+/**
+ * Riesame dei collegamenti MANUALE, senza modificarli.
+ *
+ * Per ogni riga MANUALE (non gia' da verificare) calcola cosa proporrebbe la
+ * logica automatica se il giocatore non fosse collegato: stesso nome (o, in
+ * mancanza, stesso cognome + iniziale) nell'ultima stagione precedente in cui
+ * compare, anche con salti di stagione. La riga viene segnata
+ * da_verificare = 'Y' (nota "Auto propone persona #N (AAAA: NOME)") solo se:
+ *   - esiste una proposta e la persona proposta e' diversa da quella attuale;
+ *   - la persona attuale non ha gia' una presenza precedente con lo stesso
+ *     nome/iniziale (cioe' il collegamento manuale e' coerente con i nomi);
+ *   - il nome non e' ambiguo (omonimi nella stagione) e la persona proposta
+ *     non e' gia' presente nella stessa stagione con un altro giocatore.
+ * Le persone omonime nell'ultima stagione utile vengono segnalate come
+ * "Auto: omonimi in AAAA (persone #a, #b)".
+ * I manuali senza differenze restano esattamente come sono.
+ *
+ * @return array manuali (esaminati), con_differenze (righe segnate),
+ *               gruppi (persone interessate)
+ */
+function rg_riesamina_manuali(): array
+{
+    global $conn;
+    $es = ["manuali" => 0, "con_differenze" => 0, "gruppi" => 0];
+
+    $righe = [];     // stagione => [id_giocatore => [persona, metodo, verif]]
+    foreach (query_all("SELECT stagione, id_giocatore, id_anagrafica, metodo, da_verificare FROM " . RG_T_RACC) as $r) {
+        $righe[(int) $r["stagione"]][(int) $r["id_giocatore"]] = [(int) $r["id_anagrafica"], $r["metodo"], $r["da_verificare"]];
+    }
+
+    $idxNome = [];   // nome normalizzato => [[stagione, id], ...]   (stagioni gia' viste)
+    $idxAbbr = [];   // chiave abbreviata => [[stagione, id, e_iniziale], ...]
+    $gruppi  = [];
+    foreach (rg_stagioni() as $s) {
+        $giocatori = rg_giocatori_stagione($s);
+        $perNomeS = [];
+        foreach ($giocatori as $g) $perNomeS[rg_norm($g["nome"])] = ($perNomeS[rg_norm($g["nome"])] ?? 0) + 1;
+        $personeS = [];   // persone gia' presenti nella stagione
+        foreach ($righe[$s] ?? [] as $v) $personeS[$v[0]] = true;
+
+        foreach ($righe[$s] ?? [] as $id => [$pers, $metodo, $verif]) {
+            if ($metodo !== "MANUALE" || $verif === "Y" || !isset($giocatori[$id])) continue;
+            $es["manuali"]++;
+            $g      = $giocatori[$id];
+            $chiave = rg_norm($g["nome"]);
+            if (($perNomeS[$chiave] ?? 0) > 1) continue;              // omonimi nella stagione: ambiguo
+
+            // Presenze precedenti con lo stesso nome; in mancanza, con la stessa iniziale
+            $voci = $idxNome[$chiave] ?? [];
+            if (!$voci) {
+                $kk = rg_chiave_abbreviata($g["nome"], $iniG);
+                foreach ($idxAbbr[$kk] ?? [] as [$spA, $idA, $iniA]) {
+                    if ($kk !== "" && ($iniG || $iniA)) $voci[] = [$spA, $idA];
+                }
+            }
+            if (!$voci) continue;
+
+            $tutte = [];                                              // persone di tutte le presenze
+            $ultSt = 0;
+            foreach ($voci as [$sp, $idp]) {
+                $pp = $righe[$sp][$idp][0] ?? 0;
+                if ($pp > 0) { $tutte[$pp] = true; $ultSt = max($ultSt, $sp); }
+            }
+            if (!$tutte || isset($tutte[$pers])) continue;            // nessuna proposta, o manuale coerente col nome
+
+            $propo = [];                                              // persone dell'ultima stagione utile
+            foreach ($voci as [$sp, $idp]) {
+                $pp = $righe[$sp][$idp][0] ?? 0;
+                if ($sp === $ultSt && $pp > 0) { $propo[$pp] = true; }
+            }
+            $propo = array_keys($propo);
+            if (count($propo) === 1) {
+                if (isset($personeS[$propo[0]])) continue;            // gia' presente in questa stagione con un altro giocatore
+                $nota = "Auto propone persona #" . $propo[0] . " (" . $ultSt . ")";
+            } else {
+                sort($propo);
+                $nota = "Auto: omonimi in " . $ultSt . " (persone #" . implode(", #", $propo) . ")";
+            }
+            rg_esegui("UPDATE " . RG_T_RACC . " SET da_verificare = 'Y', nota = '" . rg_esc(substr($nota, 0, 100)) . "',
+                       aggiornato_il = NOW() WHERE stagione = $s AND id_giocatore = $id");
+            $es["con_differenze"]++;
+            $gruppi[$pers] = true;
+        }
+
+        // Indici aggiornati con la stagione appena esaminata
+        foreach ($giocatori as $g) {
+            $idxNome[rg_norm($g["nome"])][] = [$s, $g["id"]];
+            $kk = rg_chiave_abbreviata($g["nome"], $ini);
+            if ($kk !== "") $idxAbbr[$kk][] = [$s, $g["id"], $ini];
+        }
+    }
+    $es["gruppi"] = count($gruppi);
+    return $es;
 }
 
 // ── Lettura ──────────────────────────────────────────────────

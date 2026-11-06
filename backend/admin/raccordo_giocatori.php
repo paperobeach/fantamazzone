@@ -10,8 +10,10 @@
 // ACCESSO: utenza amministratore (password verificata lato server).
 //
 // azione = "stato"        contatori per stagione + numero di persone
-// azione = "ricostruisci" { azzera_auto?: true }  rifa' i collegamenti AUTO
-//                         di tutte le stagioni (i MANUALE restano)
+// azione = "ricostruisci" { azzera_auto?: true, riesamina_manuali?: true }
+//                         rifa' i collegamenti AUTO di tutte le stagioni (i MANUALE
+//                         restano invariati); con riesamina_manuali segna da verificare
+//                         solo i MANUALE per cui l'automatico propone una persona diversa
 // azione = "allinea"      { stagione_da_allineare }  collega i giocatori nuovi
 // azione = "verifica"     { limite? }  collegamenti da verificare + candidati
 // azione = "cerca"        { q }  persone per nome
@@ -54,8 +56,13 @@ try {
             break;
 
         case "ricostruisci":
-            $risultato = rg_ricostruisci(($input["azzera_auto"] ?? true) !== false);
-            api_success(["ok" => true, "stagioni" => $risultato, "stato" => rg_stato()]);
+            $esitoManuali = null;
+            $risultato = rg_ricostruisci(
+                ($input["azzera_auto"] ?? true) !== false,
+                ($input["riesamina_manuali"] ?? true) !== false,
+                $esitoManuali
+            );
+            api_success(["ok" => true, "stagioni" => $risultato, "manuali" => $esitoManuali, "stato" => rg_stato()]);
             break;
 
         case "allinea":

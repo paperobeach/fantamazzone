@@ -630,6 +630,17 @@ export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP')
 export const getDashboardLive = (stagione, id_squadra) =>
   get('dashboard_live.php', { stagione, id_squadra })
 
+// ── Dashboard lega ───────────────────────────────────────────
+// Prossima giornata (o giornata in corso) a livello di lega: partite di
+// campionato e Champions, stato formazioni, scadenza e finestra LIVE.
+export const getDashboardLega = (stagione) =>
+  get('dashboard_lega.php', { stagione })
+
+// Record storici dei giocatori su tutte le stagioni.
+// competizione: 'CAMP' | 'CHAMP'; ruolo: 0 = tutti, 1..4 = reparto.
+export const getRecordStorici = (competizione = 'CAMP', ruolo = 0) =>
+  get('record_storici.php', { competizione, ruolo })
+
 
 // ── Mercato (prima finestra di riparazione, svincolati) ──────────────────
 // Stato: configurazione, sessioni, ordine di chiamata, squadra di turno, scadenza.

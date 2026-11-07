@@ -25,6 +25,7 @@ const MercatoSecondaFinestra = lazy(() => import('./pages/MercatoSecondaFinestra
 const Svincolati = lazy(() => import('./pages/Svincolati'))
 const Formazione  = lazy(() => import('./pages/Formazione'))
 const DashboardSquadra = lazy(() => import('./pages/DashboardSquadra'))
+const DashboardLega = lazy(() => import('./pages/DashboardLega'))
 const Login       = lazy(() => import('./pages/Login'))
 const Admin       = lazy(() => import('./pages/Admin'))
 const InserimentoRose = lazy(() => import('./pages/InserimentoRose'))
@@ -168,6 +169,7 @@ function AppShell() {
                   } />
                   {/* La dashboard squadra è la home: il vecchio indirizzo resta come redirect */}
                   <Route path="/dashboard-squadra" element={<Navigate to="/" replace />} />
+                  <Route path="/dashboard-lega" element={<DashboardLega />} />
                   <Route path="/login"        element={<Login />} />
                   <Route path="/admin"        element={
                     <AdminRoute><Admin /></AdminRoute>

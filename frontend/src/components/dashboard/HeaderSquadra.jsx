@@ -11,7 +11,7 @@ import { LiveChip, LivePanel, useLiveSquadra } from './LiveSquadra'
 // ── Scadenza formazione ──────────────────────────────────────
 
 /** Tempo mancante alla scadenza, aggiornato ogni 30 secondi. */
-function useResiduo(scadenza) {
+export function useResiduo(scadenza) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000)
@@ -30,7 +30,7 @@ function useResiduo(scadenza) {
   return { scaduta: false, testo, urgenza }
 }
 
-const URGENZA = {
+export const URGENZA = {
   scaduta: 'text-slate-400 border-white/10 bg-white/[0.03]',
   alta:    'text-red-300 border-red-500/40 bg-red-500/10',
   media:   'text-gold-300 border-gold-500/40 bg-gold-500/10',
@@ -40,7 +40,7 @@ const URGENZA = {
 // ── Indicatore "formazione inserita" ─────────────────────────
 
 /** stato = { inserita, titolari } */
-function StatoFormazione({ stato, etichetta, compatto = false }) {
+export function StatoFormazione({ stato, etichetta, compatto = false }) {
   if (!stato) return null
   const parziale = !stato.inserita && stato.titolari > 0
   const Icona = stato.inserita ? Check : parziale ? Minus : X

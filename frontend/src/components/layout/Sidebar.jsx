@@ -5,7 +5,7 @@ import RicercaGiocatore from '../RicercaGiocatore'
 import {
   Trophy, Calendar, Users,
   Star, Shield, LogOut, UserPlus,
-  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle, GitMerge, ListChecks
+  ChevronDown, X, Upload, ClipboardList, RefreshCw, ClipboardCheck, SlidersHorizontal, RotateCcw, CalendarDays, Radio, Eraser, ArchiveRestore, Sparkles, PlugZap, Newspaper, FileText, BookOpen, LayoutDashboard, Images, Award, Link2, Activity, Repeat, Shuffle, GitMerge, ListChecks, Landmark
 } from 'lucide-react'
 
 // Menu principale suddiviso in tre sezioni: Generale, Campionato, Champions.
@@ -13,6 +13,7 @@ const NAV_SECTIONS = [
   {
     title: 'Generale',
     items: [
+      { to: '/dashboard-lega', icon: Landmark, label: 'Dashboard lega' },
       { to: '/squadre',      icon: Users,     label: 'Squadre'       },
       { to: '/live',         icon: Radio,     label: 'LIVE Giornata in corso' },
       { to: '/all-star-game', icon: Sparkles, label: 'All Star Game' },

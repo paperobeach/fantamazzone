@@ -66,7 +66,39 @@ WHERE r.rn IN (1, 2) OR r.rn = r.tot;
 -- Verifica: attese 66 righe CAMP (22 stagioni x 3: 2003-2023 + 2025).
 -- SELECT COUNT(*) FROM NEW_ALBO_ORO WHERE competizione = 'CAMP';
 
--- Stagione 2024 (assente in NEW_GENERALE) e storico CHAMPIONS: da inserire
+-- ============================================================
+-- Popolamento albo d'oro CHAMPIONS (vincitore e finalista)
+-- ricavato da NEW_SQUADRE.albo (char(2)). Si considera il SECONDO
+-- carattere: 'W' = vincitore della coppa (posizione 1),
+--            'F' = finalista (posizione 2).
+-- La squadra e' risolta in NEW_UTENZE.utenza tramite (stagione, id),
+-- come per il popolamento del campionato.
+-- INSERT IGNORE: non sovrascrive righe gia' presenti.
+-- NB: se in una stagione ci sono piu' squadre con 'W' (o con 'F'),
+-- per la chiave primaria (stagione, competizione, posizione) viene
+-- inserita solo la prima (MIN(id)).
+-- ============================================================
+INSERT IGNORE INTO `NEW_ALBO_ORO` (`stagione`,`competizione`,`posizione`,`utenza`)
+SELECT s.stagione,
+       'CHAMP',
+       CASE SUBSTRING(s.albo, 2, 1) WHEN 'W' THEN 1 ELSE 2 END,
+       u.utenza
+FROM NEW_SQUADRE s
+JOIN (
+  SELECT stagione, id, MIN(utenza) AS utenza
+  FROM NEW_UTENZE
+  GROUP BY stagione, id
+) u ON u.stagione = s.stagione AND u.id = s.id
+WHERE SUBSTRING(s.albo, 2, 1) IN ('W', 'F')
+ORDER BY s.stagione, s.id;
+
+-- Verifica: attese 43 righe CHAMP (23 vincitori + 20 finalisti):
+-- stagioni 2003-2023, 2025 e 2026. Senza finalista: 2014, 2015, 2022.
+-- Il 2008 ha DUE 'F' (id 2 Degio Team e id 3 Lucky Luciano): viene
+-- inserito solo id 2 (la PK ammette un solo finalista per stagione).
+-- SELECT COUNT(*) FROM NEW_ALBO_ORO WHERE competizione = 'CHAMP';
+
+-- Stagione 2024 (assente in NEW_GENERALE e in NEW_SQUADRE): da inserire
 -- a mano, ad esempio:
 -- INSERT INTO `NEW_ALBO_ORO` (`stagione`,`competizione`,`posizione`,`utenza`) VALUES
 --   (2024,'CAMP',1,'utenza_primo'),

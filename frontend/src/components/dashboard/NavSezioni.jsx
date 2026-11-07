@@ -59,7 +59,7 @@ function Scelta({ titolo, icona: Icona, value, onChange, opzioni }) {
   )
 }
 
-function PannelloConfig({ config, onChange, onClose }) {
+function PannelloConfig({ config, onChange, onClose, soloCompetizione = false }) {
   return (
     <div role="dialog" aria-label="Personalizza la visualizzazione"
          className="absolute right-3 sm:right-6 lg:right-8 top-full mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-pitch-900 shadow-xl shadow-black/50 p-4 space-y-4 z-30">
@@ -70,9 +70,9 @@ function PannelloConfig({ config, onChange, onClose }) {
       <Scelta titolo="Competizione" icona={Trophy} value={config.competizione}
               onChange={v => onChange({ ...config, competizione: v })}
               opzioni={[{ value: 'CAMP', label: 'Campionato', icona: Trophy }, { value: 'CHAMP', label: 'Champions', icona: Crown }]} />
-      <Scelta titolo="Giocatori" icona={Users} value={config.vista}
+      {!soloCompetizione && <Scelta titolo="Giocatori" icona={Users} value={config.vista}
               onChange={v => onChange({ ...config, vista: v })}
-              opzioni={[{ value: 'SCHIERATI', label: 'Solo schierati', icona: UserCheck }, { value: 'ROSA', label: 'Intera rosa', icona: Users }]} />
+              opzioni={[{ value: 'SCHIERATI', label: 'Solo schierati', icona: UserCheck }, { value: 'ROSA', label: 'Intera rosa', icona: Users }]} />}
       <div className="flex items-center justify-between text-[11px] text-slate-600">
         <span>Vale per tutte le sezioni.</span>
         <button type="button" onClick={() => onChange(CONFIG_DEFAULT)} className="text-slate-400 hover:text-white">Ripristina</button>
@@ -81,7 +81,7 @@ function PannelloConfig({ config, onChange, onClose }) {
   )
 }
 
-export function BarraSezioni({ sezioni, config, onConfig }) {
+export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = false }) {
   const barraRef = useRef(null)
   const [attiva, setAttiva] = useState(sezioni[0]?.id ?? null)
   const [aperto, setAperto] = useState(false)
@@ -157,11 +157,11 @@ export function BarraSezioni({ sezioni, config, onConfig }) {
                 className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1.5 rounded-full border text-xs transition-colors ${
                   aperto ? 'border-grass-500/50 text-grass-300 bg-grass-500/10' : 'border-white/10 text-slate-300 hover:text-white hover:border-white/25'}`}>
           {champ ? <Crown className="w-4 h-4 text-sky-400" /> : <Trophy className="w-4 h-4 text-grass-400" />}
-          <span className="hidden sm:inline">{champ ? 'Champions' : 'Campionato'} · {config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}</span>
+          <span className="hidden sm:inline">{champ ? 'Champions' : 'Campionato'}{soloCompetizione ? '' : ` · ${config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}`}</span>
           <Settings className="w-4 h-4" />
         </button>
       </div>
-      {aperto && <PannelloConfig config={config} onChange={onConfig} onClose={() => setAperto(false)} />}
+      {aperto && <PannelloConfig config={config} onChange={onConfig} onClose={() => setAperto(false)} soloCompetizione={soloCompetizione} />}
     </div>
   )
 }

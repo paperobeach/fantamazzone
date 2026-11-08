@@ -33,6 +33,16 @@
 // (RG_VERIFICA_INIZIALI). Il confronto per iniziali scatta solo se il nome
 // esatto non e' presente in nessuna stagione precedente e almeno uno dei due
 // nomi e' abbreviato (due nomi estesi diversi non si collegano mai).
+// VARIANTI DI SCRITTURA: se il nome esatto non e' presente in nessuna stagione
+// precedente, si confrontano i nomi "compattati" (rg_chiave_compatta: senza
+// spazi, apostrofi, punti e trattini): "DI MARCO" = "DIMARCO", "N'DRI" = "NDRI" =
+// "N DRI". Il collegamento e' proposto con da_verificare = 'Y' e nota
+// "Variante nome: ..." (RG_VERIFICA_VARIANTI), cosi' l'utente lo valuta.
+// OMONIMI CERTIFICATI: rg_omonimi_certificati() ripropone le persone diverse,
+// gia' certificate dall'utente (MANUALE e non da verificare), con nome uguale
+// o molto simile; rg_rinomina() cambia il NOME del giocatore (NEW_GIOCATORI,
+// NEW_GIOCATORI_SVINCOLATI, NEW_GIOCATORI_BASE_ASTA e nome canonico della
+// persona), in una sola stagione o in tutte, per distinguere gli omonimi.
 // Il ruolo e la squadra Serie A NON bloccano il collegamento (cambiano
 // spesso): sono solo informazioni per chi verifica a mano.
 // Un giocatore assente per una stagione intera, o che cambia nome
@@ -64,6 +74,16 @@ const RG_VERIFICA_SALTO = true;
 // true = i collegamenti trovati tramite iniziale (nome abbreviato in una delle
 // due stagioni) sono segnati da verificare; false = collegati e basta.
 const RG_VERIFICA_INIZIALI = true;
+
+// true = i collegamenti trovati tramite variante di scrittura (spazi, apostrofi,
+// punteggiatura diversi) sono segnati da verificare; false = collegati e basta.
+const RG_VERIFICA_VARIANTI = true;
+
+// Omonimi certificati: due nomi diversi si considerano "molto simili" se la
+// distanza di Levenshtein tra i nomi compattati e' <= RG_SIMILI_DISTANZA e
+// entrambi hanno almeno RG_SIMILI_LUNGHEZZA_MIN caratteri.
+const RG_SIMILI_DISTANZA = 1;
+const RG_SIMILI_LUNGHEZZA_MIN = 7;
 
 // ── Utilita' ─────────────────────────────────────────────────
 
@@ -212,6 +232,15 @@ function rg_chiave_abbreviata(string $nome, ?bool &$iniziale = null): string
     return implode(" ", $t) . " " . substr($ultimo, 0, 1);
 }
 
+/**
+ * Chiave "compatta" del nome: rg_norm senza alcuno spazio.
+ * "Di Marco", "DIMARCO" -> "DIMARCO"; "N'Dri", "Ndri", "N Dri" -> "NDRI".
+ */
+function rg_chiave_compatta(?string $nome): string
+{
+    return str_replace(" ", "", rg_norm($nome));
+}
+
 /** Stagioni con giocatori, in ordine crescente. */
 function rg_stagioni(): array
 {
@@ -282,13 +311,13 @@ function rg_nuova_persona(string $nome): int
  * quelle che puntano a giocatori non piu' presenti nella stagione.
  *
  * @return array contatori: giocatori, gia_collegati, collegati, nuove_persone,
- *               omonimi, da_verificare, rimossi
+ *               omonimi, varianti, da_verificare, rimossi
  */
 function rg_allinea(int $stagione): array
 {
     $giocatori = rg_giocatori_stagione($stagione);
     $esito = ["stagione" => $stagione, "giocatori" => count($giocatori), "gia_collegati" => 0,
-              "collegati" => 0, "nuove_persone" => 0, "omonimi" => 0, "da_verificare" => 0, "rimossi" => 0];
+              "collegati" => 0, "nuove_persone" => 0, "omonimi" => 0, "varianti" => 0, "da_verificare" => 0, "rimossi" => 0];
 
     // 1. Righe orfane (giocatore non piu' in anagrafica della stagione)
     global $conn;
@@ -343,6 +372,20 @@ function rg_allinea(int $stagione): array
         }
     }
 
+    // Indice per nome compatto (senza spazi/apostrofi): nella stagione e nelle precedenti
+    $perCompS = [];      // chiave compatta => [id, ...] nella stagione
+    foreach ($giocatori as $g) {
+        $kc = rg_chiave_compatta($g["nome"]);
+        if ($kc !== "") $perCompS[$kc][] = $g["id"];
+    }
+    $perComp = [];       // chiave compatta => [[stagione, id], ...] nelle stagioni precedenti
+    foreach ($precStagioni as $sp) {
+        foreach ($gioc[$sp] as $g) {
+            $kc = rg_chiave_compatta($g["nome"]);
+            if ($kc !== "") $perComp[$kc][] = [$sp, $g["id"]];
+        }
+    }
+
     // 5. Nuovi collegamenti
     $righe = [];
     foreach ($giocatori as $id => $g) {
@@ -352,8 +395,28 @@ function rg_allinea(int $stagione): array
         $stPrec = $ultimo[$chiave]["stagione"] ?? null;    // stagione in cui il nome compare l'ultima volta
         $cand   = $ultimo[$chiave]["ids"] ?? [];
         $viaIniziali = false;
+        $viaVariante = false;
+        $kcG = rg_chiave_compatta($g["nome"]);
+        if ($kcG !== "" && isset($perComp[$kcG])) {
+            // Stesso nome scritto in modo diverso (DI MARCO <-> DIMARCO, N'DRI <-> NDRI): stessi
+            // caratteri, spazi/punteggiatura diversi. Si usa se non c'e' un nome identico oppure se la
+            // variante compare in una stagione PIU' RECENTE dell'ultimo nome identico (cosi' non si
+            // segnala un falso salto di stagione).
+            $trovati = [];   // stagione => [id, ...]
+            foreach ($perComp[$kcG] as [$spC, $idC]) $trovati[$spC][] = $idC;
+            $stC = max(array_keys($trovati));
+            if (!$cand || $stC > $stPrec) {
+                $candC = $trovati[$stC];
+                $pC = array_values(array_unique(array_map(fn($i) => $persona[$stC][$i] ?? 0, $candC)));
+                $pE = $cand ? array_values(array_unique(array_map(fn($i) => $persona[$stPrec][$i] ?? 0, $cand))) : [];
+                // Variante "vera" solo se non e' gia' la stessa persona del nome identico
+                $viaVariante = !($cand && count($pC) === 1 && $pC === $pE);
+                $stPrec = $stC;
+                $cand   = $candC;
+            }
+        }
         if (!$cand) {
-            // Nessun nome identico: provo con le iniziali (MARTINEZ L. <-> MARTINEZ LAUTARO).
+            // Nessun nome identico ne' variante: provo con le iniziali (MARTINEZ L. <-> MARTINEZ LAUTARO).
             // Serve che almeno uno dei due nomi sia abbreviato.
             $kk = rg_chiave_abbreviata($g["nome"], $iniG);
             if ($kk !== "" && isset($perAbbr[$kk])) {
@@ -369,7 +432,9 @@ function rg_allinea(int $stagione): array
             }
         }
         $pPers  = $stPrec !== null ? $persona[$stPrec] : [];
-        $nS     = count($perNomeS[$chiave]);
+        // Giocatori della stagione con lo stesso nome (o, per le varianti, con lo stesso nome compatto)
+        $stessi = $viaVariante ? ($perCompS[$kcG] ?? [$id]) : $perNomeS[$chiave];
+        $nS     = count($stessi);
         // Persone distinte tra i candidati della stagione precedente (piu' id
         // della stessa persona, es. cessione/acquisto, contano una volta sola)
         $personeCand = array_values(array_unique(array_map(fn($i) => $pPers[$i] ?? 0, $cand)));
@@ -384,14 +449,14 @@ function rg_allinea(int $stagione): array
             // Stesso nome piu' volte nella stagione (omonimi o cessione/acquisto)
             // o persone diverse nella precedente: nessun collegamento automatico
             $trasf = false;
-            foreach ($perNomeS[$chiave] as $altro) {
+            foreach ($stessi as $altro) {
                 if ($altro !== $id
                     && $giocatori[$altro]["ruolo"] === $g["ruolo"]
                     && rg_norm($giocatori[$altro]["nazione"]) === rg_norm($g["nazione"])) $trasf = true;
             }
             $idPers = rg_nuova_persona($g["nome"]);
             $verif  = "Y";
-            $nota   = ($viaIniziali ? "Iniziale ambigua" : "Omonimia") . ": $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
+            $nota   = ($viaIniziali ? "Iniziale ambigua" : ($viaVariante ? "Variante ambigua" : "Omonimia")) . ": $nS in $stagione" . ($trasf ? " (stesso ruolo e nazione: forse cessione/acquisto)" : "")
                     . ", " . count($personeCand) . " persone in $stPrec";
             $esito["nuove_persone"]++;
             $esito["omonimi"]++;
@@ -418,6 +483,12 @@ function rg_allinea(int $stagione): array
                     $nomeP = $rif["nome"];
                     if (RG_VERIFICA_INIZIALI) $verif = "Y";
                     $nota  = "Iniziale: " . $nomeP . " (" . $stPrec . ")" . ($nota !== null ? "; " . $nota : "");
+                }
+                if ($viaVariante) {
+                    // Stesso nome scritto in modo diverso (spazi, apostrofi, punteggiatura)
+                    if (RG_VERIFICA_VARIANTI) $verif = "Y";
+                    $nota  = "Variante nome: " . $rif["nome"] . " (" . $stPrec . ")" . ($nota !== null ? "; " . $nota : "");
+                    $esito["varianti"]++;
                 }
                 if (RG_VERIFICA_SALTO && $stPrec !== $prec) {
                     // Il giocatore manca in una o piu' stagioni intermedie
@@ -475,7 +546,7 @@ function rg_ricostruisci(bool $azzeraAuto = true, bool $riesaminaManuali = true,
  * Per ogni riga MANUALE (non gia' da verificare) calcola cosa proporrebbe la
  * logica automatica se il giocatore non fosse collegato: stesso nome (o, in
  * mancanza, stesso cognome + iniziale) nell'ultima stagione precedente in cui
- * compare, anche con salti di stagione. La riga viene segnata
+ * compare (o, in mancanza, stessa scrittura senza spazi/apostrofi), anche con salti di stagione. La riga viene segnata
  * da_verificare = 'Y' (nota "Auto propone persona #N (AAAA: NOME)") solo se:
  *   - esiste una proposta e la persona proposta e' diversa da quella attuale;
  *   - la persona attuale non ha gia' una presenza precedente con lo stesso
@@ -501,6 +572,7 @@ function rg_riesamina_manuali(): array
 
     $idxNome = [];   // nome normalizzato => [[stagione, id], ...]   (stagioni gia' viste)
     $idxAbbr = [];   // chiave abbreviata => [[stagione, id, e_iniziale], ...]
+    $idxComp = [];   // chiave compatta => [[stagione, id], ...]
     $gruppi  = [];
     foreach (rg_stagioni() as $s) {
         $giocatori = rg_giocatori_stagione($s);
@@ -518,6 +590,12 @@ function rg_riesamina_manuali(): array
 
             // Presenze precedenti con lo stesso nome; in mancanza, con la stessa iniziale
             $voci = $idxNome[$chiave] ?? [];
+            if (!$voci) {                                             // variante di scrittura (DI MARCO / DIMARCO)
+                $kc = rg_chiave_compatta($g["nome"]);
+                foreach ($idxComp[$kc] ?? [] as [$spC, $idC]) {
+                    if ($kc !== "") $voci[] = [$spC, $idC];
+                }
+            }
             if (!$voci) {
                 $kk = rg_chiave_abbreviata($g["nome"], $iniG);
                 foreach ($idxAbbr[$kk] ?? [] as [$spA, $idA, $iniA]) {
@@ -558,6 +636,8 @@ function rg_riesamina_manuali(): array
             $idxNome[rg_norm($g["nome"])][] = [$s, $g["id"]];
             $kk = rg_chiave_abbreviata($g["nome"], $ini);
             if ($kk !== "") $idxAbbr[$kk][] = [$s, $g["id"], $ini];
+            $kc = rg_chiave_compatta($g["nome"]);
+            if ($kc !== "") $idxComp[$kc][] = [$s, $g["id"]];
         }
     }
     $es["gruppi"] = count($gruppi);
@@ -695,17 +775,22 @@ function rg_elenco_da_verificare(int $limite = 100): array
                         WHERE r.da_verificare = 'Y'
                         ORDER BY r.stagione DESC, a.nome, r.id_giocatore
                         LIMIT " . max(1, min(500, $limite)));
+    // Persone raggruppate per nome compatto: i candidati sono le persone con lo
+    // stesso nome oppure con una variante di scrittura (DI MARCO / DIMARCO, N'DRI / NDRI)
+    $perCompatto = [];
+    foreach (query_all("SELECT id_anagrafica, nome FROM " . RG_T_ANAG . " ORDER BY id_anagrafica") as $a) {
+        $kc = rg_chiave_compatta((string) $a["nome"]);
+        if ($kc !== "") $perCompatto[$kc][] = (int) $a["id_anagrafica"];
+    }
     $out = [];
     foreach ($righe as $r) {
         $idPers = (int) $r["id_anagrafica"];
         $cand = [];
-        foreach (query_all("SELECT id_anagrafica FROM " . RG_T_ANAG . "
-                            WHERE TRIM(nome) = '" . rg_esc(trim((string) $r["nome"])) . "'
-                              AND id_anagrafica <> $idPers
-                            ORDER BY id_anagrafica LIMIT 8") as $c) {
+        $ids = array_values(array_filter($perCompatto[rg_chiave_compatta((string) $r["nome"])] ?? [], fn($i) => $i !== $idPers));
+        foreach (array_slice($ids, 0, 8) as $idC) {
             // Persona con tutte le edizioni (e i loro dati): servono per scegliere
             // stagione per stagione quali collegare
-            $s = rg_persona_dettaglio((int) $c["id_anagrafica"]);
+            $s = rg_persona_dettaglio($idC);
             if ($s) $cand[] = $s;
         }
         $out[] = [
@@ -830,4 +915,148 @@ function rg_separa(int $stagione, int $idGiocatore): int
                WHERE stagione = $stagione AND id_giocatore = $idGiocatore");
     rg_pulisci_orfane();
     return $nuova;
+}
+
+// ── Omonimi tra i raccordi certificati ───────────────────────
+
+/** Distanza di Levenshtein tra due chiavi compatte, solo se entro la soglia (altrimenti > soglia). */
+function rg_simili(string $a, string $b): bool
+{
+    if ($a === $b) return true;
+    if (strlen($a) < RG_SIMILI_LUNGHEZZA_MIN || strlen($b) < RG_SIMILI_LUNGHEZZA_MIN) return false;
+    if (abs(strlen($a) - strlen($b)) > RG_SIMILI_DISTANZA) return false;
+    return levenshtein($a, $b) <= RG_SIMILI_DISTANZA;
+}
+
+/**
+ * Omonimi (o nomi molto simili) tra le persone gia' CERTIFICATE dall'utente.
+ *
+ * Persona certificata: almeno un collegamento MANUALE non da verificare e
+ * nessun collegamento ancora da verificare (quelli stanno nell'elenco
+ * "da verificare"). Si ripropongono i gruppi di PERSONE DIVERSE il cui nome:
+ *   - e' uguale una volta normalizzato (maiuscolo, accenti, apostrofi...);
+ *   - oppure differisce solo per spazi/punteggiatura (DI MARCO / DIMARCO);
+ *   - oppure e' molto simile (Levenshtein <= RG_SIMILI_DISTANZA, nomi lunghi).
+ * Un gruppo sparisce da solo quando i nomi (rinominati con rg_rinomina) non
+ * sono piu' uguali ne' simili.
+ *
+ * @return array gruppi: [tipo (uguale|variante|simile), persone[] con edizioni]
+ */
+function rg_omonimi_certificati(int $limite = 100): array
+{
+    $righe = query_all("SELECT a.id_anagrafica, a.nome,
+                               SUM(r.metodo = 'MANUALE' AND r.da_verificare = 'N') AS certificati,
+                               SUM(r.da_verificare = 'Y') AS da_verificare
+                        FROM " . RG_T_ANAG . " a
+                        JOIN " . RG_T_RACC . " r ON r.id_anagrafica = a.id_anagrafica
+                        GROUP BY a.id_anagrafica, a.nome");
+    $persone = [];       // id => [nome, chiave]
+    $perChiave = [];     // chiave compatta => [id, ...]
+    foreach ($righe as $r) {
+        if ((int) $r["certificati"] < 1 || (int) $r["da_verificare"] > 0) continue;
+        $kc = rg_chiave_compatta((string) $r["nome"]);
+        if ($kc === "") continue;
+        $id = (int) $r["id_anagrafica"];
+        $persone[$id] = ["nome" => trim((string) $r["nome"]), "chiave" => $kc];
+        $perChiave[$kc][] = $id;
+    }
+
+    // Unione delle chiavi uguali o molto simili (union-find sulle chiavi compatte)
+    $padre = [];
+    foreach (array_keys($perChiave) as $k) $padre[$k] = $k;
+    $trova = function (string $k) use (&$padre): string {
+        while ($padre[$k] !== $k) { $padre[$k] = $padre[$padre[$k]]; $k = $padre[$k]; }
+        return $k;
+    };
+    // Confronto solo tra chiavi con lo stesso inizio (3 lettere) o la stessa fine (3 lettere)
+    $blocchi = [];
+    foreach (array_keys($perChiave) as $k) {
+        if (strlen($k) < RG_SIMILI_LUNGHEZZA_MIN) continue;
+        $blocchi["i" . substr($k, 0, 3)][] = $k;
+        $blocchi["f" . substr($k, -3)][] = $k;
+    }
+    foreach ($blocchi as $chiavi) {
+        $n = count($chiavi);
+        if ($n < 2 || $n > 400) continue;
+        for ($i = 0; $i < $n; $i++) {
+            for ($j = $i + 1; $j < $n; $j++) {
+                $ri = $trova($chiavi[$i]);
+                $rj = $trova($chiavi[$j]);
+                if ($ri !== $rj && rg_simili($chiavi[$i], $chiavi[$j])) $padre[$rj] = $ri;
+            }
+        }
+    }
+    $cluster = [];       // radice => [id, ...]
+    foreach ($perChiave as $k => $ids) {
+        foreach ($ids as $id) $cluster[$trova($k)][] = $id;
+    }
+
+    $out = [];
+    foreach ($cluster as $ids) {
+        if (count($ids) < 2) continue;
+        sort($ids);
+        $nomi = array_unique(array_map(fn($i) => rg_norm($persone[$i]["nome"]), $ids));
+        $chiavi = array_unique(array_map(fn($i) => $persone[$i]["chiave"], $ids));
+        $tipo = count($nomi) === 1 ? "uguale" : (count($chiavi) === 1 ? "variante" : "simile");
+        $out[] = ["tipo" => $tipo, "ids" => $ids, "ordine" => $persone[$ids[0]]["nome"]];
+    }
+    usort($out, fn($a, $b) => strcmp($a["ordine"], $b["ordine"]) ?: ($a["ids"][0] <=> $b["ids"][0]));
+
+    $gruppi = [];
+    foreach (array_slice($out, 0, max(1, min(300, $limite))) as $g) {
+        $gruppi[] = [
+            "tipo"    => $g["tipo"],
+            "persone" => array_values(array_filter(array_map("rg_persona_dettaglio", $g["ids"]))),
+        ];
+    }
+    return ["gruppi" => $gruppi, "totale" => count($out)];
+}
+
+/**
+ * Rinomina il giocatore: il nuovo nome sostituisce quello usato in tutta
+ * l'applicazione (NEW_GIOCATORI.descrizione, NEW_GIOCATORI_SVINCOLATI.descrizione,
+ * NEW_GIOCATORI_BASE_ASTA.nome). Le associazioni con i voti Serie A, le formazioni
+ * ecc. sono per id e non cambiano.
+ *
+ *  - $stagione/$idGiocatore null  -> TUTTE le stagioni della persona e nome
+ *    canonico (NEW_GIOCATORI_ANAGRAFICA.nome);
+ *  - $stagione e $idGiocatore     -> solo quel giocatore in quella stagione
+ *    (il nome canonico della persona non cambia).
+ *
+ * @return int numero di giocatori (stagione, id) rinominati
+ */
+function rg_rinomina(int $idAnagrafica, string $nuovoNome, ?int $stagione = null, ?int $idGiocatore = null): int
+{
+    $nome = trim(preg_replace('/\s+/u', ' ', $nuovoNome));
+    if ($nome === "") throw new InvalidArgumentException("Il nome non puo' essere vuoto");
+    $len = function_exists('mb_strlen') ? mb_strlen($nome, 'UTF-8') : strlen($nome);
+    if ($len > 50) throw new InvalidArgumentException("Il nome supera i 50 caratteri");
+    if (!query_one("SELECT 1 AS x FROM " . RG_T_ANAG . " WHERE id_anagrafica = $idAnagrafica")) {
+        throw new InvalidArgumentException("Persona $idAnagrafica non trovata");
+    }
+
+    $coppie = [];        // [stagione, id_giocatore]
+    if ($stagione !== null || $idGiocatore !== null) {
+        if (rg_persona_di((int) $stagione, (int) $idGiocatore) !== $idAnagrafica) {
+            throw new InvalidArgumentException("Il giocatore non appartiene a questa persona");
+        }
+        $coppie[] = [(int) $stagione, (int) $idGiocatore];
+    } else {
+        foreach (query_all("SELECT stagione, id_giocatore FROM " . RG_T_RACC . " WHERE id_anagrafica = $idAnagrafica") as $r) {
+            $coppie[] = [(int) $r["stagione"], (int) $r["id_giocatore"]];
+        }
+    }
+    if (!$coppie) throw new InvalidArgumentException("Nessun giocatore collegato alla persona");
+
+    $e = rg_esc($nome);
+    foreach ($coppie as [$s, $id]) {
+        $dove = "WHERE stagione = $s AND id = $id";
+        rg_esegui("UPDATE NEW_GIOCATORI SET descrizione = '$e' $dove");
+        rg_esegui("UPDATE NEW_GIOCATORI_SVINCOLATI SET descrizione = '$e' $dove");
+        rg_esegui("UPDATE NEW_GIOCATORI_BASE_ASTA SET nome = '$e' WHERE stagione = $s AND id_giocatore = $id");
+    }
+    if ($stagione === null && $idGiocatore === null) {
+        rg_esegui("UPDATE " . RG_T_ANAG . " SET nome = '$e' WHERE id_anagrafica = $idAnagrafica");
+    }
+    return count($coppie);
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { raccordoGiocatori } from '../api/client'
 import { PageHeader, TabBar, RoleBadge } from '../components/ui'
 import { useCredenzialiAdmin, CardCredenziali, Avviso, Pulsante } from '../components/ApiFootballUi'
-import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks } from 'lucide-react'
+import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks, Users, Save } from 'lucide-react'
 
 // ============================================================
 // "Raccordo giocatori" — l'id di NEW_GIOCATORI vale solo dentro la propria
@@ -17,6 +17,11 @@ import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks } from 
 //     persone omonime (oppure si uniscono tutte le stagioni di una persona).
 //     Una persona può avere PIÙ id nella stessa stagione (cessione/acquisto):
 //     l'id più basso è il primo in ordine cronologico;
+//   - varianti di scrittura: "Di Marco" / "Dimarco", "N'Dri" / "Ndri" vengono
+//     collegate da "Ricostruisci raccordo" ma segnate "da verificare" (nota "Variante nome");
+//   - "Omonimi": tra le persone già certificate, ripropone quelle diverse con nome
+//     uguale o molto simile e permette di rinominare il giocatore (in tutte le
+//     stagioni o in una sola) per distinguerlo, es. "ROSSI M. (DIF)";
 //   - "Persone": ricerca per nome, unisci due persone, collega o separa una singola stagione.
 // Per le stagioni future l'allineamento parte al termine di "Inserimento rose".
 // ============================================================
@@ -64,6 +69,8 @@ export default function RaccordoGiocatori() {
   const [trovati, setTrovati] = useState(null)
   const [persona, setPersona] = useState(null)
   const [selezione, setSelezione] = useState([])   // max 2 persone da unire
+  const [omonimi, setOmonimi] = useState(null)      // { gruppi, totale }
+  const [bozze, setBozze] = useState({})            // id_anagrafica -> nuovo nome in modifica
 
   const off = !cred.pronto || !!occupato
 
@@ -89,17 +96,18 @@ export default function RaccordoGiocatori() {
   }
 
   const ricostruisci = async () => {
-    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano; vengono segnati "da verificare" solo quelli per cui l\'automatico propone un collegamento diverso.')) return
+    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano; vengono segnati "da verificare" solo quelli per cui l\'automatico propone un collegamento diverso. I nomi scritti in modo diverso (es. Di Marco / Dimarco) vengono collegati e proposti in verifica.')) return
     const r = await chiama('ricostruisci', { azzera_auto: true })
     if (r) {
       const tot = r.stagioni.reduce((a, x) => ({
         giocatori: a.giocatori + x.giocatori, collegati: a.collegati + x.collegati,
         nuove: a.nuove + x.nuove_persone, omonimi: a.omonimi + x.omonimi, verifica: a.verifica + x.da_verificare,
-      }), { giocatori: 0, collegati: 0, nuove: 0, omonimi: 0, verifica: 0 })
+        varianti: a.varianti + (x.varianti ?? 0),
+      }), { giocatori: 0, collegati: 0, nuove: 0, omonimi: 0, verifica: 0, varianti: 0 })
       const man = r.manuali
         ? ` Manuali esaminati: ${r.manuali.manuali}; ${r.manuali.con_differenze} segnati da verificare (${r.manuali.gruppi} persone), gli altri non sono stati toccati.`
         : ''
-      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.verifica} da verificare.${man}`)
+      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.varianti} varianti di scrittura (es. Di Marco / Dimarco), ${tot.verifica} da verificare.${man}`)
       caricaVerifica()
     }
   }
@@ -152,6 +160,27 @@ export default function RaccordoGiocatori() {
   const cerca = async () => {
     const r = await chiama('cerca', { q }, 'cerca')
     if (r) setTrovati(r)
+  }
+
+  const caricaOmonimi = async () => {
+    const r = await chiama('omonimi', {}, 'omonimi')
+    if (r) {
+      setOmonimi(r)
+      setBozze({})
+    }
+  }
+
+  // Rinomina il giocatore: tutte le stagioni della persona, oppure una sola (edizione e)
+  const rinomina = async (p, e) => {
+    const nome = (bozze[p.id_anagrafica] ?? p.nome).trim()
+    const dove = e ? `solo nella stagione ${stagioneLabel(e.stagione)}` : `in TUTTE le stagioni (${p.edizioni.length})`
+    if (!nome || !window.confirm(`Rinominare ${p.nome} #${p.id_anagrafica} in "${nome}" ${dove}?\n\nIl nome cambia in tutta l'applicazione.`)) return
+    const extra = e ? { stagione_giocatore: e.stagione, id_giocatore: e.id_giocatore } : {}
+    const r = await chiama('rinomina', { id_anagrafica: p.id_anagrafica, nome, ...extra }, 'rinomina')
+    if (r) {
+      setEsito(`${p.nome} #${p.id_anagrafica} rinominato in "${nome}" ${dove} (${r.rinominati} giocator${r.rinominati === 1 ? 'e' : 'i'}).`)
+      await caricaOmonimi()
+    }
   }
 
   const apriPersona = async id => {
@@ -218,7 +247,7 @@ export default function RaccordoGiocatori() {
         )}
 
         <TabBar
-          tabs={[{ value: 'verifica', label: 'Da verificare' }, { value: 'persone', label: 'Persone' }]}
+          tabs={[{ value: 'verifica', label: 'Da verificare' }, { value: 'omonimi', label: 'Omonimi' }, { value: 'persone', label: 'Persone' }]}
           active={tab} onChange={setTab}
         />
 
@@ -300,6 +329,64 @@ export default function RaccordoGiocatori() {
                           titolo="Chiude la verifica di questo giocatore: esce dall'elenco">
                   Conferma e chiudi
                 </Pulsante>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab === 'omonimi' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Pulsante onClick={() => caricaOmonimi()} disabled={off} caricando={occupato === 'omonimi'} icona={Users}>
+                {omonimi ? 'Ricarica omonimi' : 'Carica omonimi'}
+              </Pulsante>
+            </div>
+            <p className="text-xs text-slate-500">
+              Persone diverse, già certificate, con nome uguale o molto simile (anche scritto con spazi o apostrofi diversi).
+              Rinomina il giocatore per distinguerlo (es. "ROSSI M. (DIF)"): il nome cambia in tutta l'applicazione, in tutte le stagioni oppure in una sola. Quando i nomi non sono più uguali o simili il gruppo sparisce dall'elenco.
+            </p>
+            {omonimi && !omonimi.gruppi.length && <Avviso tono="green" icona={CheckCircle2}>Nessun omonimo da distinguere.</Avviso>}
+            {omonimi && omonimi.totale > omonimi.gruppi.length && (
+              <p className="text-xs text-slate-500">Mostrati {omonimi.gruppi.length} gruppi su {omonimi.totale}.</p>
+            )}
+            {omonimi?.gruppi.map(gr => (
+              <div key={gr.persone.map(p => p.id_anagrafica).join('-')} className="card p-4 space-y-3">
+                <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600">
+                  {gr.tipo === 'uguale' ? 'Stesso nome' : gr.tipo === 'variante' ? 'Stesso nome, scrittura diversa' : 'Nomi molto simili'}
+                </p>
+                {gr.persone.map(p => {
+                  const valore = bozze[p.id_anagrafica] ?? p.nome
+                  const modificato = valore.trim() !== p.nome
+                  return (
+                    <div key={p.id_anagrafica} className="rounded-lg border border-white/10 px-3 py-2 space-y-2">
+                      <p className="text-sm text-slate-200">
+                        {p.nome} <span className="text-xs text-slate-600 font-mono">#{p.id_anagrafica}</span>
+                      </p>
+                      <input
+                        type="text" maxLength={50} value={valore}
+                        onChange={ev => setBozze(b => ({ ...b, [p.id_anagrafica]: ev.target.value }))}
+                        placeholder="Nuovo nome del giocatore" className="fanta-input w-full max-w-sm"
+                      />
+                      {p.edizioni.map(e => (
+                        <div key={`${e.stagione}-${e.id_giocatore}`}
+                             className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                          <span className="font-mono text-slate-400">{stagioneLabel(e.stagione)}</span>
+                          <span>{e.nome}</span>
+                          <InfoGiocatore g={e} />
+                          <Pulsante piccolo icona={Save} disabled={off || !modificato}
+                                    titolo={`Applica il nuovo nome solo alla stagione ${stagioneLabel(e.stagione)}`}
+                                    onClick={() => rinomina(p, e)}>
+                            Solo {stagioneLabel(e.stagione)}
+                          </Pulsante>
+                        </div>
+                      ))}
+                      <Pulsante piccolo primario={modificato} icona={Save} disabled={off || !modificato}
+                                caricando={occupato === 'rinomina'} onClick={() => rinomina(p)}>
+                        Rinomina in tutte le stagioni
+                      </Pulsante>
+                    </div>
+                  )
+                })}
               </div>
             ))}
           </div>

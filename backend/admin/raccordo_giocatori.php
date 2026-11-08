@@ -24,6 +24,11 @@
 // azione = "unisci"       { id_tieni, id_assorbi }  unisce TUTTE le stagioni di due persone
 // azione = "unisci_molti" { id_tieni, id_assorbi[] }  unisce TUTTE le stagioni di piu' persone in una
 // azione = "separa"       { stagione_giocatore, id_giocatore }
+// azione = "omonimi"      { limite? }  persone diverse, gia' certificate, con nome uguale
+//                         o molto simile (anche DI MARCO / DIMARCO)
+// azione = "rinomina"     { id_anagrafica, nome, stagione_giocatore?, id_giocatore? }
+//                         cambia il NOME del giocatore: in tutte le stagioni della persona
+//                         oppure, se indicati stagione_giocatore e id_giocatore, in una sola
 // ============================================================
 require_once __DIR__ . "/../connect.php";
 require_once __DIR__ . "/../lib/BackupStagione.php";
@@ -109,6 +114,17 @@ try {
         case "separa":
             $nuova = rg_separa((int) ($input["stagione_giocatore"] ?? 0), (int) ($input["id_giocatore"] ?? 0));
             api_success(["ok" => true, "id_anagrafica" => $nuova, "stato" => rg_stato()]);
+            break;
+
+        case "omonimi":
+            api_success(rg_omonimi_certificati((int) ($input["limite"] ?? 100)));
+            break;
+
+        case "rinomina":
+            $sg = isset($input["stagione_giocatore"]) ? (int) $input["stagione_giocatore"] : null;
+            $ig = isset($input["id_giocatore"]) ? (int) $input["id_giocatore"] : null;
+            $n  = rg_rinomina((int) ($input["id_anagrafica"] ?? 0), (string) ($input["nome"] ?? ""), $sg, $ig);
+            api_success(["ok" => true, "rinominati" => $n, "stato" => rg_stato()]);
             break;
 
         default:

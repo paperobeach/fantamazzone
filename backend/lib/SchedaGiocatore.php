@@ -3,7 +3,7 @@
 // backend/lib/SchedaGiocatore.php
 //
 // Logica della scheda giocatore (api/giocatore.php) e della ricerca
-// rapida (api/giocatori_cerca.php).
+// rapida su tutte le stagioni (api/giocatori_cerca.php).
 //
 // ATTENZIONE: l'id di un giocatore NON e' lo stesso tra una stagione
 // e l'altra (NEW_GIOCATORI.id e' valido solo insieme alla stagione).
@@ -44,21 +44,35 @@ function sg_escape_like(string $s): string
 }
 
 /**
- * Ricerca rapida tra i giocatori della stagione (in rosa + svincolati).
+ * Ricerca rapida tra i giocatori di TUTTE le stagioni (in rosa + svincolati).
+ * Ogni persona compare una sola volta, con la sua edizione piu' recente
+ * (stagione piu' alta, a parita' id piu' alto): l'id e la stagione restituiti
+ * servono ad aprire la scheda (api/giocatore.php), che mostra anche lo storico.
+ * Il collegamento tra stagioni usa il raccordo per id; se manca (tabelle
+ * assenti o giocatore non raccordato) si ripiega sul nome + ruolo.
  * Restituisce al massimo $limite giocatori: i nomi che INIZIANO con il testo
  * cercato vengono prima di quelli che lo contengono soltanto.
  */
-function sg_cerca(int $stagione, string $q, int $limite = 10): array
+function sg_cerca(string $q, int $limite = 10): array
 {
-    global $conn;
     $q = trim($q);
     if (strlen($q) < 2) return [];
 
-    $like       = sg_escape_like($q);
-    $limite     = max(1, min(25, $limite));
-    $anagrafica = rs_sql_anagrafica($stagione);
+    $like   = sg_escape_like($q);
+    $limite = max(1, min(25, $limite));
 
-    $righe = query_all("SELECT a.id, a.descrizione, a.ruolo, a.nazione,
+    // Anagrafica di tutte le stagioni: in rosa oppure svincolati (ceduti)
+    $anagrafica = "(SELECT a.id, a.stagione, a.descrizione, a.ruolo, a.nazione
+                       FROM NEW_GIOCATORI a
+                      UNION ALL
+                     SELECT v.id, v.stagione, v.descrizione, v.ruolo, v.nazione
+                       FROM NEW_GIOCATORI_SVINCOLATI v
+                      WHERE NOT EXISTS (SELECT 1 FROM NEW_GIOCATORI x
+                                         WHERE x.stagione = v.stagione AND x.id = v.id))";
+
+    // Una persona puo' avere un'edizione per ogni stagione: si leggono piu'
+    // righe del limite richiesto, poi si riuniscono per persona.
+    $righe = query_all("SELECT a.id, a.stagione, a.descrizione, a.ruolo, a.nazione,
                                b.squadra_serie_a,
                                s.id AS id_squadra, s.nome AS squadra, s.logo
                         FROM $anagrafica a
@@ -69,35 +83,54 @@ function sg_cerca(int $stagione, string $q, int $limite = 10): array
                         LEFT JOIN NEW_GIOCATORI_BASE_ASTA b
                                ON b.stagione = a.stagione AND b.id_giocatore = a.id
                         WHERE a.descrizione LIKE '%$like%'
-                        ORDER BY (a.descrizione LIKE '$like%') DESC, a.descrizione
-                        LIMIT " . ($limite * 2));
+                        ORDER BY (a.descrizione LIKE '$like%') DESC, a.descrizione,
+                                 a.stagione DESC, a.id DESC
+                        LIMIT " . ($limite * 40));
+    if (!$righe) return [];
 
-    // Piu' id della stessa persona nella stagione (cessione/acquisto): in elenco
-    // compare una volta sola, con l'id piu' alto (l'ultimo in ordine cronologico)
-    $persona = [];
-    if ($righe && rg_tabelle_esistono()) {
-        $ids = implode(",", array_map(fn($r) => (int) $r["id"], $righe));
-        foreach (query_all("SELECT id_giocatore, id_anagrafica FROM " . RG_T_RACC . "
-                            WHERE stagione = $stagione AND id_giocatore IN ($ids)") as $r) {
-            $persona[(int) $r["id_giocatore"]] = (int) $r["id_anagrafica"];
+    // Persona del raccordo per (stagione, id)
+    $persona = [];   // "stagione-id" => id_anagrafica
+    if (rg_tabelle_esistono()) {
+        $coppie = [];
+        foreach ($righe as $r) $coppie[] = "(" . (int) $r["stagione"] . "," . (int) $r["id"] . ")";
+        foreach (query_all("SELECT stagione, id_giocatore, id_anagrafica FROM " . RG_T_RACC . "
+                            WHERE (stagione, id_giocatore) IN (" . implode(",", array_unique($coppie)) . ")") as $r) {
+            $persona[(int) $r["stagione"] . "-" . (int) $r["id_giocatore"]] = (int) $r["id_anagrafica"];
         }
     }
-    $chiave = fn($r) => isset($persona[(int) $r["id"]]) ? "p" . $persona[(int) $r["id"]] : "g" . (int) $r["id"];
+    $chiave = function (array $r) use ($persona): string {
+        $k = (int) $r["stagione"] . "-" . (int) $r["id"];
+        return isset($persona[$k])
+            ? "p" . $persona[$k]
+            : "n" . mb_strtolower(trim($r["descrizione"])) . "|" . (int) $r["ruolo"];
+    };
+
+    // Edizione migliore (la piu' recente) e stagioni in cui compare, per persona
     $migliore = [];
+    $stagioni = [];
     foreach ($righe as $r) {
         $k = $chiave($r);
-        if (!isset($migliore[$k]) || (int) $r["id"] > (int) $migliore[$k]["id"]) $migliore[$k] = $r;
+        $stagioni[$k][(int) $r["stagione"]] = true;
+        if (!isset($migliore[$k])
+            || [(int) $r["stagione"], (int) $r["id"]] > [(int) $migliore[$k]["stagione"], (int) $migliore[$k]["id"]]) {
+            $migliore[$k] = $r;
+        }
     }
 
+    // L'ordine delle righe (prefisso, nome) decide l'ordine delle persone
     $out   = [];
     $visti = [];
     foreach ($righe as $r0) {
         $k = $chiave($r0);
         if (isset($visti[$k])) continue;
         $visti[$k] = true;
-        $r = $migliore[$k];
+        $r  = $migliore[$k];
+        $st = array_keys($stagioni[$k]);
+        sort($st);
         $out[] = [
             "id"              => (int) $r["id"],
+            "stagione"        => (int) $r["stagione"],
+            "stagioni"        => $st,
             "descrizione"     => $r["descrizione"],
             "ruolo"           => (int) $r["ruolo"],
             "squadra_serie_a" => $r["squadra_serie_a"] ?? null,

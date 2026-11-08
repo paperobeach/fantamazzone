@@ -1,19 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, X } from 'lucide-react'
-import { useApp } from '../context/AppContext'
 import { cercaGiocatori } from '../api/client'
 import { RoleBadge } from './ui'
 
+const stagioneLabel = s => `${s}/${String(Number(s) + 1).slice(-2)}`
+
 // Ricerca rapida giocatore: campo di testo con suggerimenti (da 2 caratteri,
-// max 10 risultati) nella stagione scelta. Selezionando un risultato si apre
-// la scheda del giocatore (/giocatori/:id?stagione=...).
+// max 10 risultati) su TUTTE le stagioni; ogni giocatore compare una volta, con
+// la sua edizione piu' recente. Selezionando un risultato si apre la scheda del
+// giocatore in quella stagione (/giocatori/:id?stagione=...), che mostra anche lo storico.
 //
 // inline=false  elenco a tendina sotto il campo (sidebar desktop)
 // inline=true   elenco nel flusso della pagina (pannello mobile)
 // onSelect      chiamata dopo la selezione (es. per chiudere un pannello)
 export default function RicercaGiocatore({ onSelect, autoFocus = false, inline = false, className = '' }) {
-  const { stagione } = useApp()
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [risultati, setRisultati] = useState([])
@@ -30,7 +31,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
   // Ricerca con debounce; il contatore evita che una risposta lenta
   // sovrascriva una più recente.
   useEffect(() => {
-    if (!valido || !stagione) {
+    if (!valido) {
       setRisultati([])
       setLoading(false)
       setErrore(false)
@@ -40,7 +41,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
     setLoading(true)
     const t = setTimeout(async () => {
       try {
-        const r = await cercaGiocatori(stagione, testo)
+        const r = await cercaGiocatori(testo)
         if (n !== reqRef.current) return
         setRisultati(Array.isArray(r) ? r : [])
         setErrore(false)
@@ -54,7 +55,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
       }
     }, 250)
     return () => clearTimeout(t)
-  }, [testo, valido, stagione])
+  }, [testo, valido])
 
   // Chiude l'elenco con un click fuori dal componente
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
     setQ('')
     setRisultati([])
     setAperto(false)
-    navigate(`/giocatori/${g.id}?stagione=${stagione}`)
+    navigate(`/giocatori/${g.id}?stagione=${g.stagione}`)
     onSelect?.(g)
   }
 
@@ -99,7 +100,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
         <p className="px-3 py-3 text-xs text-slate-500">Nessun giocatore trovato.</p>
       ) : risultati.map((g, i) => (
         <button
-          key={g.id}
+          key={`${g.stagione}-${g.id}`}
           type="button"
           role="option"
           aria-selected={i === attivo}
@@ -114,6 +115,7 @@ export default function RicercaGiocatore({ onSelect, autoFocus = false, inline =
             <span className="block truncate text-sm text-slate-200">{g.descrizione}</span>
             <span className="block truncate text-[11px] text-slate-600">
               {[g.squadra_serie_a, g.squadra].filter(Boolean).join(' · ') || 'Svincolato'}
+              {g.stagione ? ` · ${stagioneLabel(g.stagione)}` : ''}
             </span>
           </span>
         </button>

@@ -2,7 +2,9 @@
 // /giocatori/:id?stagione=2026
 // Dati della stagione indicata (totali, andamento e dettaglio per giornata,
 // percorso in lega) e storico di tutte le stagioni. L'id del giocatore è valido
-// solo nella propria stagione: lo storico è collegato dal backend per nome.
+// solo nella propria stagione: lo storico è collegato dal backend (raccordo per id,
+// ripiego per nome). Il selettore di stagione sotto l'intestazione permette di
+// passare da una stagione all'altra; senza ?stagione si apre l'ultima.
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useApp } from '../context/AppContext'
@@ -79,12 +81,45 @@ function Andamento({ giornate, media }) {
   )
 }
 
+// Selettore di stagione: una voce per ogni stagione in cui il giocatore compare
+// (dalla più recente). Ogni voce porta l'id del giocatore in QUELLA stagione,
+// perché l'id non è lo stesso tra una stagione e l'altra.
+function SelettoreStagione({ stagioni, attiva, onSeleziona }) {
+  if (stagioni.length < 2) return null
+  return (
+    <div className="mb-6 -mx-1 px-1 overflow-x-auto">
+      <div role="tablist" aria-label="Stagione" className="flex gap-2 w-max">
+        {stagioni.map(({ stagione, id }) => {
+          const on = stagione === attiva
+          return (
+            <button
+              key={stagione}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              onClick={() => !on && onSeleziona(stagione, id)}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-mono whitespace-nowrap transition-colors ${
+                on
+                  ? 'bg-grass-500/15 border-grass-500/40 text-grass-400'
+                  : 'bg-pitch-800 border-white/10 text-slate-400 hover:text-slate-200 hover:border-white/20'
+              }`}
+            >
+              {stagioneLabel(stagione)}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Giocatore() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [sp] = useSearchParams()
   const { stagione: stagioneApp, ultimaStagione } = useApp()
-  const stagione = Number(sp.get('stagione')) || stagioneApp
+  // Senza ?stagione si apre l'ultima stagione disponibile
+  const stagione = Number(sp.get('stagione')) || ultimaStagione || stagioneApp
 
   const { data, loading, error, refetch } = useFetch(
     stagione ? () => getGiocatore(stagione, id) : null,
@@ -98,6 +133,23 @@ export default function Giocatore() {
   const { anagrafica: a, stagione_corrente: sc, storico } = data
   const portiere = a.ruolo === 1
   const t = sc.totali
+
+  // Stagioni in cui il giocatore compare, con il suo id in ciascuna (storico già
+  // ordinato dalla più recente; con più id nella stessa stagione basta uno qualsiasi:
+  // il backend riunisce tutti gli id della persona)
+  const stagioniGiocatore = []
+  for (const r of storico.stagioni) {
+    if (!stagioniGiocatore.some(x => x.stagione === r.stagione)) {
+      stagioniGiocatore.push({ stagione: r.stagione, id: r.id_giocatore })
+    }
+  }
+  if (!stagioniGiocatore.some(x => x.stagione === stagione)) {
+    stagioniGiocatore.push({ stagione, id: a.id })
+    stagioniGiocatore.sort((x, y) => y.stagione - x.stagione)
+  }
+  // replace: il tasto Indietro continua a tornare alla pagina di provenienza
+  const vaiAStagione = (st, idGiocatore) =>
+    navigate(`/giocatori/${idGiocatore}?stagione=${st}`, { replace: true })
   // La mappa delle bandiere vale per la stagione scelta e per l'ultima
   const bandieraOk = stagione === stagioneApp || stagione === ultimaStagione
 
@@ -110,6 +162,8 @@ export default function Giocatore() {
 
       <PageHeader label="Scheda giocatore" title={a.nome}
                   subtitle={`Stagione ${stagioneLabel(stagione)}`} />
+
+      <SelettoreStagione stagioni={stagioniGiocatore} attiva={stagione} onSeleziona={vaiAStagione} />
 
       {/* Anagrafica */}
       <div className="card p-4 mb-6 flex flex-wrap items-center gap-x-6 gap-y-3">

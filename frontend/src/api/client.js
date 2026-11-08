@@ -166,8 +166,9 @@ export const getSquadra = (stagione, id)  => get('squadre.php', { stagione, id }
 // solo nella stagione indicata; lo storico è collegato per nome.
 export const getGiocatore = (stagione, id) => get('giocatore.php', { stagione, id })
 
-// Ricerca rapida per nome tra i giocatori della stagione (min. 2 caratteri, max 10 risultati)
-export const cercaGiocatori = (stagione, q) => get('giocatori_cerca.php', { stagione, q })
+// Ricerca rapida per nome tra i giocatori di TUTTE le stagioni (min. 2 caratteri, max 10 risultati,
+// uno per persona con la sua edizione piu' recente: { id, stagione, stagioni[], ... })
+export const cercaGiocatori = q => get('giocatori_cerca.php', { q })
 
 // ── Dashboard squadra ────────────────────────────────────────
 // Tutti i dati della dashboard (albo, KPI, campionato, Champions,

@@ -71,7 +71,10 @@ function calcolaMedagliere(data) {
     const k = String(t.utenza ?? '').trim().toLowerCase()
     if (!m.has(k)) m.set(k, { utenza: k, nome: t.nome, logo: t.logo, campionati: 0, secondi: 0, champions: 0, finali: 0, nere: 0,
       st: { campionati: [], secondi: [], champions: [], finali: [], nere: [] } })
-    return m.get(k)
+    const x = m.get(k)
+    // logo mancante nella stagione piu' recente: si recupera da una stagione precedente
+    if (!x.logo && t.logo) x.logo = t.logo
+    return x
   }
   // oltre al conteggio si tiene la stagione (anno di inizio) di ciascun piazzamento
   const segna = (t, tipo, stagione) => { const x = get(t); if (x) { x[tipo]++; x.st[tipo].push(stagione) } }
@@ -92,6 +95,7 @@ function calcolaMedagliere(data) {
     const k = String(x.nome ?? '').trim().toLowerCase() || x.utenza
     const y = uniti.get(k)
     if (!y) { uniti.set(k, x); continue }
+    if (!y.logo && x.logo) y.logo = x.logo
     for (const t of ['campionati', 'secondi', 'champions', 'finali', 'nere']) {
       y[t] += x[t]
       y.st[t].push(...x.st[t])

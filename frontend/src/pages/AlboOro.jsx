@@ -98,10 +98,9 @@ function calcolaMedagliere(data) {
     }
   }
   for (const x of uniti.values()) for (const k of Object.keys(x.st)) x.st[k].sort((a, b) => a - b)
+  // ordine alfabetico per nome squadra (senza distinzione di maiuscole/accenti)
   return [...uniti.values()].sort((a, b) =>
-    (b.campionati + b.champions) - (a.campionati + a.champions)
-    || b.campionati - a.campionati || b.champions - a.champions
-    || b.secondi - a.secondi || a.nere - b.nere)
+    String(a.nome ?? '').localeCompare(String(b.nome ?? ''), 'it', { sensitivity: 'base' }))
 }
 
 const TIPI = [
@@ -127,51 +126,14 @@ function Titoli({ stagioni, Icon, cls }) {
   )
 }
 
-function Podio({ squadre }) {
-  const top = squadre.slice(0, 3)
-  const stile = [
-    'border-gold-400/50 bg-gradient-to-b from-gold-500/15 to-transparent',
-    'border-slate-300/40 bg-gradient-to-b from-slate-300/10 to-transparent',
-    'border-amber-700/50 bg-gradient-to-b from-amber-700/15 to-transparent',
-  ]
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-      {top.map((t, i) => (
-        <div key={t.utenza} className={`card border p-4 flex flex-col items-center text-center ${stile[i]}`}>
-          <div className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-widest text-slate-400 mb-2">
-            {i === 0 && <Crown className="w-4 h-4 text-gold-400" aria-hidden="true" />}
-            {i + 1}° posto
-          </div>
-          <TeamLogo logo={t.logo} nome={t.nome} size="lg" />
-          <p className="mt-2 font-semibold text-slate-100 truncate max-w-full">{t.nome}</p>
-          <div className="mt-3 flex items-end gap-5">
-            <div className="flex flex-col items-center">
-              <Trophy className="w-5 h-5 text-gold-400" aria-hidden="true" />
-              <span className="text-display text-3xl font-bold text-gold-400 leading-none">{t.campionati}</span>
-              <span className="text-[9px] font-mono uppercase text-slate-500">Campionati</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <Shield className="w-5 h-5 text-sky-400" aria-hidden="true" />
-              <span className="text-display text-3xl font-bold text-sky-400 leading-none">{t.champions}</span>
-              <span className="text-[9px] font-mono uppercase text-slate-500">Champions</span>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function Medagliere({ squadre }) {
   return (
     <>
-      <Podio squadre={squadre} />
       <div className="card overflow-hidden">
         <ul className="divide-y divide-white/5">
-          {squadre.map((t, i) => (
+          {squadre.map(t => (
             <li key={t.utenza} className="px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
               <div className="flex items-center gap-3 lg:w-64 min-w-0">
-                <span className="text-display font-bold text-lg text-slate-600 w-6 text-center">{i + 1}</span>
                 <TeamLogo logo={t.logo} nome={t.nome} size="sm" />
                 <span className="font-medium text-slate-200 text-sm truncate">{t.nome}</span>
               </div>

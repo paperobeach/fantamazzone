@@ -1,8 +1,21 @@
 import { useState } from 'react'
-import { CheckCircle2, MinusCircle, XCircle, User, Home, Plane } from 'lucide-react'
+import { CheckCircle2, MinusCircle, XCircle, User, Users, UserCheck, Home, Plane } from 'lucide-react'
 import TeamLogo from '../TeamLogo'
 
 // ── Utilità ──────────────────────────────────────────────────
+
+/** Etichetta del filtro giocatori applicato a una statistica (solo schierati / intera rosa). */
+export function BadgeVista({ vista, className = '' }) {
+  const rosa = vista === 'ROSA'
+  const Icona = rosa ? Users : UserCheck
+  return (
+    <span title={rosa ? 'Calcolata su tutta la rosa' : 'Calcolata sui soli giocatori schierati'}
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[10px] font-semibold ${
+            rosa ? 'bg-gold-500/15 border-gold-500/40 text-gold-300' : 'bg-grass-500/15 border-grass-500/40 text-grass-300'} ${className}`}>
+      <Icona className="w-3 h-3" /> {rosa ? 'Rosa' : 'Schierati'}
+    </span>
+  )
+}
 
 export const fmt = (n, d = 1) =>
   (n === null || n === undefined || Number.isNaN(Number(n)) ? '–' : Number(n).toFixed(d))

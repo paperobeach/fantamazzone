@@ -8,7 +8,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts'
 import { Activity } from 'lucide-react'
-import { Section, Vuoto } from './shared'
+import { Section, Vuoto, BadgeVista } from './shared'
 import { GraficoZoom, LegendaInterattiva, useEvidenzia, asse } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState, TabBar } from '../ui'
 import { SelettoreMetriche } from './SelezioneMetriche'
@@ -97,6 +97,8 @@ export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-dis
 
   const defs = mappaDef(ctx.data)
   const selezionate = ctx.sel.chiavi.map(k => defs[k]).filter(Boolean)
+  const vista = ctx.vistaApplicata ?? ctx.vista
+  const conGiocatori = selezionate.some(d => d.giocatori)
 
   return (
     <div className="space-y-6">
@@ -118,10 +120,22 @@ export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-dis
         <EmptyState label="Seleziona una o più statistiche per vederne l'andamento." />
       ) : (
         <div className="space-y-6">
+          {conGiocatori && (
+            <p className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+              <BadgeVista vista={vista} />
+              Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre.
+              {ctx.vistaNota && <span className="text-gold-400">{ctx.vistaNota}</span>}
+            </p>
+          )}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {selezionate.map(def => (
               <Section key={def.key} title={def.label} icon={Activity}
-                       right={MODI_ANDAMENTO.find(m => m.value === modo)?.label}>
+                       right={(
+                         <span className="inline-flex items-center gap-2">
+                           {def.giocatori && <BadgeVista vista={vista} />}
+                           {MODI_ANDAMENTO.find(m => m.value === modo)?.label}
+                         </span>
+                       )}>
                 <GraficoMetrica def={def} data={ctx.data} me={ctx.me} conf={conf} modo={modo} />
               </Section>
             ))}

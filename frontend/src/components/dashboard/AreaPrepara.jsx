@@ -1,16 +1,16 @@
-import { useState } from 'react'
-import { Trophy, Crown, ClipboardList, Swords, Home, Plane, EyeOff, LayoutGrid, Timer } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Trophy, Crown, ClipboardList, Home, Plane, LayoutGrid, Flame } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardPrepara } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
 import TeamLogo from '../TeamLogo'
 import { NomeConBandiera } from '../Bandiera'
 import { useApp } from '../../context/AppContext'
-import { PitchLineup } from '../PitchLineup'
+import { IncontroSerieA } from '../PitchField'
 import PreparaTop11 from './PreparaTop11'
 import PreparaSerieA, { IncontriSerieA, GiocatoriPerAvversaria } from './PreparaSerieA'
 import {
-  Section, Vuoto, BarraPerc, PallinoForma, RigaRisultato, EsitoIcon, CoachPhoto, fmt, fmtDataOra,
+  Section, Vuoto, BarraPerc, PallinoForma, RigaRisultato, EsitoIcon, CoachPhoto, BadgeVista, fmt,
 } from './shared'
 
 // ── Formazioni (elenco) ──────────────────────────────────────
@@ -125,11 +125,6 @@ function SchedaAvversario({ m, d, champ }) {
           </div>
         )}
       </div>
-      {m.scadenza && (
-        <p className="text-xs text-slate-500 mt-3 flex items-center gap-1.5">
-          <Timer className="w-3.5 h-3.5" /> Limite formazione: {fmtDataOra(m.scadenza)}
-        </p>
-      )}
     </div>
   )
 }
@@ -182,43 +177,29 @@ function ModuliAvversario({ moduli, nome }) {
   )
 }
 
-function FormazioniScontro({ p, m, d }) {
-  const f = p.formazioni
-  const colonne = [
-    { nome: d.squadra.nome, logo: d.squadra.logo, lista: f.mia, nascosta: !!f.mia_nascosta },
-    { nome: m.avversario.nome, logo: m.avversario.logo, lista: f.avversario, nascosta: f.avversario_nascosta },
-  ]
-  return (
-    <Section title="Formazioni per lo scontro diretto" icon={Swords} right={`Giornata ${m.giornata}`}>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-        {colonne.map(({ nome, logo, lista, nascosta }) => (
-          <div key={nome}>
-            <div className="flex items-center gap-2 mb-3">
-              <TeamLogo logo={logo} nome={nome} size="sm" />
-              <p className="text-sm font-semibold text-slate-300 truncate">{nome}</p>
-            </div>
-            {lista ? <PitchLineup players={lista} /> : (
-              <div className="rounded-xl border border-dashed border-white/10 aspect-[3/4] flex flex-col items-center justify-center gap-2 px-4 text-center">
-                {nascosta && <EyeOff className="w-5 h-5 text-slate-600" />}
-                <p className="text-sm text-slate-600">
-                  {nascosta ? 'Formazione nascosta: sarà visibile all\'inizio della prima partita di Serie A della giornata' : 'Formazione non inserita'}
-                </p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </Section>
-  )
+// Giocatori da temere: i 5 dell'avversario con la fantamedia (media fantavoto) più alta,
+// secondo il filtro giocatori (solo schierati / intera rosa) e le sole presenze con voto.
+const N_TEMUTI = 5
+
+function calcolaTemuti(rosaAvv, vista) {
+  const usaRosa = vista === 'ROSA' && rosaAvv.every(g => g.tutta_rosa)
+  const lista = rosaAvv
+    .map(g => {
+      const dati = usaRosa ? g.tutta_rosa : g
+      return { ...g, fantamedia: dati.media_fantavoto, pres: dati.presenze }
+    })
+    .filter(g => g.fantamedia !== null && g.fantamedia !== undefined && g.pres > 0)
+    .sort((a, b) => b.fantamedia - a.fantamedia || b.pres - a.pres)
+    .slice(0, N_TEMUTI)
+  return { lista, usaRosa, mappa: new Map(lista.map((g, i) => [g.id_giocatore, i + 1])) }
 }
 
-function SezioneAvversario({ p, d, champ }) {
+// ── L'avversario - sintesi ───────────────────────────────────
+
+function SintesiAvversario({ p, d, champ }) {
   const m = p.match
   if (!m) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
   const a = m.avversario
-  const pr = !champ ? d.prossima : null
-  const uf = pr?.ultima_formazione_avversario
-
   return (
     <div className="space-y-6">
       <SchedaAvversario m={m} d={d} champ={champ} />
@@ -228,37 +209,77 @@ function SezioneAvversario({ p, d, champ }) {
         <ModuliAvversario moduli={p.moduli_avversario} nome={a.nome} />
       </div>
 
-      <IncontriSerieA incontri={p.incontri_avversario ?? []} giornataSerieA={p.giornata_serie_a}
-                      titolo={`Incontri di Serie A · giocatori di ${a.nome}`} />
-      <GiocatoriPerAvversaria rosa={p.rosa_avversario ?? []}
-                              titolo={`Giocatori di ${a.nome} per squadra avversaria`}
-                              vuoto={`Nessun giocatore di ${a.nome} ha una partita in questa giornata.`} />
-
-      <FormazioniScontro p={p} m={m} d={d} />
-
       {p.storico && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StoricoScontri dati={p.storico.campionato} titolo="Storico in campionato" icona={Trophy} />
           <StoricoScontri dati={p.storico.champions}  titolo="Storico in Champions"  icona={Crown} />
         </div>
       )}
-
-      {pr && (
-        <>
-          <Section title="Ultima formazione schierata dall'avversario" icon={ClipboardList}
-                   right={uf ? `G${uf.giornata} vs ${uf.partita.avversario} ${uf.partita.golf}-${uf.partita.gols}` : undefined}>
-            {uf && uf.giocatori.length > 0
-              ? <Lineup giocatori={uf.giocatori} conVoti />
-              : <Vuoto>Nessuna formazione disponibile.</Vuoto>}
-          </Section>
-        </>
-      )}
     </div>
   )
 }
 
+// ── L'avversario - Serie A ───────────────────────────────────
+
+function SerieAAvversario({ p, champ, vista }) {
+  const { ultimaStagione } = useApp()
+  const m = p.match
+  const rosaAvv = p.rosa_avversario ?? []
+  const temuti = useMemo(() => calcolaTemuti(rosaAvv, vista), [rosaAvv, vista])
+  if (!m) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
+  const a = m.avversario
+
+  return (
+    <div className="space-y-6">
+      <Section title="Giocatori da temere" icon={Flame}
+               right={<BadgeVista vista={temuti.usaRosa ? 'ROSA' : 'SCHIERATI'} />}>
+        {temuti.lista.length === 0 ? <Vuoto>Nessun giocatore di {a.nome} ha ancora preso voto.</Vuoto> : (
+          temuti.lista.map((g, i) => (
+            <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
+              <span className="w-5 text-xs font-mono text-red-400 font-bold">{i + 1}</span>
+              <RoleBadge ruolo={g.ruolo} />
+              <div className="flex-1 min-w-0 flex flex-col">
+                <NomeConBandiera id={g.id_giocatore} nome={g.nome} stagione={ultimaStagione} className="text-sm text-slate-200 font-medium" />
+                <IncontroSerieA player={g} />
+              </div>
+              <span className="text-xs text-slate-600 font-mono">{g.pres} pres.</span>
+              <span className="font-mono text-sm font-bold text-red-300 w-12 text-right">{fmt(g.fantamedia, 2)}</span>
+            </div>
+          ))
+        )}
+        <p className="px-4 py-2 text-[11px] text-slate-600">
+          I {N_TEMUTI} giocatori di {a.nome} con la fantamedia (media fantavoto) più alta
+          {champ ? ' in Champions' : ' in campionato'}; sono evidenziati anche negli incontri qui sotto.
+        </p>
+      </Section>
+
+      <IncontriSerieA incontri={p.incontri_avversario ?? []} giornataSerieA={p.giornata_serie_a}
+                      titolo={`Incontri di Serie A · giocatori di ${a.nome}`} temuti={temuti.mappa} />
+      <GiocatoriPerAvversaria rosa={rosaAvv} temuti={temuti.mappa}
+                              titolo={`Giocatori di ${a.nome} per squadra avversaria`}
+                              vuoto={`Nessun giocatore di ${a.nome} ha una partita in questa giornata.`} />
+    </div>
+  )
+}
+
+// ── L'avversario - ultima formazione ─────────────────────────
+
+function UltimaFormazioneAvversario({ p, champ }) {
+  if (!p.match) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
+  const uf = p.ultima_formazione_avversario
+  return (
+    <Section title="Ultima formazione schierata dall'avversario" icon={ClipboardList}
+             right={uf ? `G${uf.giornata} vs ${uf.partita.avversario} ${uf.partita.golf}-${uf.partita.gols}` : undefined}>
+      {uf && uf.giocatori.length > 0
+        ? <Lineup giocatori={uf.giocatori} conVoti />
+        : <Vuoto>Nessuna formazione disponibile.</Vuoto>}
+    </Section>
+  )
+}
+
 // ── Area "Prepara la prossima partita" ───────────────────────
-// Una sola pagina con le sezioni L'avversario, Top 11 e Serie A (navigabili dalla barra fissa).
+// Una sola pagina con le sezioni L'avversario (sintesi, Serie A, ultima formazione), Top 11 e Serie A
+// (navigabili dalla barra fissa).
 
 function BloccoSezione({ id, titolo, children }) {
   return (
@@ -283,8 +304,14 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione, vist
 
   return (
     <div className="space-y-6">
-      <BloccoSezione id="prep-avversario" titolo="L'avversario">
-        <SezioneAvversario p={p} d={d} champ={champ} />
+      <BloccoSezione id="prep-avv-sintesi" titolo="L'avversario - sintesi">
+        <SintesiAvversario p={p} d={d} champ={champ} />
+      </BloccoSezione>
+      <BloccoSezione id="prep-avv-serie_a" titolo="L'avversario - serie A">
+        <SerieAAvversario p={p} champ={champ} vista={vista} />
+      </BloccoSezione>
+      <BloccoSezione id="prep-avv-formazione" titolo="L'avversario - ultima formazione">
+        <UltimaFormazioneAvversario p={p} champ={champ} />
       </BloccoSezione>
       <BloccoSezione id="prep-top11" titolo="Top 11">
         <PreparaTop11 rosa={p.rosa} competizione={competizione} vista={vista} rosaNonDisponibile={p.rosa_non_disponibile} />

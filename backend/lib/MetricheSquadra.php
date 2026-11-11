@@ -27,16 +27,21 @@
 // ============================================================
 
 require_once __DIR__ . "/RosaStorico.php";
+require_once __DIR__ . "/StatisticheRosa.php";
 
 const MS_REPARTI = [1 => "portieri", 2 => "difensori", 3 => "centrocampisti", 4 => "attaccanti"];
 
-/** Definizione di una metrica. dir: up (più è alto meglio è) | down | neutral. */
+/**
+ * Definizione di una metrica. dir: up (più è alto meglio è) | down | neutral.
+ * $giocatori = true se la metrica dipende dal filtro giocatori (solo schierati / intera rosa).
+ */
 function ms_def(string $key, string $label, string $gruppo, string $agg, string $dir,
-                string $unita = "", int $dec = 2, string $descr = ""): array
+                string $unita = "", int $dec = 2, string $descr = "", bool $giocatori = false): array
 {
     return [
         "key" => $key, "label" => $label, "gruppo" => $gruppo, "agg" => $agg,
         "dir" => $dir, "unita" => $unita, "dec" => $dec, "descr" => $descr,
+        "giocatori" => $giocatori,
     ];
 }
 
@@ -84,9 +89,9 @@ function ms_catalogo(bool $champ = false): array
     $G = "Reparti";
     foreach (MS_REPARTI as $r => $nome) {
         $c[] = ms_def("reparto_{$r}_voto",      "Voto $nome",      $G, "mean", "up", "", 2,
-                      "Voto base, senza bonus/malus: media delle medie di partita dei giocatori schierati");
+                      "Voto base, senza bonus/malus: media delle medie di partita dei giocatori del reparto (schierati o intera rosa, secondo il filtro giocatori)", true);
         $c[] = ms_def("reparto_{$r}_fantavoto", "Fantavoto $nome", $G, "mean", "up", "", 2,
-                      "Voto con bonus/malus: media delle medie di partita dei giocatori schierati");
+                      "Voto con bonus/malus: media delle medie di partita dei giocatori del reparto (schierati o intera rosa, secondo il filtro giocatori)", true);
     }
     return $c;
 }
@@ -218,16 +223,49 @@ function ms_estrai_partite(array $partite): array
  */
 function ms_voti_reparti(int $stagione, bool $champ, callable $pub): array
 {
+    return ms_medie_reparti(ms_righe_schierati($stagione, $champ, $pub));
+}
+
+/**
+ * Vista ROSA: voti di tutti i giocatori in rosa con un voto reale, schierati o no
+ * (lib/StatisticheRosa.php), per ogni squadra nelle giornate che ha giocato.
+ * @param array $squadre [["id",...]]
+ * @param array $giornatePerSq id_squadra => [giornate pubbliche giocate]
+ * @throws StatisticheRosaNonDisponibili
+ */
+function ms_voti_reparti_rosa(int $stagione, bool $champ, array $squadre, array $giornatePerSq): array
+{
+    $righe = [];
+    foreach ($squadre as $s) {
+        $id = (int) $s["id"];
+        foreach (sr_voti_rosa($stagione, $id, $champ, $giornatePerSq[$id] ?? []) as $v) {
+            $righe[] = [
+                "id_squadra" => $id, "giornata" => (int) $v["giornata"], "id_giocatore" => (int) $v["id_giocatore"],
+                "voto" => $v["voto"], "totale" => $v["totale"], "ruolo_g" => $v["ruolo_g"],
+            ];
+        }
+    }
+    return ms_medie_reparti($righe);
+}
+
+/** Righe voto dei giocatori che hanno concorso al punteggio (vista SCHIERATI). */
+function ms_righe_schierati(int $stagione, bool $champ, callable $pub): array
+{
     $tab = $champ ? "NEW_VOTI_CHAMP" : "NEW_VOTI";
     $rows = query_all("SELECT v.id_squadra, v.giornata, v.id_giocatore, v.voto, v.totale, g.ruolo AS ruolo_g
                        FROM $tab v
                        LEFT JOIN " . rs_sql_anagrafica($stagione) . " g
                               ON g.id = v.id_giocatore AND g.stagione = v.stagione
                        WHERE v.stagione = $stagione AND v.giocata = 1");
+    return array_values(array_filter($rows, fn($r) => $pub((int) $r["giornata"])));
+}
+
+/** Per ogni squadra, reparto e giornata: media di voto e fantavoto dei giocatori del reparto. */
+function ms_medie_reparti(array $rows): array
+{
     $acc = [];
     foreach ($rows as $r) {
         $g = (int) $r["giornata"];
-        if (!$pub($g)) continue;
         $id = (int) $r["id_giocatore"];
         if ($r["ruolo_g"] !== null)  $ruolo = (int) $r["ruolo_g"];
         elseif ($id < 0)             $ruolo = intdiv(-$id, 1000000);   // riserva d'ufficio
@@ -256,7 +294,7 @@ function ms_voti_reparti(int $stagione, bool $champ, callable $pub): array
  * Valori, serie per giornata e benchmark di tutte le metriche per tutte le squadre.
  * $squadre: [["id","nome","logo"], ...].
  */
-function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre): array
+function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre, string $vista = "SCHIERATI"): array
 {
     $catalogo = ms_catalogo($champ);
     $posizioni = $champ ? [] : ms_posizioni($stagione, $pub);
@@ -270,7 +308,21 @@ function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre): 
         $perSq[$id] = ms_estrai_partite($partite);
         $perSq[$id]["_giornate"] = array_map(fn($p) => (int) $p["giornata"], $partite);
     }
-    $reparti = ms_voti_reparti($stagione, $champ, $pub);
+    // Filtro giocatori: vale solo per le metriche che dipendono dai singoli giocatori (reparti)
+    $vistaApplicata = "SCHIERATI";
+    $vistaNota = null;
+    $reparti = null;
+    if ($vista === "ROSA") {
+        try {
+            $gPerSq = [];
+            foreach ($perSq as $id => $x) $gPerSq[$id] = $x["_giornate"];
+            $reparti = ms_voti_reparti_rosa($stagione, $champ, $squadre, $gPerSq);
+            $vistaApplicata = "ROSA";
+        } catch (StatisticheRosaNonDisponibili $e) {
+            $vistaNota = $e->getMessage() . " Vengono mostrati i soli schierati.";
+        }
+    }
+    if ($reparti === null) $reparti = ms_voti_reparti($stagione, $champ, $pub);
     $giornate = array_keys($giornateSet);
     sort($giornate);
 
@@ -307,6 +359,8 @@ function ms_calcola(int $stagione, bool $champ, callable $pub, array $squadre): 
     }
 
     return [
+        "vista"     => $vistaApplicata,
+        "vista_nota" => $vistaNota,
         "giornate"  => $giornate,
         "metriche"  => $catalogo,
         "valori"    => (object) $valori,

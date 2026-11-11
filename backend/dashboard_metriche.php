@@ -1,13 +1,17 @@
 <?php
 // ============================================================
 // api/dashboard_metriche.php
-// GET ?stagione=2026&competizione=CAMP|CHAMP
+// GET ?stagione=2026&competizione=CAMP|CHAMP&vista=SCHIERATI|ROSA
 //
 // Statistiche SELEZIONABILI della Dashboard squadra, per UNA competizione
 // (campionato = default, Champions). Alimenta le card dell'area
 // "Statistiche" e le aree "Confronta" e "Andamento".
 //
 //   competizione  "CAMP" | "CHAMP"
+//   vista         "SCHIERATI" | "ROSA": filtro giocatori richiesto (default SCHIERATI) -> vista
+//                 effettivamente applicata (ROSA ricade su SCHIERATI se la stagione non ha
+//                 voti Serie A / regole di calcolo: vista_nota spiega perche').
+//                 Ha effetto SOLO sulle metriche con "giocatori": true (voto/fantavoto di reparto).
 //   squadre       [{id, nome, logo}] tutte le squadre della stagione
 //   giornate      giornate pubbliche (chiuse) giocate da almeno una squadra
 //   metriche      catalogo: key, label, gruppo, agg, dir (up|down|neutral),
@@ -33,6 +37,8 @@ $stagione = param_int("stagione");
 $comp     = strtoupper(trim((string) (param_str("competizione", false) ?: "CAMP")));
 if (!in_array($comp, ["CAMP", "CHAMP"], true)) api_error("Competizione non valida (CAMP o CHAMP)", 400);
 $champ = $comp === "CHAMP";
+$vista = strtoupper(trim((string) (param_str("vista", false) ?: "SCHIERATI")));
+if (!in_array($vista, ["SCHIERATI", "ROSA"], true)) api_error("Vista non valida (SCHIERATI o ROSA)", 400);
 
 $storica = $stagione !== sg_ultima_stagione();
 $chiuse  = [];
@@ -45,10 +51,11 @@ $pub = fn(int $g): bool => $storica || isset($chiuse[$g]);
 $squadre = query_all("SELECT id, nome, logo FROM NEW_SQUADRE WHERE stagione = $stagione ORDER BY nome");
 if (!$squadre) api_error("Nessuna squadra per la stagione", 404);
 
-$r = ms_calcola($stagione, $champ, $pub, $squadre);
+$r = ms_calcola($stagione, $champ, $pub, $squadre, $vista);
 
 api_success([
     "stagione"     => $stagione,
     "competizione" => $comp,
+    "vista_richiesta" => $vista,
     "squadre"      => array_map(fn($s) => ["id" => (int) $s["id"], "nome" => $s["nome"], "logo" => $s["logo"]], $squadre),
 ] + $r);

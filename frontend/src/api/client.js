@@ -612,8 +612,9 @@ export const adminImportaCalendarioSerieA = (stagione, file) => {
 // Statistiche selezionabili della dashboard (aree Statistiche, Confronta,
 // Andamento): catalogo metriche, valori e serie per giornata di TUTTE le
 // squadre della lega e benchmark di lega, per UNA competizione.
-export const getDashboardMetriche = (stagione, competizione = 'CAMP') =>
-  get('dashboard_metriche.php', { stagione, competizione })
+// vista: 'SCHIERATI' | 'ROSA' (filtro giocatori): ha effetto solo sulle metriche con `giocatori: true`.
+export const getDashboardMetriche = (stagione, competizione = 'CAMP', vista = 'SCHIERATI') =>
+  get('dashboard_metriche.php', { stagione, competizione, vista })
 
 // Area "Statistiche" della dashboard: analisi di un reparto.
 // ruolo: 1 = portieri, 2 = difensori, 3 = centrocampisti, 4 = attaccanti.

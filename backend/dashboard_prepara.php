@@ -35,6 +35,12 @@
 //                      Serie A, avversaria della giornata, casa/trasferta);
 //                      [] se non c'e' match
 //   incontri_avversario  come incontri_serie_a, ma con i giocatori dell'avversario
+//   ultima_formazione_avversario  ultima formazione schierata dall'avversario nella
+//                      competizione selezionata (campionato o Champions), con voti e
+//                      fantavoti: {giornata, partita, giocatori}; null se non ha giocato
+//   rosa_avversario[].presenze / media_voto / media_fantavoto / tutta_rosa  medie dei
+//                      giocatori dell'avversario nella competizione (stesso significato di `rosa`):
+//                      servono a evidenziare i giocatori da temere (fantamedia piu' alta)
 //
 // Giornata di Serie A = giornata di fantacampionato + GIORNATA_SERIE_A_INIZIO
 // - 1 (vedi ds_inizio_giornata). Per la Champions si usa la giornata del match.
@@ -95,7 +101,7 @@ $vuoto = [
     "match" => null, "forma_avversario" => [], "moduli_avversario" => null, "storico" => null,
     "formazioni" => ["mia" => null, "mia_nascosta" => false, "avversario" => null, "avversario_nascosta" => false],
     "giornata_serie_a" => null, "rosa" => [], "incontri_serie_a" => [],
-    "rosa_avversario" => [], "incontri_avversario" => [],
+    "rosa_avversario" => [], "incontri_avversario" => [], "ultima_formazione_avversario" => null,
 ];
 if ($conclusa) api_success($vuoto);
 
@@ -167,6 +173,7 @@ $scaduta = $scadenza !== null && strtotime($scadenza) <= time();
 // ── Avversario: forma, moduli, formazioni ────────────────────
 
 $forma = [];
+$ultimaFormAvv = null;
 $moduli = null;
 $formazioni = ["mia" => null, "avversario" => null, "avversario_nascosta" => false];
 
@@ -177,6 +184,19 @@ if ($match) {
         ? ds_partite_champ($stagione, $idAvv, $pub)
         : ds_partite_camp($stagione, $idAvv, $pub);
     $forma = array_slice(array_reverse($partiteAvv), 0, 10);
+
+    // Ultima formazione schierata dall'avversario (ultima partita pubblica della competizione)
+    if ($partiteAvv) {
+        $ultP = end($partiteAvv);
+        $gU   = (int) $ultP["giornata"];
+        $ultimaFormAvv = [
+            "giornata"  => $gU,
+            "partita"   => $ultP,
+            "giocatori" => $champ
+                ? ds_formazione_con_voti($stagione, $gU, $idAvv, formazione_tabella_champions($stagione, $gU, $idAvv), "NEW_VOTI_CHAMP")
+                : ds_formazione_con_voti($stagione, $gU, $idAvv),
+        ];
+    }
 
     // Moduli schierati: una formazione completa (11 titolari) per giornata chiusa
     $perGiornata = [];   // giornata => [ruolo => n]
@@ -247,7 +267,7 @@ if ($match) {
     $uAvv = query_one("SELECT utenza FROM NEW_UTENZE WHERE stagione = $stagione AND id = " . (int) $match["avversario"]["id"] . " LIMIT 1");
     if ($uMe && $uAvv && $uMe["utenza"] !== null && $uAvv["utenza"] !== null) {
         $storico["campionato"] = ds_storico("NEW_RISULTATI",       "id_squadra", false, $stagione, $uMe["utenza"], $uAvv["utenza"], $pub);
-        $storico["champions"]  = ds_storico("NEW_RISULTATI_CHAMP", "squadra",    true,  $stagione, $uMe["utenza"], $uAvv["utenza"], $pub);
+        $storico["champions"]  = ds_storico_champions($stagione, $uMe["utenza"], $uAvv["utenza"], $pub);
     }
 }
 
@@ -341,6 +361,22 @@ $incontri = array_map(fn($p) => [
 $rosaAvv = [];
 if ($match) {
     $idAvvRosa = (int) $match["avversario"]["id"];
+
+    // Medie dei giocatori dell'avversario nella competizione (schierati e tutta la rosa)
+    $medieAvv = [];
+    foreach (query_all("SELECT v.id_giocatore, COUNT(*) AS presenze, AVG(v.voto) AS voto, AVG(v.totale) AS fantavoto
+                        FROM $tabVoti v
+                        WHERE v.stagione = $stagione AND v.id_squadra = $idAvvRosa AND v.giocata = 1 AND $condPub
+                        GROUP BY v.id_giocatore") as $r) {
+        $medieAvv[(int) $r["id_giocatore"]] = $r;
+    }
+    $mediePerRosaAvv = null;
+    try {
+        $mediePerRosaAvv = sr_medie_per_giocatore(
+            sr_voti_rosa($stagione, $idAvvRosa, $champ, array_column($partiteAvv ?? [], "giornata"))
+        );
+    } catch (StatisticheRosaNonDisponibili $e) { /* resta null: si usano i soli schierati */ }
+
     foreach (query_all("SELECT id, descrizione, ruolo FROM NEW_GIOCATORI
                         WHERE stagione = $stagione AND squadra = $idAvvRosa
                         ORDER BY ruolo, descrizione") as $g) {
@@ -348,6 +384,7 @@ if ($match) {
         if (isset($fuoriLista[$id])) continue;
         $sa  = $squadreSerieA[$id] ?? null;
         $inc = $sa !== null ? ($perSquadraSerieA[dp_norm($sa)] ?? null) : null;
+        $ma = $medieAvv[$id] ?? null;
         $rosaAvv[] = [
             "id_giocatore" => $id,
             "nome"         => $g["descrizione"],
@@ -357,6 +394,11 @@ if ($match) {
             "casa"         => $inc["casa"] ?? null,
             "data"         => $inc["data"] ?? null,
             "ora"          => $inc["ora"] ?? null,
+            "presenze"     => $ma ? (int) $ma["presenze"] : 0,
+            "media_voto"   => $ma ? round((float) $ma["voto"], 2) : null,
+            "media_fantavoto" => $ma ? round((float) $ma["fantavoto"], 2) : null,
+            "tutta_rosa"   => $mediePerRosaAvv === null ? null
+                              : ($mediePerRosaAvv[$id] ?? ["presenze" => 0, "media_voto" => null, "media_fantavoto" => null]),
         ];
     }
 }
@@ -392,4 +434,5 @@ api_success([
     "incontri_serie_a"  => $incontri,
     "rosa_avversario"   => $rosaAvv,
     "incontri_avversario" => $incontriAvv,
+    "ultima_formazione_avversario" => $ultimaFormAvv,
 ]);

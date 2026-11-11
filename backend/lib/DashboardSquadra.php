@@ -177,15 +177,20 @@ function ds_formazione(int $stagione, int $giornata, int $id, string $tab = "NEW
     ], $rows);
 }
 
-/** Formazione schierata in una giornata chiusa, con voti e fantavoti. */
-function ds_formazione_con_voti(int $stagione, int $giornata, int $id): array
+/**
+ * Formazione schierata in una giornata chiusa, con voti e fantavoti.
+ * $tab / $tabVoti sono sempre costanti interne: NEW_FORMAZIONI + NEW_VOTI (campionato)
+ * oppure la tabella formazioni Champions + NEW_VOTI_CHAMP.
+ */
+function ds_formazione_con_voti(int $stagione, int $giornata, int $id,
+                                string $tab = "NEW_FORMAZIONI", string $tabVoti = "NEW_VOTI"): array
 {
     $rows = query_all("SELECT f.MAGLIA AS maglia, f.ID_GIOCATORE AS id_giocatore,
                               g.descrizione AS giocatore, g.ruolo,
                               v.voto, v.totale, v.giocata
-                       FROM NEW_FORMAZIONI f
+                       FROM $tab f
                        JOIN " . rs_sql_anagrafica($stagione) . " g ON g.id = f.ID_GIOCATORE AND g.stagione = f.STAGIONE
-                       LEFT JOIN NEW_VOTI v ON v.stagione = f.STAGIONE AND v.giornata = f.GIORNATA
+                       LEFT JOIN $tabVoti v ON v.stagione = f.STAGIONE AND v.giornata = f.GIORNATA
                                            AND v.id_squadra = f.ID_SQUADRA AND v.id_giocatore = f.ID_GIOCATORE
                        WHERE f.STAGIONE = $stagione AND f.GIORNATA = $giornata AND f.ID_SQUADRA = $id
                        ORDER BY f.MAGLIA");
@@ -247,6 +252,110 @@ function ds_storico(string $tabella, string $colCasa, bool $champ, int $stagione
         $riep["media_fp_avv"] = round($sumB / $riep["giocate"], 2);
     }
     return ["riepilogo" => $riep, "partite" => array_slice($partite, 0, 30)];
+}
+
+/**
+ * Storico scontri diretti di CHAMPIONS tra due utenze, tutte le stagioni fino a $stagione.
+ *
+ * A differenza di ds_storico() non si appoggia a NEW_RISULTATI_CHAMP.id_squadra_a (nei
+ * dati storici può mancare o valere 0): gli incontri si ricavano dal calendario
+ * (NEW_CALENDARIO_CHAMP: in ogni gruppo le righe ordinate per posizione formano le
+ * partite a coppie, come in champions.php) e i risultati si leggono dalle righe
+ * delle due squadre (NEW_RISULTATI_CHAMP.squadra). Se manca la riga di una squadra
+ * il risultato si ricostruisce dalla prospettiva dell'altra.
+ * Stesso formato di ds_storico(). I gol sono quelli dei tempi regolamentari.
+ */
+function ds_storico_champions(int $stagione, string $uMe, string $uOpp, callable $pub): array
+{
+    $me  = ds_esc($uMe);
+    $opp = ds_esc($uOpp);
+    $idMe = []; $idOpp = [];
+    foreach (query_all("SELECT DISTINCT stagione, id FROM NEW_UTENZE
+                        WHERE utenza = '$me' AND stagione <= $stagione") as $r) {
+        $idMe[(int) $r["stagione"]] = (int) $r["id"];
+    }
+    foreach (query_all("SELECT DISTINCT stagione, id FROM NEW_UTENZE
+                        WHERE utenza = '$opp' AND stagione <= $stagione") as $r) {
+        $idOpp[(int) $r["stagione"]] = (int) $r["id"];
+    }
+
+    $trovate = [];
+    foreach ($idMe as $st => $a) {
+        $b = $idOpp[$st] ?? null;
+        if ($b === null || $b === $a) continue;
+
+        // Giornate di fantacampionato in cui le due squadre sono accoppiate
+        $per = [];
+        foreach (query_all("SELECT giornata_camp, squadra, TRIM(girone) AS girone, posizione
+                            FROM NEW_CALENDARIO_CHAMP WHERE stagione = $st") as $r) {
+            $per[(int) $r["giornata_camp"]][] = $r;
+        }
+        $giornate = [];   // giornata => gruppo (girone/turno)
+        foreach ($per as $g => $righe) {
+            foreach (champions_raggruppa_righe($righe) as $gruppo => $rg) {
+                $ids = array_map(fn($r) => (int) $r["squadra"], $rg);
+                foreach (array_chunk($ids, 2) as $coppia) {
+                    if (count($coppia) === 2 && in_array($a, $coppia, true) && in_array($b, $coppia, true)) {
+                        $giornate[$g] = (string) $gruppo;
+                    }
+                }
+            }
+        }
+        if (!$giornate) continue;
+
+        $lista = implode(",", array_keys($giornate));
+        $ris = [];   // giornata => squadra => riga
+        foreach (query_all("SELECT giornata, squadra, ftotale, ftotale_a, golf, gols, punti, segno
+                            FROM NEW_RISULTATI_CHAMP
+                            WHERE stagione = $st AND squadra IN ($a, $b) AND giornata IN ($lista)") as $r) {
+            $ris[(int) $r["giornata"]][(int) $r["squadra"]] = $r;
+        }
+
+        foreach ($giornate as $g => $gruppo) {
+            $mio = $ris[$g][$a] ?? null;
+            $suo = $ris[$g][$b] ?? null;
+            if (!$mio && !$suo) continue;                       // non ancora giocata
+            if ($st === $stagione && !$pub($g)) continue;       // giornata non chiusa
+
+            if ($mio) {
+                $golf = (int) $mio["golf"];  $gols = (int) $mio["gols"];
+                $ft   = (float) $mio["ftotale"];
+                $fta  = (float) $mio["ftotale_a"] > 0 || !$suo ? (float) $mio["ftotale_a"] : (float) $suo["ftotale"];
+                $seg  = ds_segno($mio["segno"]);
+            } else {
+                $golf = (int) $suo["gols"];  $gols = (int) $suo["golf"];
+                $ft   = (float) $suo["ftotale_a"];
+                $fta  = (float) $suo["ftotale"];
+                $s2   = ds_segno($suo["segno"]);
+                $seg  = $s2 === "V" ? "P" : ($s2 === "P" ? "V" : $s2);
+            }
+            $trovate[] = [
+                "stagione" => $st, "giornata" => $g, "golf" => $golf, "gols" => $gols,
+                "ftotale" => $ft, "ftotale_a" => $fta, "segno" => $seg,
+                "turno" => champions_etichetta_gruppo($gruppo),
+            ];
+        }
+    }
+    usort($trovate, fn($x, $y) => [$y["stagione"], $y["giornata"]] <=> [$x["stagione"], $x["giornata"]]);
+
+    $riep = ["giocate" => 0, "vinte" => 0, "nulle" => 0, "perse" => 0,
+             "golf" => 0, "gols" => 0, "media_fp" => null, "media_fp_avv" => null];
+    $sumA = 0.0; $sumB = 0.0;
+    foreach ($trovate as $p) {
+        $riep["giocate"]++;
+        if ($p["segno"] === "V") $riep["vinte"]++;
+        elseif ($p["segno"] === "N") $riep["nulle"]++;
+        else $riep["perse"]++;
+        $riep["golf"] += $p["golf"];
+        $riep["gols"] += $p["gols"];
+        $sumA += $p["ftotale"];
+        $sumB += $p["ftotale_a"];
+    }
+    if ($riep["giocate"] > 0) {
+        $riep["media_fp"]     = round($sumA / $riep["giocate"], 2);
+        $riep["media_fp_avv"] = round($sumB / $riep["giocate"], 2);
+    }
+    return ["riepilogo" => $riep, "partite" => array_slice($trovate, 0, 30)];
 }
 
 /**

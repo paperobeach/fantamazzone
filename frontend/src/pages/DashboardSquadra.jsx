@@ -104,11 +104,16 @@ export default function DashboardSquadra() {
   // La selezione resta valida passando da un'area all'altra.
   const sel = useSelezioneMetriche()
   const met = useFetch(
-    d?.stagione ? () => getDashboardMetriche(d.stagione, competizione) : null,
-    [d?.stagione, competizione]
+    d?.stagione ? () => getDashboardMetriche(d.stagione, competizione, vista) : null,
+    [d?.stagione, competizione, vista]
   )
+  const metOk = met.data && met.data.competizione === competizione
+    && (met.data.vista_richiesta ?? vista) === vista
   const ctx = {
-    data: met.data && met.data.competizione === competizione ? met.data : null,
+    data: metOk ? met.data : null,
+    vista,                                   // filtro giocatori scelto nella rotellina
+    vistaApplicata: metOk ? met.data.vista : vista,
+    vistaNota: metOk ? met.data.vista_nota : null,
     errore: met.error,
     riprova: met.refetch,
     me: idSquadra,

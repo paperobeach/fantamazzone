@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Calendar, Users, Home, Plane, ListChecks } from 'lucide-react'
+import { Calendar, Users, Home, Plane, ListChecks, Flame } from 'lucide-react'
 import { RoleBadge } from '../ui'
 import { Bandiera } from '../Bandiera'
 import { Section, Vuoto, Indicatore, BarraPerc, parseDataOra } from './shared'
@@ -13,21 +13,33 @@ function fmtPartita(data, ora) {
   return ora ? `${g} · ${d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}` : `${g} · orario da definire`
 }
 
-function Chips({ giocatori, allinea }) {
+/**
+ * `temuti`: Map id_giocatore -> posizione (1..5) dei giocatori da temere
+ * (fantamedia più alta); se presente li evidenzia.
+ */
+function Chips({ giocatori, allinea, temuti }) {
   if (!giocatori.length) return <p className={`text-xs text-slate-700 ${allinea}`}>—</p>
   return (
     <div className={`flex flex-wrap gap-1 ${allinea === 'text-right' ? 'justify-end' : ''}`}>
-      {giocatori.map(g => (
-        <span key={g.id_giocatore} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-grass-500/10 border border-grass-500/20 text-[11px] text-grass-300">
-          <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
-        </span>
-      ))}
+      {giocatori.map(g => {
+        const pos = temuti?.get(g.id_giocatore)
+        return (
+          <span key={g.id_giocatore}
+                title={pos ? `Da temere: n. ${pos} per fantamedia` : undefined}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border text-[11px] ${
+                  pos ? 'bg-red-500/15 border-red-500/50 text-red-300 font-semibold'
+                      : 'bg-grass-500/10 border-grass-500/20 text-grass-300'}`}>
+            {pos && <Flame className="w-3 h-3 text-red-400" aria-label="Da temere" />}
+            <RoleBadge ruolo={g.ruolo} /><Bandiera id={g.id_giocatore} /> {g.nome}
+          </span>
+        )
+      })}
     </div>
   )
 }
 
 /** Partite di Serie A della giornata con i giocatori della rosa schierabili da ciascun lato. */
-export function IncontriSerieA({ incontri, giornataSerieA, titolo = 'Incontri di Serie A' }) {
+export function IncontriSerieA({ incontri, giornataSerieA, titolo = 'Incontri di Serie A', temuti = null }) {
   return (
     <>
       <Section title={titolo} icon={Calendar} right={giornataSerieA ? `${giornataSerieA}ª giornata` : undefined}>
@@ -38,12 +50,12 @@ export function IncontriSerieA({ incontri, giornataSerieA, titolo = 'Incontri di
               <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-start">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-slate-200 truncate">{p.casa}</p>
-                  <Chips giocatori={p.giocatori_casa} allinea="text-left" />
+                  <Chips giocatori={p.giocatori_casa} allinea="text-left" temuti={temuti} />
                 </div>
                 <span className="text-xs text-slate-600 font-mono pt-0.5">vs</span>
                 <div className="min-w-0 text-right">
                   <p className="text-sm font-semibold text-slate-200 truncate">{p.ospite}</p>
-                  <Chips giocatori={p.giocatori_ospite} allinea="text-right" />
+                  <Chips giocatori={p.giocatori_ospite} allinea="text-right" temuti={temuti} />
                 </div>
               </div>
             </div>
@@ -55,7 +67,7 @@ export function IncontriSerieA({ incontri, giornataSerieA, titolo = 'Incontri di
 }
 
 /** Giocatori della rosa raggruppati per squadra avversaria di Serie A. */
-export function GiocatoriPerAvversaria({ rosa, titolo = 'Giocatori per squadra avversaria', vuoto = 'Nessun tuo giocatore ha una partita in questa giornata.' }) {
+export function GiocatoriPerAvversaria({ rosa, titolo = 'Giocatori per squadra avversaria', vuoto = 'Nessun tuo giocatore ha una partita in questa giornata.', temuti = null }) {
   const conPartita = useMemo(() => rosa.filter(g => g.avversaria), [rosa])
   const perAvversaria = useMemo(() => {
     const m = new Map()
@@ -85,7 +97,9 @@ export function GiocatoriPerAvversaria({ rosa, titolo = 'Giocatori per squadra a
                   <span className="inline-flex items-center gap-x-2 gap-y-0.5 flex-wrap">
                     <span>·</span>
                     {a.giocatori.map((g, i) => (
-                      <span key={g.id_giocatore ?? i} className="inline-flex items-center gap-1">
+                      <span key={g.id_giocatore ?? i}
+                            className={`inline-flex items-center gap-1 ${temuti?.has(g.id_giocatore) ? 'text-red-300 font-semibold' : ''}`}>
+                        {temuti?.has(g.id_giocatore) && <Flame className="w-3 h-3 text-red-400" aria-label="Da temere" />}
                         <Bandiera id={g.id_giocatore} size="xs" />{g.nome}{i < a.giocatori.length - 1 ? ',' : ''}
                       </span>
                     ))}

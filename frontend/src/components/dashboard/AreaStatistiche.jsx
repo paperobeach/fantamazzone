@@ -6,7 +6,7 @@ import { useFetch } from '../../hooks/useFetch'
 import { getDashboardStatistiche } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
 import {
-  Section, Vuoto, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, fmt,
+  Section, Vuoto, BarraPerc, PallinoForma, MatriceScontri, LogoCompatto, BadgeVista, fmt,
 } from './shared'
 import AreaRuoli from './AreaRuoli'
 import { NomeConBandiera } from '../Bandiera'
@@ -177,13 +177,14 @@ const REPARTI = [
   { ruolo: 4, nome: 'Attaccanti' },
 ]
 
-function CardReparto({ reparto, ctx, aperto, onDettaglio }) {
+function CardReparto({ reparto, ctx, aperto, onDettaglio, vista }) {
   const kv = `reparto_${reparto.ruolo}_voto`
   const kf = `reparto_${reparto.ruolo}_fantavoto`
   return (
     <div className={`rounded-xl border p-3 space-y-2 transition-colors ${aperto ? 'border-grass-500/40 bg-pitch-900' : 'border-white/5 bg-pitch-900'}`}>
       <p className="text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
         <RoleBadge ruolo={reparto.ruolo} /> {reparto.nome}
+        <BadgeVista vista={vista} className="ml-auto normal-case tracking-normal" />
       </p>
       <div className="grid grid-cols-2 gap-2">
         <CardMetrica k={kv} ctx={ctx} label="Voto" tono="text-grass-400" />
@@ -201,6 +202,8 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
   const [aperto, setAperto] = useState(null)
   const dettaglioRef = useRef(null)
   const rep = REPARTI.find(r => r.ruolo === aperto)
+  // Filtro realmente applicato ai KPI di reparto (può ricadere su SCHIERATI se la rosa non è calcolabile)
+  const vistaKpi = ctx.vistaApplicata ?? vista
 
   // Il dettaglio compare sotto le quattro card: lo si porta in vista, altrimenti
   // (soprattutto da mobile) sembra che il pulsante non faccia nulla.
@@ -214,13 +217,17 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {REPARTI.map(r => (
-          <CardReparto key={r.ruolo} reparto={r} ctx={ctx} aperto={aperto === r.ruolo}
+          <CardReparto key={r.ruolo} reparto={r} ctx={ctx} vista={vistaKpi} aperto={aperto === r.ruolo}
                        onDettaglio={() => setAperto(a => (a === r.ruolo ? null : r.ruolo))} />
         ))}
       </div>
       <p className="text-[11px] text-slate-600 -mt-3">
-        Voto = voto base senza bonus/malus; fantavoto = voto con bonus/malus. Media dei giocatori schierati, calcolata
-        come media delle medie di partita.
+        Voto = voto base senza bonus/malus; fantavoto = voto con bonus/malus.{' '}
+        {vistaKpi === 'ROSA'
+          ? 'Media di tutti i giocatori della rosa che hanno preso voto, anche se non schierati,'
+          : 'Media dei soli giocatori schierati,'}{' '}
+        calcolata come media delle medie di partita (filtro giocatori nella rotellina).
+        {ctx.vistaNota && <span className="text-gold-400"> {ctx.vistaNota}</span>}
       </p>
       {rep && (
         <div ref={dettaglioRef} className="sezione-scroll">

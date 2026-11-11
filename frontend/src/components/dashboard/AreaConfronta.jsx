@@ -6,7 +6,7 @@
 // ============================================================
 import { useState } from 'react'
 import { BarChart3 } from 'lucide-react'
-import { Section, LogoCompatto } from './shared'
+import { Section, LogoCompatto, BadgeVista } from './shared'
 import { GraficoZoom } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState } from '../ui'
 import { SelettoreMetriche } from './SelezioneMetriche'
@@ -35,7 +35,7 @@ function righeMetrica(data, def, me, conf) {
   })
 }
 
-function CardConfronto({ def, data, me, conf }) {
+function CardConfronto({ def, data, me, conf, vista }) {
   const righe = righeMetrica(data, def, me, conf)
   const info = infoMetrica(data, def.key, me)
   const vals = righe.map(r => r.valore).filter(v => v !== null)
@@ -106,7 +106,12 @@ function CardConfronto({ def, data, me, conf }) {
 
   return (
     <Section title={def.label} icon={BarChart3}
-             right={info?.rank && info.valore !== null ? `${info.rank.pos}° su ${info.rank.n}` : undefined}>
+             right={(
+               <span className="inline-flex items-center gap-2">
+                 {def.giocatori && <BadgeVista vista={vista} />}
+                 {info?.rank && info.valore !== null ? `${info.rank.pos}° su ${info.rank.n}` : null}
+               </span>
+             )}>
       <GraficoZoom titolo={def.label} fluido>{corpo}</GraficoZoom>
     </Section>
   )
@@ -121,6 +126,8 @@ export default function AreaConfronta({ ctx }) {
   const defs = mappaDef(ctx.data)
   const selezionate = ctx.sel.chiavi.map(k => defs[k]).filter(Boolean)
   const nulla = !conf.bench && conf.ids.length === 0
+  const vista = ctx.vistaApplicata ?? ctx.vista
+  const conGiocatori = selezionate.some(d => d.giocatori)
 
   return (
     <div className="space-y-6">
@@ -135,9 +142,16 @@ export default function AreaConfronta({ ctx }) {
       ) : (
         <>
           {nulla && <p className="text-xs text-slate-500">Scegli il benchmark di lega o almeno una squadra per il confronto.</p>}
+          {conGiocatori && (
+            <p className="text-xs text-slate-500 mb-3 flex items-center gap-2 flex-wrap">
+              <BadgeVista vista={vista} />
+              Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre a confronto.
+              {ctx.vistaNota && <span className="text-gold-400">{ctx.vistaNota}</span>}
+            </p>
+          )}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {selezionate.map(def => (
-              <CardConfronto key={def.key} def={def} data={ctx.data} me={ctx.me} conf={conf} />
+              <CardConfronto key={def.key} def={def} data={ctx.data} me={ctx.me} conf={conf} vista={vista} />
             ))}
           </div>
           <p className="text-[11px] text-slate-600">

@@ -8,11 +8,15 @@ import { PitchField, PlayerChip } from './PitchField'
 import { RosterRow } from './FormationBuilder'
 import { getSlotsForConteggio } from '../lib/pitchLayout'
 
-// players: [{ id_giocatore, giocatore, ruolo, maglia, titolare }]
+// players: [{ id_giocatore, giocatore, ruolo, maglia, titolare, serie_a?, avversaria?, casa?, data?, ora? }]
 export function PitchLineup({ players }) {
   const ordinati = [...(players ?? [])]
     .sort((a, b) => a.maglia - b.maglia)
-    .map(p => ({ id: p.id_giocatore, descrizione: p.giocatore, ruolo: p.ruolo, titolare: p.titolare }))
+    .map(p => ({
+      id: p.id_giocatore, descrizione: p.giocatore, ruolo: p.ruolo, titolare: p.titolare,
+      // Incontro di Serie A (avversaria + casa/trasferta), se il chiamante lo fornisce
+      ...('avversaria' in p ? { serie_a: p.serie_a, avversaria: p.avversaria, casa: p.casa, data: p.data, ora: p.ora } : {}),
+    }))
 
   const titolari = ordinati.filter(p => p.titolare)
   const panchina = ordinati.filter(p => !p.titolare)

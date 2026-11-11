@@ -17,7 +17,9 @@ export const SEZIONI_AREA = {
     { id: 'stat-giocatori', label: 'Top / Flop' },
   ],
   prepara: [
-    { id: 'prep-avversario', label: "L'avversario" },
+    { id: 'prep-avv-sintesi',     label: 'Avversario · sintesi' },
+    { id: 'prep-avv-serie_a',     label: 'Avversario · Serie A' },
+    { id: 'prep-avv-formazione',  label: 'Avversario · formazione' },
     { id: 'prep-top11',      label: 'Top 11' },
     { id: 'prep-serie_a',    label: 'Serie A' },
   ],
@@ -158,6 +160,17 @@ export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = fal
                   aperto ? 'border-grass-500/50 text-grass-300 bg-grass-500/10' : 'border-white/10 text-slate-300 hover:text-white hover:border-white/25'}`}>
           {champ ? <Crown className="w-4 h-4 text-sky-400" /> : <Trophy className="w-4 h-4 text-grass-400" />}
           <span className="hidden sm:inline">{champ ? 'Champions' : 'Campionato'}{soloCompetizione ? '' : ` · ${config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}`}</span>
+          {!soloCompetizione && (
+            <span title={`Giocatori considerati: ${config.vista === 'ROSA' ? 'intera rosa' : 'solo schierati'}`}
+                  aria-label={`Filtro giocatori attivo: ${config.vista === 'ROSA' ? 'intera rosa' : 'solo schierati'}`}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    config.vista === 'ROSA'
+                      ? 'bg-gold-500/15 border-gold-500/40 text-gold-300'
+                      : 'bg-grass-500/15 border-grass-500/40 text-grass-300'}`}>
+              {config.vista === 'ROSA' ? <Users className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+              <span className="sm:hidden">{config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}</span>
+            </span>
+          )}
           <Settings className="w-4 h-4" />
         </button>
       </div>

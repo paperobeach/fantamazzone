@@ -248,7 +248,7 @@ if (!$conclusa) {
             $storico = ["campionato" => null, "champions" => null];
             if ($utenza !== null && $uAvv !== null) {
                 $storico["campionato"] = ds_storico("NEW_RISULTATI",       "id_squadra", false, $stagione, $utenza, $uAvv, $pub);
-                $storico["champions"]  = ds_storico("NEW_RISULTATI_CHAMP", "squadra",    true,  $stagione, $utenza, $uAvv, $pub);
+                $storico["champions"]  = ds_storico_champions($stagione, $utenza, $uAvv, $pub);
             }
 
             $formMia = ds_formazione($stagione, $giornataF, $idSquadra);

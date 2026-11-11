@@ -68,12 +68,15 @@ export function BandieraTonda({ id, children }) {
 // valido solo nella propria stagione, il link porta con sé la stagione:
 // `stagione` (se omessa, quella scelta nell'app). `link={false}` disattiva il
 // link (es. elenchi in cui il click sul nome ha già un altro significato).
-export function NomeConBandiera({ id, nome, className = '', link = true, stagione, logoSquadra, nomeSquadra }) {
+// `multiriga` mostra nome e squadra per intero, andando a capo invece di troncare
+// (es. menu di scelta del giocatore su mobile).
+export function NomeConBandiera({ id, nome, className = '', link = true, stagione, logoSquadra, nomeSquadra, multiriga = false }) {
   const { stagione: stagioneApp } = useApp()
   const st = stagione ?? stagioneApp
   const cliccabile = link && Number(id) > 0 && !!st
+  const cNome = multiriga ? 'break-words min-w-0' : 'truncate'
   return (
-    <span className={`flex items-center gap-1.5 min-w-0 ${className}`}>
+    <span className={`flex ${multiriga ? 'items-start' : 'items-center'} gap-1.5 min-w-0 ${className}`}>
       {logoSquadra !== undefined
         ? <TeamLogo logo={logoSquadra} nome={nomeSquadra} size="xs" />
         : <Bandiera id={id} />}
@@ -81,14 +84,14 @@ export function NomeConBandiera({ id, nome, className = '', link = true, stagion
         <Link
           to={`/giocatori/${id}?stagione=${st}`}
           onClick={e => e.stopPropagation()}
-          className="truncate hover:text-grass-400 hover:underline underline-offset-2 transition-colors"
+          className={`${cNome} hover:text-grass-400 hover:underline underline-offset-2 transition-colors`}
         >
           {nome}
         </Link>
       ) : (
-        <span className="truncate">{nome}</span>
+        <span className={cNome}>{nome}</span>
       )}
-      {nomeSquadra && <span className="text-[10px] text-slate-500 truncate flex-shrink-[2]">· {nomeSquadra}</span>}
+      {nomeSquadra && <span className={`text-[10px] text-slate-500 ${multiriga ? 'break-words min-w-0' : 'truncate flex-shrink-[2]'}`}>· {nomeSquadra}</span>}
     </span>
   )
 }

@@ -452,12 +452,12 @@ export function FormationBuilder({
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownSlot(null)} />
                 <div
-                  className="absolute z-50 w-[190px] max-h-52 overflow-y-auto rounded-lg border border-white/10 bg-pitch-900 shadow-2xl py-1"
+                  className="absolute z-50 w-[240px] max-w-[calc(100%-12px)] max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-pitch-900 shadow-2xl py-1"
                   style={{
                     // Centrato sullo slot ma mai oltre i bordi del campo
                     // (che ha overflow-hidden): left viene "clampato" tra
                     // 6px dal bordo sinistro e 6px dal bordo destro.
-                    left: `clamp(6px, calc(${slots[dropdownSlot].x}% - 95px), calc(100% - 196px))`,
+                    left: `clamp(6px, calc(${slots[dropdownSlot].x}% - 120px), calc(100% - 246px))`,
                     top: `${slots[dropdownSlot].y}%`,
                     transform: slots[dropdownSlot].y > 55 ? 'translateY(-110%)' : 'translateY(30px)',
                   }}
@@ -480,11 +480,11 @@ export function FormationBuilder({
                         key={p.id}
                         type="button"
                         onClick={() => { placePlayer(p.id, dropdownSlot); setDropdownSlot(null) }}
-                        className="w-full flex items-center gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors whitespace-nowrap"
+                        className="w-full flex items-start gap-2 text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-grass-500/20 hover:text-grass-200 transition-colors"
                       >
                         <span className={`stat-pill flex-shrink-0 ${ROLE_PILL_CLASS[p.ruolo] ?? ''}`}>{ROLE_LABEL[String(p.ruolo)]}</span>
                         <span className="flex-1 min-w-0 flex flex-col">
-                          <NomeConBandiera link={false} id={p.id} nome={p.descrizione} logoSquadra={p.logo_squadra} nomeSquadra={p.squadra_asg} />
+                          <NomeConBandiera multiriga link={false} id={p.id} nome={p.descrizione} logoSquadra={p.logo_squadra} nomeSquadra={p.squadra_asg} />
                           <IncontroSerieA player={p} />
                         </span>
                         {fromTribuna && (

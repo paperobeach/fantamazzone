@@ -17,17 +17,20 @@ import { mappaDef, serieModo, mediaSerie, fmtVal, MODI_ANDAMENTO, TOOLTIP_STYLE 
 
 // ── Grafico di una metrica ───────────────────────────────────
 
-function GraficoMetrica({ def, data, me, conf, modo }) {
+function GraficoMetrica({ def, data, me, conf, modo, dataAlt = null }) {
   const { giornate, squadre } = data
+  // Modalità duale: la mia squadra ha una seconda linea (tratteggiata) con la vista alternativa
+  const alt = def.giocatori && dataAlt ? dataAlt : null
 
   // Serie presenti nel grafico: servono prima di ogni return anticipato (regole degli hook)
-  const chiavi = ['me', ...(conf.bench && def.key !== 'posizione' ? ['bench'] : []), ...conf.ids.filter(id => id !== me).map(id => `s${id}`)]
+  const chiavi = ['me', ...(alt ? ['meAlt'] : []), ...(conf.bench && def.key !== 'posizione' ? ['bench'] : []), ...conf.ids.filter(id => id !== me).map(id => `s${id}`)]
   const { evid, toggle, reset } = useEvidenzia(chiavi)
 
   if (!giornate.length) return <Vuoto>Nessuna giornata chiusa.</Vuoto>
 
   const serieDi = id => serieModo(def, data.serie[def.key]?.[id] ?? giornate.map(() => null), modo)
   const mia = serieDi(me)
+  const miaAlt = alt ? serieModo(def, alt.serie[def.key]?.[me] ?? giornate.map(() => null), modo) : null
   const confrontate = conf.ids.filter(id => id !== me).map(id => ({ id, nome: squadre.find(s => s.id === id)?.nome ?? `#${id}`, serie: serieDi(id) }))
   // La media di lega della posizione in classifica è sempre la stessa: non ha senso tracciarla
   const classifica = def.key === 'posizione'
@@ -35,6 +38,7 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
 
   const righe = giornate.map((g, i) => {
     const r = { giornata: g, me: mia[i] }
+    if (miaAlt) r.meAlt = miaAlt[i]
     if (bench) r.bench = bench[i]
     confrontate.forEach(c => { r[`s${c.id}`] = c.serie[i] })
     return r
@@ -43,14 +47,19 @@ function GraficoMetrica({ def, data, me, conf, modo }) {
   if (vuoto) return <Vuoto>Nessun dato per questa statistica.</Vuoto>
 
   // Definizione di ogni linea (la chiave coincide con il dataKey delle righe)
-  const tu = { key: 'me', nome: 'Tu', colore: '#4ade80', spessore: 3, punti: true }
+  const tu = { key: 'me', nome: alt ? 'Tu · schierati' : 'Tu', colore: '#4ade80', spessore: 3, punti: true }
+  // Stesso colore di "Tu", tratteggiata: la stessa squadra vista sull'intera rosa
+  const tuAlt = alt ? { key: 'meAlt', nome: 'Tu · rosa', colore: '#4ade80', spessore: 3, tratteggio: true } : null
   const altre = [
+    ...(tuAlt ? [tuAlt] : []),
     ...(bench ? [{ key: 'bench', nome: 'Media lega', colore: '#fbbf24', spessore: 2, tratteggio: true }] : []),
     ...confrontate.map(c => ({ key: `s${c.id}`, nome: c.nome, colore: coloreSquadra(squadre, me, c.id), spessore: 1.75 })),
   ]
   const voci = [tu, ...altre]
+  const proprie = new Set(['me', 'meAlt'])
   // La serie evidenziata viene disegnata per ultima, quindi sopra le altre
-  const ordinate = [...altre, tu].sort((x, y) => (x.key === evid ? 1 : 0) - (y.key === evid ? 1 : 0))
+  const ordinate = [...altre.filter(l => !proprie.has(l.key)), ...(tuAlt ? [tuAlt] : []), tu]
+    .sort((x, y) => (x.key === evid ? 1 : 0) - (y.key === evid ? 1 : 0))
 
   return (
     <GraficoZoom titolo={def.label}
@@ -98,6 +107,7 @@ export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-dis
   const defs = mappaDef(ctx.data)
   const selezionate = ctx.sel.chiavi.map(k => defs[k]).filter(Boolean)
   const vista = ctx.vistaApplicata ?? ctx.vista
+  const vistaAlt = ctx.vistaAlt && ctx.dataAlt ? (ctx.vistaAltApplicata ?? ctx.vistaAlt) : null
   const conGiocatori = selezionate.some(d => d.giocatori)
 
   return (
@@ -122,8 +132,10 @@ export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-dis
         <div className="space-y-6">
           {conGiocatori && (
             <p className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
-              <BadgeVista vista={vista} />
-              Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre.
+              <BadgeVista vista={vista} />{ctx.vistaAlt && <BadgeVista vista={vistaAlt ?? ctx.vistaAlt} />}
+              {ctx.vistaAlt
+                ? 'Confronto tra le due viste: per le statistiche dei giocatori la tua squadra ha due linee (continua = solo schierati, tratteggiata = intera rosa); le altre squadre e la media lega sono calcolate sui soli schierati.'
+                : 'Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre.'}
               {ctx.vistaNota && <span className="text-gold-400">{ctx.vistaNota}</span>}
             </p>
           )}
@@ -133,10 +145,11 @@ export default function AreaAndamento({ d, competizione, ctx }) {  // eslint-dis
                        right={(
                          <span className="inline-flex items-center gap-2">
                            {def.giocatori && <BadgeVista vista={vista} />}
+                           {def.giocatori && vistaAlt && <BadgeVista vista={vistaAlt} />}
                            {MODI_ANDAMENTO.find(m => m.value === modo)?.label}
                          </span>
                        )}>
-                <GraficoMetrica def={def} data={ctx.data} me={ctx.me} conf={conf} modo={modo} />
+                <GraficoMetrica def={def} data={ctx.data} me={ctx.me} conf={conf} modo={modo} dataAlt={ctx.dataAlt} />
               </Section>
             ))}
           </div>

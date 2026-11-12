@@ -177,16 +177,16 @@ const REPARTI = [
   { ruolo: 4, nome: 'Attaccanti' },
 ]
 
-function CardReparto({ reparto, ctx, aperto, onDettaglio, vista }) {
+function CardReparto({ reparto, ctx, aperto, onDettaglio, vista, duale }) {
   const kv = `reparto_${reparto.ruolo}_voto`
   const kf = `reparto_${reparto.ruolo}_fantavoto`
   return (
     <div className={`rounded-xl border p-3 space-y-2 transition-colors ${aperto ? 'border-grass-500/40 bg-pitch-900' : 'border-white/5 bg-pitch-900'}`}>
       <p className="text-xs uppercase tracking-widest text-slate-400 flex items-center gap-2">
         <RoleBadge ruolo={reparto.ruolo} /> {reparto.nome}
-        <BadgeVista vista={vista} className="ml-auto normal-case tracking-normal" />
+        {!duale && <BadgeVista vista={vista} className="ml-auto normal-case tracking-normal" />}
       </p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className={`grid gap-2 ${duale ? 'grid-cols-1' : 'grid-cols-2'}`}>
         <CardMetrica k={kv} ctx={ctx} label="Voto" tono="text-grass-400" />
         <CardMetrica k={kf} ctx={ctx} label="Fantavoto" tono="text-gold-400" />
       </div>
@@ -198,12 +198,15 @@ function CardReparto({ reparto, ctx, aperto, onDettaglio, vista }) {
   )
 }
 
-function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
+function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista, vistaAlt }) {
   const [aperto, setAperto] = useState(null)
   const dettaglioRef = useRef(null)
   const rep = REPARTI.find(r => r.ruolo === aperto)
   // Filtro realmente applicato ai KPI di reparto (può ricadere su SCHIERATI se la rosa non è calcolabile)
   const vistaKpi = ctx.vistaApplicata ?? vista
+  const duale = !!vistaAlt
+  // Viste del dettaglio: una sola, oppure le due affiancate in modalità duale
+  const viste = duale ? [vista, vistaAlt] : [vista]
 
   // Il dettaglio compare sotto le quattro card: lo si porta in vista, altrimenti
   // (soprattutto da mobile) sembra che il pulsante non faccia nulla.
@@ -217,17 +220,20 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {REPARTI.map(r => (
-          <CardReparto key={r.ruolo} reparto={r} ctx={ctx} vista={vistaKpi} aperto={aperto === r.ruolo}
+          <CardReparto key={r.ruolo} reparto={r} ctx={ctx} vista={vistaKpi} duale={duale} aperto={aperto === r.ruolo}
                        onDettaglio={() => setAperto(a => (a === r.ruolo ? null : r.ruolo))} />
         ))}
       </div>
       <p className="text-[11px] text-slate-600 -mt-3">
         Voto = voto base senza bonus/malus; fantavoto = voto con bonus/malus.{' '}
-        {vistaKpi === 'ROSA'
-          ? 'Media di tutti i giocatori della rosa che hanno preso voto, anche se non schierati,'
-          : 'Media dei soli giocatori schierati,'}{' '}
+        {duale
+          ? 'Per la tua squadra sono riportati i due valori: solo schierati e intera rosa (tutti i giocatori che hanno preso voto, anche se non schierati). La posizione in lega è calcolata nella rispettiva vista, con le altre squadre calcolate nella stessa vista,'
+          : vistaKpi === 'ROSA'
+            ? 'Media di tutti i giocatori della rosa che hanno preso voto, anche se non schierati,'
+            : 'Media dei soli giocatori schierati,'}{' '}
         calcolata come media delle medie di partita (filtro giocatori nella rotellina).
         {ctx.vistaNota && <span className="text-gold-400"> {ctx.vistaNota}</span>}
+        {ctx.vistaAltNota && <span className="text-gold-400"> {ctx.vistaAltNota}</span>}
       </p>
       {rep && (
         <div ref={dettaglioRef} className="sezione-scroll">
@@ -237,9 +243,14 @@ function SezioneReparti({ ctx, stagione, idSquadra, competizione, vista }) {
                        <X className="w-3.5 h-3.5" /> Chiudi
                      </button>
                    }>
-            <div className="p-4">
-              <AreaRuoli key={rep.ruolo} stagione={stagione} idSquadra={idSquadra} competizione={competizione}
-                         vista={vista} repartoFisso={rep.ruolo} />
+            <div className={`p-4 ${duale ? 'grid grid-cols-1 2xl:grid-cols-2 gap-6' : ''}`}>
+              {viste.map(v => (
+                <div key={v} className="min-w-0 space-y-3">
+                  {duale && <BadgeVista vista={v} />}
+                  <AreaRuoli key={`${rep.ruolo}-${v}`} stagione={stagione} idSquadra={idSquadra} competizione={competizione}
+                             vista={v} repartoFisso={rep.ruolo} />
+                </div>
+              ))}
             </div>
           </Section>
         </div>
@@ -286,7 +297,7 @@ function TopFlopPropri({ top, flop }) {
 
 // ── Area ─────────────────────────────────────────────────────
 
-export default function AreaStatistiche({ d, stagione, idSquadra, competizione, vista = 'ROSA', ctx }) {
+export default function AreaStatistiche({ d, stagione, idSquadra, competizione, vista = 'ROSA', vistaAlt = null, ctx }) {
   const champ = competizione === 'CHAMP'
   const { data: s, loading, error, refetch } = useFetch(
     () => getDashboardStatistiche(stagione, idSquadra, competizione),
@@ -319,7 +330,7 @@ export default function AreaStatistiche({ d, stagione, idSquadra, competizione, 
 
       <div id="stat-reparti" className="sezione-scroll space-y-3">
         <h2 className="text-xs uppercase tracking-widest text-slate-500">Reparti</h2>
-        <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} />
+        <SezioneReparti ctx={ctx} stagione={stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} vistaAlt={vistaAlt} />
       </div>
 
       <div id="stat-giocatori" className="sezione-scroll space-y-3">

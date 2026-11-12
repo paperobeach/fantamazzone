@@ -34,7 +34,27 @@ export const SEZIONI_AREA = {
   ultima: [], storia: [], fortuna: [], finanza: [],
 }
 
-export const CONFIG_DEFAULT = { competizione: 'CAMP', vista: 'ROSA' }
+// Filtro giocatori: `viste` è un elenco con almeno una voce. Con entrambe attive ('SCHIERATI' e 'ROSA')
+// le pagine mostrano i due valori a confronto (modalità "duale").
+export const CONFIG_DEFAULT = { competizione: 'CAMP', viste: ['ROSA'] }
+export const VISTA_ALT = 'ROSA'
+
+/** Viste attive, sempre valide (almeno una). */
+export const visteAttive = c => {
+  const v = (c?.viste ?? []).filter(x => x === 'SCHIERATI' || x === 'ROSA')
+  return v.length ? v : CONFIG_DEFAULT.viste
+}
+export const isDuale = c => visteAttive(c).length === 2
+/** Vista principale: quella unica scelta; in modalità duale SCHIERATI (riferimento per lega e altre squadre). */
+export const vistaPrincipale = c => (isDuale(c) ? 'SCHIERATI' : visteAttive(c)[0])
+/** Seconda vista da affiancare alla principale (solo in modalità duale), altrimenti null. */
+export const vistaAlternativa = c => (isDuale(c) ? VISTA_ALT : null)
+
+const ETICHETTE_VISTA = { SCHIERATI: 'Solo schierati', ROSA: 'Intera rosa' }
+const VISTA_STILE = {
+  SCHIERATI: 'bg-grass-500/15 border-grass-500/40 text-grass-300',
+  ROSA: 'bg-gold-500/15 border-gold-500/40 text-gold-300',
+}
 
 const vaiA = id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 const inAlto = () => window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -61,6 +81,34 @@ function Scelta({ titolo, icona: Icona, value, onChange, opzioni }) {
   )
 }
 
+/** Scelta multipla: più opzioni attive insieme, ma almeno una. */
+function SceltaMultipla({ titolo, icona: Icona, valori, onChange, opzioni, nota }) {
+  const toggle = v => {
+    const nuovi = valori.includes(v) ? valori.filter(x => x !== v) : [...valori, v]
+    if (nuovi.length) onChange(opzioni.map(o => o.value).filter(x => nuovi.includes(x)))
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+        <Icona className="w-3 h-3" /> {titolo}
+      </p>
+      <div className="flex gap-1 p-1 bg-pitch-950 rounded-xl border border-white/5" role="group" aria-label={titolo}>
+        {opzioni.map(o => {
+          const on = valori.includes(o.value)
+          return (
+            <button key={o.value} type="button" aria-pressed={on} onClick={() => toggle(o.value)}
+                    className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                      on ? 'bg-grass-500/15 text-grass-300' : 'text-slate-400 hover:text-slate-200'}`}>
+              <o.icona className="w-3.5 h-3.5" /> {o.label}
+            </button>
+          )
+        })}
+      </div>
+      {nota && <p className="text-[11px] text-slate-600">{nota}</p>}
+    </div>
+  )
+}
+
 function PannelloConfig({ config, onChange, onClose, soloCompetizione = false }) {
   return (
     <div role="dialog" aria-label="Personalizza la visualizzazione"
@@ -72,9 +120,12 @@ function PannelloConfig({ config, onChange, onClose, soloCompetizione = false })
       <Scelta titolo="Competizione" icona={Trophy} value={config.competizione}
               onChange={v => onChange({ ...config, competizione: v })}
               opzioni={[{ value: 'CAMP', label: 'Campionato', icona: Trophy }, { value: 'CHAMP', label: 'Champions', icona: Crown }]} />
-      {!soloCompetizione && <Scelta titolo="Giocatori" icona={Users} value={config.vista}
-              onChange={v => onChange({ ...config, vista: v })}
-              opzioni={[{ value: 'SCHIERATI', label: 'Solo schierati', icona: UserCheck }, { value: 'ROSA', label: 'Intera rosa', icona: Users }]} />}
+      {!soloCompetizione && <SceltaMultipla titolo="Giocatori" icona={Users} valori={visteAttive(config)}
+              onChange={v => onChange({ ...config, viste: v })}
+              opzioni={[{ value: 'SCHIERATI', label: 'Solo schierati', icona: UserCheck }, { value: 'ROSA', label: 'Intera rosa', icona: Users }]}
+              nota={isDuale(config)
+                ? 'Confronto attivo: i due valori sono affiancati (per la tua squadra).'
+                : 'Attiva entrambe per confrontare i due valori.'} />}
       <div className="flex items-center justify-between text-[11px] text-slate-600">
         <span>Vale per tutte le sezioni.</span>
         <button type="button" onClick={() => onChange(CONFIG_DEFAULT)} className="text-slate-400 hover:text-white">Ripristina</button>
@@ -159,16 +210,17 @@ export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = fal
                 className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2 py-1.5 rounded-full border text-xs transition-colors ${
                   aperto ? 'border-grass-500/50 text-grass-300 bg-grass-500/10' : 'border-white/10 text-slate-300 hover:text-white hover:border-white/25'}`}>
           {champ ? <Crown className="w-4 h-4 text-sky-400" /> : <Trophy className="w-4 h-4 text-grass-400" />}
-          <span className="hidden sm:inline">{champ ? 'Champions' : 'Campionato'}{soloCompetizione ? '' : ` · ${config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}`}</span>
+          <span className="hidden sm:inline">{champ ? 'Champions' : 'Campionato'}</span>
           {!soloCompetizione && (
-            <span title={`Giocatori considerati: ${config.vista === 'ROSA' ? 'intera rosa' : 'solo schierati'}`}
-                  aria-label={`Filtro giocatori attivo: ${config.vista === 'ROSA' ? 'intera rosa' : 'solo schierati'}`}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                    config.vista === 'ROSA'
-                      ? 'bg-gold-500/15 border-gold-500/40 text-gold-300'
-                      : 'bg-grass-500/15 border-grass-500/40 text-grass-300'}`}>
-              {config.vista === 'ROSA' ? <Users className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
-              <span className="sm:hidden">{config.vista === 'ROSA' ? 'Rosa' : 'Schierati'}</span>
+            <span className="inline-flex items-center gap-1"
+                  title={`Giocatori considerati: ${visteAttive(config).map(v => ETICHETTE_VISTA[v].toLowerCase()).join(' + ')}`}
+                  aria-label={`Filtro giocatori attivo: ${visteAttive(config).map(v => ETICHETTE_VISTA[v].toLowerCase()).join(' e ')}`}>
+              {['SCHIERATI', 'ROSA'].filter(v => visteAttive(config).includes(v)).map(v => (
+                <span key={v} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${VISTA_STILE[v]}`}>
+                  {v === 'ROSA' ? <Users className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+                  <span className={isDuale(config) ? 'hidden' : 'sm:hidden'}>{v === 'ROSA' ? 'Rosa' : 'Schierati'}</span>
+                </span>
+              ))}
             </span>
           )}
           <Settings className="w-4 h-4" />

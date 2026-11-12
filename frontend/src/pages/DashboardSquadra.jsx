@@ -12,7 +12,7 @@ import AreaStatistiche from '../components/dashboard/AreaStatistiche'
 import AreaPrepara from '../components/dashboard/AreaPrepara'
 import AreaAndamento from '../components/dashboard/AreaAndamento'
 import AreaConfronta from '../components/dashboard/AreaConfronta'
-import { BarraSezioni, SEZIONI_AREA, CONFIG_DEFAULT } from '../components/dashboard/NavSezioni'
+import { BarraSezioni, SEZIONI_AREA, CONFIG_DEFAULT, visteAttive, vistaPrincipale, vistaAlternativa } from '../components/dashboard/NavSezioni'
 import { BarraSelezione } from '../components/dashboard/SelezioneMetriche'
 import { useSelezioneMetriche } from '../components/dashboard/metriche'
 import {
@@ -64,7 +64,8 @@ function leggiConfig() {
     const c = JSON.parse(sessionStorage.getItem(CHIAVE_CONFIG) || 'null')
     return {
       competizione: c?.competizione === 'CHAMP' ? 'CHAMP' : CONFIG_DEFAULT.competizione,
-      vista: c?.vista === 'SCHIERATI' ? 'SCHIERATI' : CONFIG_DEFAULT.vista,
+      // `viste` (elenco); le configurazioni salvate con il vecchio campo `vista` vengono migrate
+      viste: visteAttive(Array.isArray(c?.viste) ? c : { viste: c?.vista ? [c.vista] : [] }),
     }
   } catch { return CONFIG_DEFAULT }
 }
@@ -93,7 +94,8 @@ export default function DashboardSquadra() {
     try { sessionStorage.setItem(CHIAVE_CONFIG, JSON.stringify(c)) } catch { /* storage non disponibile */ }
   }, [])
   const competizione = config.competizione
-  const vista = config.vista
+  const vista = vistaPrincipale(config)        // in modalità duale: SCHIERATI (riferimento di lega)
+  const vistaAlt = vistaAlternativa(config)    // in modalità duale: ROSA, affiancata alla principale
 
   const { data: d, loading, error, refetch } = useFetch(
     ultimaStagione && idSquadra ? () => getDashboardSquadra(ultimaStagione, idSquadra) : null,
@@ -109,9 +111,20 @@ export default function DashboardSquadra() {
   )
   const metOk = met.data && met.data.competizione === competizione
     && (met.data.vista_richiesta ?? vista) === vista
+  // Seconda vista (solo modalità duale): serve per i valori della sola mia squadra
+  const metAlt = useFetch(
+    d?.stagione && vistaAlt ? () => getDashboardMetriche(d.stagione, competizione, vistaAlt) : null,
+    [d?.stagione, competizione, vistaAlt]
+  )
+  const altOk = vistaAlt && metAlt.data && metAlt.data.competizione === competizione
+    && (metAlt.data.vista_richiesta ?? vistaAlt) === vistaAlt
   const ctx = {
     data: metOk ? met.data : null,
-    vista,                                   // filtro giocatori scelto nella rotellina
+    vista,                                   // filtro giocatori scelto nella rotellina (principale)
+    vistaAlt,                                // seconda vista da affiancare (modalità duale) o null
+    dataAlt: altOk ? metAlt.data : null,     // metriche nella seconda vista
+    vistaAltApplicata: altOk ? metAlt.data.vista : vistaAlt,
+    vistaAltNota: altOk ? metAlt.data.vista_nota : null,
     vistaApplicata: metOk ? met.data.vista : vista,
     vistaNota: metOk ? met.data.vista_nota : null,
     errore: met.error,
@@ -148,12 +161,12 @@ export default function DashboardSquadra() {
       <BarraSezioni sezioni={SEZIONI_AREA[area] ?? []} config={config} onConfig={setConfig} />
 
       {area === 'statistiche' && (
-        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} ctx={ctx} />
+        <AreaStatistiche d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} vistaAlt={vistaAlt} ctx={ctx} />
       )}
       {area === 'statistiche' && (
         <BarraSelezione ctx={ctx} onConfronta={() => setArea('confronta')} onAndamento={() => setArea('andamento')} />
       )}
-      {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} />}
+      {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} vistaAlt={vistaAlt} />}
       {area === 'ultima'    && <AreaUltimaPartita d={d} competizione={competizione} />}
       {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} ctx={ctx} />}
       {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} ctx={ctx} />}

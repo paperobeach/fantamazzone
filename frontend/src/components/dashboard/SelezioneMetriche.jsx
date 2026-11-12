@@ -10,7 +10,7 @@
 // ============================================================
 import { useState } from 'react'
 import { CheckCircle2, Circle, X, Swords, TrendingUp, Plus, ChevronUp, ChevronDown, Sparkles } from 'lucide-react'
-import { Section } from './shared'
+import { Section, BadgeVista } from './shared'
 import {
   infoMetrica, fmtVal, fmtDelta, tonoDelta, gruppiMetriche, mappaDef, METRICHE_SUGGERITE,
 } from './metriche'
@@ -41,6 +41,20 @@ export function CardMetrica({ k, ctx, label, sub, tono = 'text-white' }) {
   const info = infoMetrica(ctx.data, k, ctx.me)
   const on = ctx.sel.ha(k)
   const def = info?.def
+  // Modalità duale: per le metriche dei giocatori la card riporta i due valori (schierati e rosa) della mia squadra
+  const duale = !!(def?.giocatori && ctx.vistaAlt)
+  const infoAlt = duale && ctx.dataAlt ? infoMetrica(ctx.dataAlt, k, ctx.me) : null
+  const valA = infoAlt?.valore ?? null
+  const scarto = duale && info?.valore !== null && info?.valore !== undefined && valA !== null ? valA - info.valore : null
+  const RigaVista = ({ vista, i }) => (
+    <div className="flex items-center justify-between gap-2">
+      <BadgeVista vista={vista} />
+      <span className="flex items-baseline gap-1.5">
+        <span className={`text-display text-xl font-bold leading-none ${tono}`}>{i ? fmtVal(def, i.valore) : '–'}</span>
+        {i?.rank && i.valore !== null && <span className="text-[10px] font-mono text-slate-500">{i.rank.pos}°/{i.rank.n}</span>}
+      </span>
+    </div>
+  )
   return (
     <button
       type="button"
@@ -53,10 +67,23 @@ export function CardMetrica({ k, ctx, label, sub, tono = 'text-white' }) {
       } ${info ? '' : 'opacity-60 cursor-default'}`}
     >
       <span className="absolute top-1.5 right-1.5"><Spunta on={on} /></span>
-      <p className={`text-display text-2xl font-bold leading-none ${tono}`}>{info ? fmtVal(def, info.valore) : '–'}</p>
+      {duale ? (
+        <div className="space-y-1.5 pt-1">
+          <RigaVista vista={ctx.vista} i={info} />
+          <RigaVista vista={ctx.vistaAlt} i={ctx.dataAlt ? infoAlt : null} />
+          {scarto !== null && (
+            <p className="text-[10px] font-mono text-slate-500 text-right">
+              {ctx.vistaAlt === 'ROSA' ? 'rosa − schierati' : 'differenza'}{' '}
+              <span className="text-slate-300">{fmtDelta(def, scarto)}</span>
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className={`text-display text-2xl font-bold leading-none ${tono}`}>{info ? fmtVal(def, info.valore) : '–'}</p>
+      )}
       <p className="text-[10px] uppercase tracking-wider text-slate-500 mt-1.5">{label ?? def?.label ?? k}</p>
       {sub && <p className="text-[10px] text-slate-600 font-mono mt-0.5">{sub}</p>}
-      <PosizioneLega info={info} />
+      {!duale && <PosizioneLega info={info} />}
     </button>
   )
 }

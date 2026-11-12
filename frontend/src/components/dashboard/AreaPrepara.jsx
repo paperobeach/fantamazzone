@@ -221,41 +221,53 @@ function SintesiAvversario({ p, d, champ }) {
 
 // ── L'avversario - Serie A ───────────────────────────────────
 
-function SerieAAvversario({ p, champ, vista }) {
+function SerieAAvversario({ p, champ, vista, vistaAlt = null }) {
   const { ultimaStagione } = useApp()
   const m = p.match
   const rosaAvv = p.rosa_avversario ?? []
-  const temuti = useMemo(() => calcolaTemuti(rosaAvv, vista), [rosaAvv, vista])
+  // Modalità duale: una classifica dei temuti per vista; nelle liste sono evidenziati i giocatori di entrambe
+  const viste = vistaAlt ? [vista, vistaAlt] : [vista]
+  const duale = viste.length === 2
+  const classifiche = useMemo(() => viste.map(v => calcolaTemuti(rosaAvv, v)), [rosaAvv, vista, vistaAlt]) // eslint-disable-line react-hooks/exhaustive-deps
+  const temuti = useMemo(() => {
+    const mappa = new Map()
+    classifiche.forEach(c => c.mappa.forEach((pos, id) => mappa.set(id, Math.min(pos, mappa.get(id) ?? pos))))
+    return mappa
+  }, [classifiche])
   if (!m) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
   const a = m.avversario
 
   return (
     <div className="space-y-6">
-      <Section title="Giocatori da temere" icon={Flame}
-               right={<BadgeVista vista={temuti.usaRosa ? 'ROSA' : 'SCHIERATI'} />}>
-        {temuti.lista.length === 0 ? <Vuoto>Nessun giocatore di {a.nome} ha ancora preso voto.</Vuoto> : (
-          temuti.lista.map((g, i) => (
-            <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
-              <span className="w-5 text-xs font-mono text-red-400 font-bold">{i + 1}</span>
-              <RoleBadge ruolo={g.ruolo} />
-              <div className="flex-1 min-w-0 flex flex-col">
-                <NomeConBandiera id={g.id_giocatore} nome={g.nome} stagione={ultimaStagione} className="text-sm text-slate-200 font-medium" />
-                <IncontroSerieA player={g} />
-              </div>
-              <span className="text-xs text-slate-600 font-mono">{g.pres} pres.</span>
-              <span className="font-mono text-sm font-bold text-red-300 w-12 text-right">{fmt(g.fantamedia, 2)}</span>
-            </div>
-          ))
-        )}
-        <p className="px-4 py-2 text-[11px] text-slate-600">
-          I {N_TEMUTI} giocatori di {a.nome} con la fantamedia (media fantavoto) più alta
-          {champ ? ' in Champions' : ' in campionato'}; sono evidenziati anche negli incontri qui sotto.
-        </p>
-      </Section>
+      <div className={duale ? 'grid grid-cols-1 xl:grid-cols-2 gap-6 items-start' : ''}>
+        {classifiche.map(c => (
+          <Section key={c.usaRosa ? 'ROSA' : 'SCHIERATI'} title="Giocatori da temere" icon={Flame}
+                   right={<BadgeVista vista={c.usaRosa ? 'ROSA' : 'SCHIERATI'} />}>
+            {c.lista.length === 0 ? <Vuoto>Nessun giocatore di {a.nome} ha ancora preso voto.</Vuoto> : (
+              c.lista.map((g, i) => (
+                <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
+                  <span className="w-5 text-xs font-mono text-red-400 font-bold">{i + 1}</span>
+                  <RoleBadge ruolo={g.ruolo} />
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <NomeConBandiera id={g.id_giocatore} nome={g.nome} stagione={ultimaStagione} className="text-sm text-slate-200 font-medium" />
+                    <IncontroSerieA player={g} />
+                  </div>
+                  <span className="text-xs text-slate-600 font-mono">{g.pres} pres.</span>
+                  <span className="font-mono text-sm font-bold text-red-300 w-12 text-right">{fmt(g.fantamedia, 2)}</span>
+                </div>
+              ))
+            )}
+            <p className="px-4 py-2 text-[11px] text-slate-600">
+              I {N_TEMUTI} giocatori di {a.nome} con la fantamedia (media fantavoto) più alta
+              {champ ? ' in Champions' : ' in campionato'}; sono evidenziati anche negli incontri qui sotto.
+            </p>
+          </Section>
+        ))}
+      </div>
 
       <IncontriSerieA incontri={p.incontri_avversario ?? []} giornataSerieA={p.giornata_serie_a}
-                      titolo={`Incontri di Serie A · giocatori di ${a.nome}`} temuti={temuti.mappa} />
-      <GiocatoriPerAvversaria rosa={rosaAvv} temuti={temuti.mappa}
+                      titolo={`Incontri di Serie A · giocatori di ${a.nome}`} temuti={temuti} />
+      <GiocatoriPerAvversaria rosa={rosaAvv} temuti={temuti}
                               titolo={`Giocatori di ${a.nome} per squadra avversaria`}
                               vuoto={`Nessun giocatore di ${a.nome} ha una partita in questa giornata.`} />
     </div>
@@ -290,7 +302,7 @@ function BloccoSezione({ id, titolo, children }) {
   )
 }
 
-export default function AreaPrepara({ d, stagione, idSquadra, competizione, vista = 'ROSA' }) {
+export default function AreaPrepara({ d, stagione, idSquadra, competizione, vista = 'ROSA', vistaAlt = null }) {
   const champ = competizione === 'CHAMP'
   const { data: p, loading, error, refetch } = useFetch(
     () => getDashboardPrepara(stagione, idSquadra, competizione),
@@ -308,13 +320,13 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione, vist
         <SintesiAvversario p={p} d={d} champ={champ} />
       </BloccoSezione>
       <BloccoSezione id="prep-avv-serie_a" titolo="L'avversario - serie A">
-        <SerieAAvversario p={p} champ={champ} vista={vista} />
+        <SerieAAvversario p={p} champ={champ} vista={vista} vistaAlt={vistaAlt} />
       </BloccoSezione>
       <BloccoSezione id="prep-avv-formazione" titolo="L'avversario - ultima formazione">
         <UltimaFormazioneAvversario p={p} champ={champ} />
       </BloccoSezione>
       <BloccoSezione id="prep-top11" titolo="Top 11">
-        <PreparaTop11 rosa={p.rosa} competizione={competizione} vista={vista} rosaNonDisponibile={p.rosa_non_disponibile} />
+        <PreparaTop11 rosa={p.rosa} competizione={competizione} vista={vista} vistaAlt={vistaAlt} rosaNonDisponibile={p.rosa_non_disponibile} />
       </BloccoSezione>
       <BloccoSezione id="prep-serie_a" titolo="Serie A">
         <PreparaSerieA rosa={p.rosa} incontri={p.incontri_serie_a} giornataSerieA={p.giornata_serie_a} />

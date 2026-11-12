@@ -5,7 +5,7 @@
 // Gli scontri con le altre squadre sono nella sezione Statistiche.
 // ============================================================
 import { useState } from 'react'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Users, UserCheck } from 'lucide-react'
 import { Section, LogoCompatto, BadgeVista } from './shared'
 import { GraficoZoom } from './GraficiUtil'
 import { EmptyState, LoadingState, ErrorState } from '../ui'
@@ -14,7 +14,7 @@ import ConfrontoSquadre, { coloreSquadra } from './ConfrontoSquadre'
 import { mappaDef, infoMetrica, fmtVal, fmtDelta, tonoDelta } from './metriche'
 
 /** Righe del confronto per una metrica, ordinate dalla migliore alla peggiore. */
-function righeMetrica(data, def, me, conf) {
+function righeMetrica(data, def, me, conf, dataAlt = null) {
   const valori = data.valori[def.key] ?? {}
   const ids = [me, ...conf.ids.filter(id => id !== me)]
   const righe = ids
@@ -27,6 +27,11 @@ function righeMetrica(data, def, me, conf) {
   if (conf.bench && b?.media !== null && b?.media !== undefined) {
     righe.push({ tipo: 'bench', id: 'bench', nome: 'Media lega', valore: b.media })
   }
+  // Modalità duale: la mia squadra compare anche con il valore della seconda vista (solo lei, non le altre)
+  if (dataAlt && def.giocatori) {
+    const s = data.squadre.find(x => x.id === me)
+    righe.push({ tipo: 'meAlt', id: 'me-alt', nome: s?.nome ?? 'Tu', logo: s?.logo, valore: dataAlt.valori?.[def.key]?.[me] ?? null })
+  }
   const ord = def.dir === 'down' ? 1 : -1
   return righe.sort((a, b2) => {
     if (a.valore === null) return 1
@@ -35,9 +40,12 @@ function righeMetrica(data, def, me, conf) {
   })
 }
 
-function CardConfronto({ def, data, me, conf, vista }) {
-  const righe = righeMetrica(data, def, me, conf)
+function CardConfronto({ def, data, me, conf, vista, dataAlt = null, vistaAlt = null }) {
+  const alt = def.giocatori && vistaAlt && dataAlt ? dataAlt : null
+  const righe = righeMetrica(data, def, me, conf, alt)
   const info = infoMetrica(data, def.key, me)
+  const infoAlt = alt ? infoMetrica(alt, def.key, me) : null
+  const mioAlt = righe.find(r => r.tipo === 'meAlt')?.valore ?? null
   const vals = righe.map(r => r.valore).filter(v => v !== null)
   const lo = Math.min(0, ...vals)
   const hi = Math.max(0, ...vals)
@@ -55,7 +63,9 @@ function CardConfronto({ def, data, me, conf, vista }) {
       {def.descr && <p className={`${zoom ? 'text-xs' : 'text-[11px]'} text-slate-600 -mt-1 mb-1`}>{def.descr}</p>}
       {righe.map(r => {
         const scarto = r.tipo !== 'me' && mio !== null && r.valore !== null ? mio - r.valore : null
+        const mioTipo = r.tipo === 'me' || r.tipo === 'meAlt'
         const colore = r.tipo === 'me' ? 'bg-grass-500'
+          : r.tipo === 'meAlt' ? 'bg-gold-400'
           : r.tipo === 'bench' ? 'bg-amber-400/80'
           : ''
         const stile = r.tipo === 'squadra' ? { background: coloreSquadra(data.squadre, me, r.id), opacity: 0.75 } : {}
@@ -63,7 +73,7 @@ function CardConfronto({ def, data, me, conf, vista }) {
         const larghezza = r.valore === null ? 0 : (Math.abs(r.valore) / span) * 100
         const sel = evid === r.id
         // La riga della squadra loggata non viene mai attenuata: è il riferimento del confronto
-        const spenta = evid !== null && !sel && r.tipo !== 'me'
+        const spenta = evid !== null && !sel && !mioTipo
         return (
           <div key={r.id} role="button" tabIndex={0} aria-pressed={sel}
                title={sel ? 'Tocca per mostrare di nuovo tutte le righe' : 'Tocca per evidenziare questa riga'}
@@ -74,19 +84,25 @@ function CardConfronto({ def, data, me, conf, vista }) {
             <div className={`${zoom ? 'w-28 sm:w-44' : 'w-24 sm:w-32'} flex items-center gap-1.5 flex-shrink-0 min-w-0`}>
               {r.tipo === 'bench' ? <span className="w-7 h-7 rounded-lg bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0">∅</span>
                 : <LogoCompatto logo={r.logo} nome={r.nome} />}
-              <span className={`${zoom ? 'text-sm' : 'text-xs'} truncate ${r.tipo === 'me' ? 'text-grass-300 font-semibold' : 'text-slate-400'}`}>
-                {r.tipo === 'me' ? 'Tu' : r.nome}
+              <span className={`${zoom ? 'text-sm' : 'text-xs'} truncate ${mioTipo ? 'text-grass-300 font-semibold' : 'text-slate-400'}`}>
+                {mioTipo ? 'Tu' : r.nome}
               </span>
+              {alt && r.tipo === 'me' && <span title="Solo schierati" className="flex-shrink-0 text-grass-400"><UserCheck className="w-3.5 h-3.5" /></span>}
+              {r.tipo === 'meAlt' && <span title="Intera rosa" className="flex-shrink-0 text-gold-300"><Users className="w-3.5 h-3.5" /></span>}
             </div>
             <div className={`relative flex-1 ${zoom ? 'h-5' : 'h-3'} rounded-full bg-pitch-800 overflow-hidden min-w-0`}>
               <div className={`absolute top-0 h-full rounded-full ${colore}`}
                    style={{ left: `${sinistra}%`, width: `${Math.max(larghezza, r.valore === null ? 0 : 1)}%`, ...stile }} />
-              {mio !== null && r.tipo !== 'me' && (
+              {mio !== null && !mioTipo && (
                 <div className="absolute top-0 h-full w-0.5 bg-white/80 pointer-events-none" title={`Tuo valore: ${fmtVal(def, mio)}`}
                      style={{ left: `${((mio - lo) / span) * 100}%` }} />
               )}
+              {mioAlt !== null && !mioTipo && (
+                <div className="absolute top-0 h-full w-0.5 bg-gold-300/90 pointer-events-none" title={`Tuo valore (intera rosa): ${fmtVal(def, mioAlt)}`}
+                     style={{ left: `${((mioAlt - lo) / span) * 100}%` }} />
+              )}
             </div>
-            <span className={`${zoom ? 'w-20 text-base' : 'w-14 text-sm'} text-right font-mono flex-shrink-0 ${r.tipo === 'me' ? 'text-white font-bold' : 'text-slate-300'}`}>
+            <span className={`${zoom ? 'w-20 text-base' : 'w-14 text-sm'} text-right font-mono flex-shrink-0 ${mioTipo ? 'text-white font-bold' : 'text-slate-300'}`}>
               {fmtVal(def, r.valore)}
             </span>
             <span className={`${zoom ? 'w-20 text-xs' : 'w-14 text-[11px]'} text-right font-mono flex-shrink-0 ${scarto === null ? 'text-slate-700' : tonoDelta(def, scarto)}`}
@@ -110,6 +126,8 @@ function CardConfronto({ def, data, me, conf, vista }) {
                <span className="inline-flex items-center gap-2">
                  {def.giocatori && <BadgeVista vista={vista} />}
                  {info?.rank && info.valore !== null ? `${info.rank.pos}° su ${info.rank.n}` : null}
+                 {alt && <BadgeVista vista={vistaAlt} />}
+                 {alt && infoAlt?.rank && infoAlt.valore !== null ? `${infoAlt.rank.pos}° su ${infoAlt.rank.n}` : null}
                </span>
              )}>
       <GraficoZoom titolo={def.label} fluido>{corpo}</GraficoZoom>
@@ -127,6 +145,7 @@ export default function AreaConfronta({ ctx }) {
   const selezionate = ctx.sel.chiavi.map(k => defs[k]).filter(Boolean)
   const nulla = !conf.bench && conf.ids.length === 0
   const vista = ctx.vistaApplicata ?? ctx.vista
+  const vistaAlt = ctx.vistaAlt && ctx.dataAlt ? (ctx.vistaAltApplicata ?? ctx.vistaAlt) : null
   const conGiocatori = selezionate.some(d => d.giocatori)
 
   return (
@@ -144,14 +163,17 @@ export default function AreaConfronta({ ctx }) {
           {nulla && <p className="text-xs text-slate-500">Scegli il benchmark di lega o almeno una squadra per il confronto.</p>}
           {conGiocatori && (
             <p className="text-xs text-slate-500 mb-3 flex items-center gap-2 flex-wrap">
-              <BadgeVista vista={vista} />
-              Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre a confronto.
+              <BadgeVista vista={vista} />{ctx.vistaAlt && <BadgeVista vista={vistaAlt ?? ctx.vistaAlt} />}
+              {ctx.vistaAlt
+                ? 'Confronto tra le due viste: per le statistiche dei giocatori la tua squadra ha due barre (verde = solo schierati, oro = intera rosa); le altre squadre e la media lega sono calcolate sui soli schierati.'
+                : 'Il filtro giocatori vale per le statistiche dei giocatori (voto e fantavoto di reparto), per tutte le squadre a confronto.'}
               {ctx.vistaNota && <span className="text-gold-400">{ctx.vistaNota}</span>}
             </p>
           )}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {selezionate.map(def => (
-              <CardConfronto key={def.key} def={def} data={ctx.data} me={ctx.me} conf={conf} vista={vista} />
+              <CardConfronto key={def.key} def={def} data={ctx.data} me={ctx.me} conf={conf} vista={vista}
+                             dataAlt={ctx.dataAlt} vistaAlt={vistaAlt} />
             ))}
           </div>
           <p className="text-[11px] text-slate-600">

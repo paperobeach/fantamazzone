@@ -15,16 +15,15 @@ import AreaConfronta from '../components/dashboard/AreaConfronta'
 import { BarraSezioni, SEZIONI_AREA, CONFIG_DEFAULT, visteAttive, vistaPrincipale, vistaAlternativa } from '../components/dashboard/NavSezioni'
 import { BarraSelezione } from '../components/dashboard/SelezioneMetriche'
 import { useSelezioneMetriche } from '../components/dashboard/metriche'
-import {
-  AreaStoria, AreaUltimaPartita, AreaInArrivo,
-} from '../components/dashboard/AreeMinori'
+import AreaMatchPassati from '../components/dashboard/AreaMatchPassati'
+import { AreaStoria, AreaInArrivo } from '../components/dashboard/AreeMinori'
 
 // ── Aree ─────────────────────────────────────────────────────
 
 const AREE = [
   { value: 'statistiche', label: 'Statistiche',               icon: BarChart3 },
   { value: 'prepara',     label: 'Prepara la prossima partita', icon: Target },
-  { value: 'ultima',      label: "Analizza l'ultima partita", icon: Clock3 },
+  { value: 'ultima',      label: 'Analizza match passati',    icon: Clock3 },
   { value: 'andamento',   label: 'Analizza andamento',        icon: TrendingUp },
   { value: 'confronta',   label: 'Confronta',                 icon: Swords },
   { value: 'fortuna',     label: 'Analizza fortuna/sfortuna', icon: Dices },
@@ -167,7 +166,7 @@ export default function DashboardSquadra() {
         <BarraSelezione ctx={ctx} onConfronta={() => setArea('confronta')} onAndamento={() => setArea('andamento')} />
       )}
       {area === 'prepara'   && <AreaPrepara d={d} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} vista={vista} vistaAlt={vistaAlt} />}
-      {area === 'ultima'    && <AreaUltimaPartita d={d} competizione={competizione} />}
+      {area === 'ultima'    && <AreaMatchPassati key={competizione} stagione={d.stagione} idSquadra={idSquadra} competizione={competizione} nomeSquadra={d.squadra?.nome} />}
       {area === 'andamento' && <AreaAndamento d={d} competizione={competizione} ctx={ctx} />}
       {area === 'confronta' && <AreaConfronta d={d} competizione={competizione} ctx={ctx} />}
       {area === 'storia'    && <AreaStoria d={d} />}

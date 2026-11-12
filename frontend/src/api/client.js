@@ -626,6 +626,16 @@ export const getDashboardRuoli = (stagione, id_squadra, ruolo, competizione = 'C
 export const getDashboardPrepara = (stagione, id_squadra, competizione = 'CAMP') =>
   get('dashboard_prepara.php', { stagione, id_squadra, competizione, id_richiedente: idRichiedente() })
 
+// Area "Analizza match passati": per una partita già giocata (default: l'ultima) di UNA
+// competizione ('CAMP' | 'CHAMP'): performance di giornata vs media della stagione (squadra e
+// avversario), formazione schierata vs migliore possibile, bonus persi, percentile ed esiti
+// tra tutte le formazioni possibili. `giornata` omessa = ultima partita giocata.
+export const getDashboardAnalisiMatch = (stagione, id_squadra, competizione = 'CAMP', giornata = null) =>
+  get('dashboard_analisi_match.php', {
+    stagione, id_squadra, competizione,
+    ...(giornata !== null && giornata !== undefined ? { giornata } : {}),
+  })
+
 // Richiamo LIVE dell'intestazione della dashboard: finestra della giornata,
 // risultato (reale o simulato) delle partite della squadra, giocatori delle
 // prossime partite di Serie A di oggi e primi panchinari.

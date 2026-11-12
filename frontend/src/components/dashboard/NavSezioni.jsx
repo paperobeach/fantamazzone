@@ -31,7 +31,13 @@ export const SEZIONI_AREA = {
     { id: 'conf-selezione', label: 'Statistiche' },
     { id: 'conf-grafici',   label: 'Confronto' },
   ],
-  ultima: [], storia: [], fortuna: [], finanza: [],
+  ultima: [
+    { id: 'match-performance',     label: 'Performance' },
+    { id: 'match-performance-avv', label: 'Performance avversario' },
+    { id: 'match-scelte',          label: 'Scelte' },
+    { id: 'match-scelte-avv',      label: 'Scelte avversario' },
+  ],
+  storia: [], fortuna: [], finanza: [],
 }
 
 // Filtro giocatori: `viste` è un elenco con almeno una voce. Con entrambe attive ('SCHIERATI' e 'ROSA')

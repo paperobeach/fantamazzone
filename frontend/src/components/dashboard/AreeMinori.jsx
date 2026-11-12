@@ -1,6 +1,6 @@
-import { History, Clock3 } from 'lucide-react'
+import { History } from 'lucide-react'
 import { EmptyState } from '../ui'
-import { Section, Vuoto, RigaRisultato } from './shared'
+import { Section } from './shared'
 import { Trophy, Crown, Medal, ShieldX } from 'lucide-react'
 
 // ── Storia nella lega ────────────────────────────────────────
@@ -36,21 +36,6 @@ export function AreaStoria({ d }) {
       </div>
       {!albo.disponibile && <p className="px-4 pb-3 text-xs text-slate-600">Albo d'oro non ancora disponibile.</p>}
     </Section>
-  )
-}
-
-// ── Analizza l'ultima partita (provvisoria) ──────────────────
-
-export function AreaUltimaPartita({ d, competizione }) {
-  const champ = competizione === 'CHAMP'
-  const ultima = champ ? d.champions.ultimo : d.campionato.ultime5[0]
-  return (
-    <div className="space-y-6">
-      <Section title="Ultimo risultato" icon={Clock3}>
-        {ultima ? <RigaRisultato p={ultima} mostraTurno={champ} /> : <Vuoto>Nessuna partita ancora giocata.</Vuoto>}
-      </Section>
-      <EmptyState label="Analisi dettagliata dell'ultima partita: in arrivo." />
-    </div>
   )
 }
 

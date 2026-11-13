@@ -291,6 +291,7 @@ export default function AiArticolo() {
                 ({anteprima.riepilogo.narrativa.slot_serie_a} momenti in ordine di calendario Serie A,
                 {' '}{anteprima.riepilogo.narrativa.scontri_con_storico} con scontri diretti storici)
                 {' '}· fortuna/sfortuna: {anteprima.riepilogo.narrativa.subentri_fortuna} subentri, {anteprima.riepilogo.narrativa.big_o_titolari_flop} big o titolari in difficoltà, {anteprima.riepilogo.narrativa.assenti_illustri} assenti illustri
+                {' '}· calibrazione gol: {anteprima.riepilogo.narrativa.con_scala_gol ? `${anteprima.riepilogo.narrativa.situazioni_limite_fasce ?? 0} situazioni limite di fascia` : 'fasce non disponibili'}
                 {' '}· continuità: {anteprima.riepilogo.narrativa.puntate_precedenti === 0
                   ? 'nessuna puntata precedente'
                   : `puntate precedenti (giornate ${anteprima.riepilogo.narrativa.giornate_precedenti.join(', ')})`}

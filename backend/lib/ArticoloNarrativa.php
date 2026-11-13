@@ -27,7 +27,13 @@
 //     - colpi di fortuna (subentri che producono bonus al posto di un
 //       titolare) e di sfortuna (big che non rendono, big titolari non
 //       scesi in campo o usciti presto, assenze illustri di giocatori
-//       costosi non schierati che invece hanno giocato).
+//       costosi non schierati che invece hanno giocato);
+//     - CALIBRAZIONE PUNTEGGIO→GOL: per ogni partita si calcola in quale
+//       fascia di FASCE_GOL_PUNTEGGIO è caduta ciascuna squadra e quanto dista
+//       dal gol successivo o dalla soglia appena superata, così l'articolo
+//       cita fortuna/sfortuna di conversione (gol mancato o conquistato sul
+//       filo, regole correttive a/b/c, scarti che non si riflettono nel
+//       risultato) solo dove i numeri lo giustificano.
 //
 // NON chiama Anthropic e NON scrive su DB. Tutto è DETERMINISTICO (stessi
 // dati → stesso testo: nessuna casualità, solo rotazioni basate su crc32),
@@ -39,6 +45,7 @@
 // art_pulisci, art_profili, query_all, query_one già disponibili).
 // ============================================================
 
+require_once __DIR__ . "/CalcolatoreVoti.php";   // regole correttive sui gol (a/b/c), per la calibrazione punteggio→gol
 require_once __DIR__ . "/RosaStorico.php";
 require_once __DIR__ . "/PanchinaDettaglio.php";
 require_once __DIR__ . "/FormazioniChampions.php";
@@ -613,6 +620,293 @@ function arn_chi(array $p, string $squadra, bool $conCrediti = true): string
 }
 
 // ------------------------------------------------------------
+// CALIBRAZIONE PUNTEGGIO → GOL
+// ------------------------------------------------------------
+
+/**
+ * Parametri di conversione punteggio→gol della stagione (NEW_PARAMETRI_STAGIONE):
+ * fasce FASCE_GOL_PUNTEGGIO e soglie delle regole correttive a/b/c.
+ * Ritorna null se le fasce non sono configurate (la calibrazione viene saltata).
+ */
+function arn_fasce_config(int $stagione): ?array
+{
+    $par = [];
+    foreach (query_all("SELECT codice, valore FROM NEW_PARAMETRI_STAGIONE
+                        WHERE stagione = $stagione
+                          AND codice IN ('FASCE_GOL_PUNTEGGIO','GOL_DISTACCO_MIN_PUNTI','GOL_SOGLIA_PAREGGIO','GOL_SOGLIA_OMAGGIO')") as $r) {
+        $par[$r["codice"]] = $r["valore"];
+    }
+    $fasce = json_decode((string) ($par["FASCE_GOL_PUNTEGGIO"] ?? ""), true);
+    if (!is_array($fasce)) return null;
+    $fasce = array_values(array_filter($fasce, "is_array"));
+    $maxGol = 0;
+    foreach ($fasce as $f) $maxGol = max($maxGol, (int) ($f["gol"] ?? 0));
+    if (count($fasce) < 2 || $maxGol < 1) return null;
+
+    $num = fn(string $c, float $d) => (isset($par[$c]) && is_numeric($par[$c])) ? (float) $par[$c] : $d;
+    return [
+        "fasce"  => $fasce,
+        "regole" => [
+            "diff_min"        => $num("GOL_DISTACCO_MIN_PUNTI", 3),
+            "soglia_pareggio" => $num("GOL_SOGLIA_PAREGGIO", 66),
+            "soglia_omaggio"  => $num("GOL_SOGLIA_OMAGGIO", 59),
+        ],
+    ];
+}
+
+/** Gol dalla fascia di punteggio (stessa logica di calcolo_giornata.php::gol_da_punteggio). */
+function arn_gol_fascia(float $pt, array $fasce): int
+{
+    foreach ($fasce as $f) {
+        $da = $f["da"] ?? null;
+        $a  = $f["a"]  ?? null;
+        if ($da !== null && $pt < (float) $da) continue;
+        if ($a  !== null && $pt > (float) $a)  continue;
+        return (int) ($f["gol"] ?? 0);
+    }
+    return 0;
+}
+
+/**
+ * Posizione di un punteggio dentro la scala delle fasce.
+ * Ritorna: gol, da (soglia inferiore della fascia o null), prossima_da (soglia del gol
+ * successivo o null se è l'ultima fascia), gol_succ, gol_prec, su (punti mancanti al
+ * gol successivo), giu (punti sopra la soglia del gol attuale; null se fascia a 0 gol).
+ */
+function arn_fascia(float $pt, array $fasce): array
+{
+    $gol = arn_gol_fascia($pt, $fasce);
+    $cur = null; $next = null; $prec = null;
+    foreach ($fasce as $f) {
+        $g = (int) ($f["gol"] ?? 0);
+        if ($g === $gol && $cur === null) $cur = $f;
+        if ($g > $gol  && ($next === null || $g < (int) $next["gol"])) $next = $f;
+        if ($g < $gol  && ($prec === null || $g > (int) $prec["gol"])) $prec = $f;
+    }
+    $da   = $cur["da"] ?? null;
+    $nda  = $next["da"] ?? null;
+    return [
+        "gol"        => $gol,
+        "da"         => $da === null ? null : (float) $da,
+        "prossima_da" => $nda === null ? null : (float) $nda,
+        "gol_succ"   => $next === null ? null : (int) $next["gol"],
+        "gol_prec"   => $prec === null ? null : (int) $prec["gol"],
+        "su"         => $nda === null ? null : round((float) $nda - $pt, 2),
+        "giu"        => ($da === null || $gol === 0) ? null : round($pt - (float) $da, 2),
+    ];
+}
+
+/** «1 punto», «0.5 punti», «4 punti». */
+function arn_punti(float $n): string
+{
+    return arn_n($n) . (abs($n - 1) < 1e-9 ? " punto" : " punti");
+}
+
+/** Testo della fascia: «da 72 a meno di 77», «sotto 66», «da 109 in su». */
+function arn_testo_fascia(array $fa): string
+{
+    if ($fa["da"] !== null && $fa["prossima_da"] !== null) return "da " . arn_n($fa["da"]) . " a meno di " . arn_n($fa["prossima_da"]);
+    if ($fa["da"] !== null) return "da " . arn_n($fa["da"]) . " in su";
+    if ($fa["prossima_da"] !== null) return "sotto " . arn_n($fa["prossima_da"]);
+    return "tutte le fasce";
+}
+
+/** Riga con la posizione di una squadra nella scala: «→ 2 gol (da 72 a meno di 77; a 0.5 punti dal 3° gol)». */
+function arn_testo_posizione(float $pt, array $fa): string
+{
+    $t = "→ " . $fa["gol"] . " gol (" . arn_testo_fascia($fa);
+    if ($fa["giu"] !== null) {
+        $t .= $fa["giu"] <= 0.0001 ? "; esattamente sulla soglia del " . $fa["gol"] . "° gol"
+                                   : "; " . arn_punti($fa["giu"]) . " sopra la soglia del " . $fa["gol"] . "° gol";
+    }
+    if ($fa["su"] !== null && $fa["gol_succ"] !== null) {
+        $t .= "; a " . arn_punti($fa["su"]) . " dal " . ($fa["gol_succ"] === 1 ? "primo" : $fa["gol_succ"] . "°") . " gol";
+    } elseif ($fa["gol_succ"] === null) {
+        $t .= "; oltre l'ultima soglia";
+    }
+    return $t . ")";
+}
+
+/**
+ * Scarto in punti tra le due squadre, qualificato in base alle fasce: serve a non
+ * presentare come «minimo» o «risicato» uno scarto che vale uno o più gol di differenza.
+ */
+function arn_testo_scarto(float $pA, float $pB, array $fA, array $fB): string
+{
+    $dist = abs($pA - $pB);
+    $gap  = abs($fA["gol"] - $fB["gol"]);
+    $w = [];
+    foreach ([$fA, $fB] as $x) {
+        if ($x["da"] !== null && $x["prossima_da"] !== null) $w[] = $x["prossima_da"] - $x["da"];
+    }
+    $larg = $w ? array_sum($w) / count($w) : null;
+    $t = "Scarto tra le due squadre: " . arn_punti($dist);
+    if ($larg !== null) $t .= " (in questa zona della scala un gol vale circa " . arn_n($larg, 1) . " punti)";
+    if ($gap === 0) {
+        $t .= " → stessa fascia, nessun gol di differenza per punteggio: scarto CONTENUTO";
+    } elseif ($gap === 1) {
+        $t .= " → fasce adiacenti (1 gol di differenza per punteggio): "
+            . (($larg !== null && $dist >= $larg) ? "scarto AMPIO (più di un gol di punteggio)" : "scarto CONTENUTO (meno di un gol di punteggio)");
+    } else {
+        $t .= " → $gap gol di differenza per punteggio: scarto MOLTO AMPIO";
+    }
+    return $t;
+}
+
+/** «la vittoria», «il pareggio», «la sconfitta» per il segno di una differenza gol. */
+function arn_esito_gol(int $diff): string
+{
+    return $diff > 0 ? "la vittoria" : ($diff < 0 ? "la sconfitta" : "il pareggio");
+}
+
+/**
+ * Scala punteggio→gol della stagione in forma compatta, con le regole correttive,
+ * per il prompt (permette al modello di calibrare i riferimenti ai gol).
+ */
+function arn_testo_scala(array $cfg): string
+{
+    $f = $cfg["fasce"];
+    usort($f, fn($x, $y) => [(int) ($x["gol"] ?? 0)] <=> [(int) ($y["gol"] ?? 0)]);
+    $parti = [];
+    $primoGol = null;
+    foreach ($f as $x) {
+        $g = (int) ($x["gol"] ?? 0);
+        $da = $x["da"] ?? null;
+        if ($g === 0) {
+            $nxt = null;
+            foreach ($f as $y) if ((int) ($y["gol"] ?? 0) > 0 && ($nxt === null || (int) $y["gol"] < (int) $nxt["gol"])) $nxt = $y;
+            $parti[] = "0 gol" . (($nxt && ($nxt["da"] ?? null) !== null) ? " sotto " . arn_n((float) $nxt["da"]) : "");
+            continue;
+        }
+        if ($da === null) continue;
+        if ($primoGol === null) $primoGol = (float) $da;
+        $parti[] = $g . " gol da " . arn_n((float) $da) . ($x === end($f) ? " in su" : "");
+    }
+    $r = $cfg["regole"];
+    $t = "  " . implode(" · ", $parti) . "\n";
+    $larg = [];
+    foreach ($f as $x) {
+        if ((int) ($x["gol"] ?? 0) < 1 || ($x["da"] ?? null) === null) continue;
+        $nx = null;
+        foreach ($f as $y) if ((int) ($y["gol"] ?? 0) > (int) $x["gol"] && ($nx === null || (int) $y["gol"] < (int) $nx["gol"])) $nx = $y;
+        if ($nx && ($nx["da"] ?? null) !== null) $larg[] = (float) $nx["da"] - (float) $x["da"];
+    }
+    if ($larg) {
+        $t .= "  Ogni gol in più vale quindi da " . arn_n(min($larg)) . " a " . arn_n(max($larg)) . " punti a seconda della zona della scala: uno scarto di qualche punto va sempre letto in gol, non in assoluto.\n";
+    }
+    $t .= "  Regole correttive: se le due squadre cadono in fasce di gol diverse ma distano meno di " . arn_n($r["diff_min"])
+        . " punti, la squadra in svantaggio ottiene il gol che serve a pareggiare (pareggio forzato; 0-0 se una delle due è sotto "
+        . arn_n($r["soglia_pareggio"]) . " punti); se una squadra fa meno di " . arn_n($r["soglia_omaggio"])
+        . " punti e l'avversaria ne fa almeno " . arn_n($r["soglia_omaggio"]) . " con scarto di almeno " . arn_n($r["diff_min"])
+        . " punti, l'avversaria riceve un gol omaggio.";
+    return $t;
+}
+
+/**
+ * Calibrazione di una partita: posizione delle due squadre nella scala punteggio→gol e
+ * situazioni limite (fortuna/sfortuna di fascia, regole correttive, esiti che non
+ * rispecchiano lo scarto in punti). Usa i punteggi FINALI (fattore casa incluso) e
+ * i gol REALI registrati: se le fasce attuali non li riproducono (configurazione
+ * cambiata dopo il calcolo) la partita viene saltata per non contraddire il risultato.
+ *
+ * Ritorna null (nulla da dire) oppure ["righe" => [...posizioni], "segnalazioni" => [...testo],
+ * "fatti" => [["tipo","peso","testo"]], "incoerente" => bool].
+ */
+function arn_calibra_partita(array $inc, string $nomeA, string $nomeB, array $cfg): ?array
+{
+    $fasce = $cfg["fasce"]; $reg = $cfg["regole"];
+    $pA = (float) $inc["fa"]; $pB = (float) $inc["fb"];
+    $gA = (int) $inc["ga"];   $gB = (int) $inc["gb"];
+    $fA = arn_fascia($pA, $fasce); $fB = arn_fascia($pB, $fasce);
+
+    $e = CalcolatoreVoti::applicaRegoleGolPartita($pA, $pB, $fA["gol"], $fB["gol"], $reg);
+    if ((int) $e["golf_casa"] !== $gA || (int) $e["golf_ospite"] !== $gB) {
+        return ["righe" => [], "scarto" => "", "segnalazioni" => [], "fatti" => [], "incoerente" => true];
+    }
+
+    $margine = max(0.1, (float) art_cfg("calibrazione_margine_punti", 1.0));      // «sul filo»: entro questi punti dalla soglia
+    $stretto = (float) $reg["diff_min"] + $margine;                                  // vittoria con scarto minimo
+    $largo   = max($margine, (float) art_cfg("calibrazione_scarto_largo_pareggio", 4.0)); // pareggio con scarto grande
+    $dist    = abs($pA - $pB);
+
+    $scarto = "  " . arn_testo_scarto($pA, $pB, $fA, $fB);
+    $righe = [
+        "  - " . $nomeA . " " . arn_n($pA, 2) . " " . arn_testo_posizione($pA, $fA),
+        "  - " . $nomeB . " " . arn_n($pB, 2) . " " . arn_testo_posizione($pB, $fB),
+    ];
+    $seg = []; $fatti = [];
+    $aggiungi = function (string $tipo, float $peso, string $testo) use (&$seg, &$fatti) {
+        $seg[] = "  " . $testo;
+        $fatti[] = ["tipo" => $tipo, "peso" => $peso, "testo" => $testo];
+    };
+
+    // 1) regole correttive: l'esito NON è quello delle sole fasce
+    if ($e["regola"] === "a" || $e["regola"] === "b") {
+        $altaA = $fA["gol"] > $fB["gol"];
+        $alta = $altaA ? $nomeA : $nomeB; $bassa = $altaA ? $nomeB : $nomeA;
+        $pAlta = $altaA ? $pA : $pB; $pBassa = $altaA ? $pB : $pA;
+        $gAlta = max($fA["gol"], $fB["gol"]); $gBassa = min($fA["gol"], $fB["gol"]);
+        if ($e["regola"] === "a") {
+            $aggiungi("fascia_regola", 4 + (1 - min(1, $dist / max(0.1, $reg["diff_min"]))),
+                "- REGOLA GOL (pareggio forzato): per le fasce $alta (" . arn_n($pAlta) . ") avrebbe fatto $gAlta gol e $bassa (" . arn_n($pBassa) . ") $gBassa, "
+                . "ma il distacco è di soli " . arn_punti($dist) . " (sotto i " . arn_n($reg["diff_min"]) . "): finisce $gA-$gB. Fortunato $bassa, beffato $alta.");
+        } else {
+            $aggiungi("fascia_regola", 4.5,
+                "- REGOLA GOL (0-0 forzato): per le fasce sarebbe stato $gAlta-$gBassa a favore di $alta (" . arn_n($pAlta) . " contro " . arn_n($pBassa) . "), "
+                . "ma il distacco è di soli " . arn_punti($dist) . " e una squadra è sotto i " . arn_n($reg["soglia_pareggio"]) . ": finisce 0-0. Beffato $alta, graziato $bassa.");
+        }
+    } elseif ($e["regola"] === "c") {
+        $altaA = $pA > $pB;
+        $alta = $altaA ? $nomeA : $nomeB; $bassa = $altaA ? $nomeB : $nomeA;
+        $pAlta = $altaA ? $pA : $pB; $pBassa = $altaA ? $pB : $pA;
+        $aggiungi("fascia_regola", 4,
+            "- REGOLA GOL (gol omaggio): $bassa fa solo " . arn_n($pBassa) . " punti (sotto i " . arn_n($reg["soglia_omaggio"]) . ") e regala un gol a $alta (" . arn_n($pAlta) . "): "
+            . "senza il gol omaggio sarebbe finita " . ($altaA ? ($gA - 1) . "-$gB" : "$gA-" . ($gB - 1)) . ". Sfortuna per $bassa, fortuna per $alta.");
+    }
+
+    // 2) fortuna/sfortuna di fascia (solo senza regole correttive: altrimenti l'esito dipende dalla regola, già segnalata)
+    foreach ($e["regola"] !== null ? [] : ([[$nomeA, $pA, $fA, $gA, $gB, $fA["gol"] === $gA], [$nomeB, $pB, $fB, $gB, $gA, $fB["gol"] === $gB]]) as [$nome, $pt, $fa, $gol, $golAvv, $puro]) {
+        if (!$puro) continue;
+        // gol mancato per un soffio
+        if ($fa["su"] !== null && $fa["su"] > 0 && $fa["su"] <= $margine + 1e-9) {
+            $dopo = (int) $fa["gol_succ"];
+            $cambia = ($gol <=> $golAvv) !== ($dopo <=> $golAvv);
+            $peso = 2 + ($margine - $fa["su"]) / $margine + ($cambia ? 3 : 0);
+            $aggiungi("fascia_sfortuna", $peso,
+                "- SFORTUNA DI FASCIA: $nome (" . arn_n($pt) . ") resta a soli " . arn_punti($fa["su"]) . " dal " . ($dopo === 1 ? "primo" : $dopo . "°") . " gol"
+                . ($cambia ? ": con quel gol in più sarebbe stata " . arn_esito_gol($dopo - $golAvv) . " (invece " . arn_esito_gol($gol - $golAvv) . ")" : " (un gol in più, ma senza cambiare l'esito)") . ".");
+        }
+        // gol conquistato per un soffio
+        if ($fa["giu"] !== null && $fa["giu"] <= $margine + 1e-9) {
+            $prima = (int) ($fa["gol_prec"] ?? 0);
+            $cambia = ($gol <=> $golAvv) !== ($prima <=> $golAvv);
+            $peso = 2 + ($margine - $fa["giu"]) / $margine + ($cambia ? 3 : 0);
+            $aggiungi("fascia_fortuna", $peso,
+                "- FORTUNA DI FASCIA: $nome (" . arn_n($pt) . ") " . ($fa["giu"] <= 0.0001 ? "raggiunge esattamente" : "supera di soli " . arn_punti($fa["giu"]))
+                . " la soglia del " . $gol . "° gol"
+                . ($cambia ? ": senza quel gol sarebbe stata " . arn_esito_gol($prima - $golAvv) . " (invece " . arn_esito_gol($gol - $golAvv) . ")" : " (senza, un gol in meno ma stesso esito)") . ".");
+        }
+    }
+
+    // 3) esiti che non rispecchiano lo scarto in punti (solo senza regole correttive)
+    if ($e["regola"] === null) {
+        if ($gA !== $gB && $dist < $stretto) {
+            $vinceA = $gA > $gB;
+            $aggiungi("fascia_beffa", 2.5 + ($stretto - $dist) / $stretto,
+                "- VITTORIA SUL FILO: " . ($vinceA ? $nomeA : $nomeB) . " batte " . ($vinceA ? $nomeB : $nomeA) . " $gA-$gB con soli " . arn_punti($dist)
+                . " di scarto (il minimo per cambiare fascia è " . arn_n($reg["diff_min"]) . ").");
+        } elseif ($gA === $gB && $dist >= $largo) {
+            $altaA = $pA > $pB;
+            $aggiungi("fascia_beffa", 2.5 + min(3, ($dist - $largo) / 2),
+                "- PAREGGIO NONOSTANTE LO SCARTO: " . ($altaA ? $nomeA : $nomeB) . " (" . arn_n($altaA ? $pA : $pB) . ") ha " . arn_punti($dist) . " in più di "
+                . ($altaA ? $nomeB : $nomeA) . " (" . arn_n($altaA ? $pB : $pA) . ") ma resta nella stessa fascia di gol: $gA-$gB.");
+        }
+    }
+
+    return ["righe" => $righe, "scarto" => $scarto, "segnalazioni" => $seg, "fatti" => $fatti, "incoerente" => false];
+}
+
+// ------------------------------------------------------------
 // SCHEDA DI UNA PARTITA
 // ------------------------------------------------------------
 
@@ -912,6 +1206,10 @@ function arn_scheda($conn, array $inc, string $etichetta, array $ctx, int $dett)
         }
     }
 
+    // ---- calibrazione punteggio → gol ----
+    $cal = !empty($ctx["fasce"]) ? arn_calibra_partita($inc, $nomeA, $nomeB, $ctx["fasce"]) : null;
+    if ($cal !== null) foreach ($cal["fatti"] as $ft) $fatti[] = ["tipo" => $ft["tipo"], "peso" => $ft["peso"], "testo" => ltrim($ft["testo"], "+- ") . " — $etichetta"];
+
     // ---- testo della scheda ----
     $intest = $etichetta . ($champ ? " (Champions" . (!empty($inc["girone"]) ? ", girone " . $inc["girone"] : "") . ")" : " (campionato)")
             . ": " . $nomeA . " [" . ($ctx["sq"][$idA]["allenatore"] ?? "") . "] - " . $nomeB . " [" . ($ctx["sq"][$idB]["allenatore"] ?? "") . "]"
@@ -924,6 +1222,15 @@ function arn_scheda($conn, array $inc, string $etichetta, array $ctx, int $dett)
     foreach (($form[$idA] ?? []) as $f) if ($f["maglia"] >= 1 && $f["maglia"] <= 11) $crA += (int) ($info["crediti"][$f["id_giocatore"]] ?? 0);
     foreach (($form[$idB] ?? []) as $f) if ($f["maglia"] >= 1 && $f["maglia"] <= 11) $crB += (int) ($info["crediti"][$f["id_giocatore"]] ?? 0);
     if ($crA > 0 || $crB > 0) $t .= "  Crediti spesi per gli 11 titolari: $nomeA $crA, $nomeB $crB (rendimento: " . arn_n($inc["fa"], 1) . " e " . arn_n($inc["fb"], 1) . " punti)\n";
+    if ($cal !== null && !$cal["incoerente"]) {
+        $t .= $cal["scarto"] . "\n";
+        if ($dett >= 1) {
+            $t .= "  Posizione nella scala punteggio→gol (punteggi finali; solo per contestualizzare eventuali commenti sui punti):\n" . implode("\n", $cal["righe"]) . "\n";
+        }
+        if ($cal["segnalazioni"]) {
+            $t .= "  Situazioni limite di conversione (facoltative: se commenti fortuna o sfortuna sui gol, appoggiati solo a queste):\n" . implode("\n", $cal["segnalazioni"]) . "\n";
+        }
+    }
     if ($dett >= 1 && $righeSeq) {
         $t .= "  Sequenza in ordine di calendario di Serie A (parziali = somma dei fantavoti dei giocatori; i modificatori di squadra non sono inclusi):\n";
         $t .= implode("\n", $righeSeq) . "\n";
@@ -933,7 +1240,8 @@ function arn_scheda($conn, array $inc, string $etichetta, array $ctx, int $dett)
     if ($righeFatti) $t .= "  Fortuna e sfortuna:\n" . implode("\n", $righeFatti) . "\n";
 
     return ["testo" => rtrim($t), "fatti" => $fatti, "n_slot" => count($slotsOrd), "n_subentri" => $nSub,
-            "n_big_flop" => $nFlop, "n_assenti" => $nAss, "storico" => $sc ? 1 : 0, "sorpassi" => $sorpassi];
+            "n_big_flop" => $nFlop, "n_assenti" => $nAss, "storico" => $sc ? 1 : 0, "sorpassi" => $sorpassi,
+            "n_fasce_limite" => $cal ? count($cal["fatti"]) : 0, "fasce_incoerente" => ($cal && $cal["incoerente"]) ? 1 : 0];
 }
 
 // ------------------------------------------------------------
@@ -1103,10 +1411,11 @@ function arn_episodi($conn, array $partecipanti, array $incontri, array $etichet
  */
 function arn_costruisci($conn, int $stagione, int $giornata, array $incontri, array $partecipanti, array $sq, string $formato): array
 {
-    $out = ["forma" => "", "schede" => "", "fatti" => "", "memoria" => "", "profili" => [], "senza_profilo" => [],
+    $out = ["forma" => "", "scala" => "", "schede" => "", "fatti" => "", "memoria" => "", "profili" => [], "senza_profilo" => [],
             "episodi" => [], "errori" => [],
             "stat" => ["schede" => 0, "slot" => 0, "subentri" => 0, "big_flop" => 0, "assenti" => 0, "scontri_con_storico" => 0,
-                       "memoria_articoli" => 0, "memoria_giornate" => [], "tormentoni_proposti" => 0, "episodi_in_pausa" => 0]];
+                       "memoria_articoli" => 0, "memoria_giornate" => [], "tormentoni_proposti" => 0, "episodi_in_pausa" => 0,
+                       "fasce_limite" => 0, "fasce_incoerenti" => 0]];
     $seed = "S$stagione-G$giornata";
 
     // etichette delle partite, nello stesso ordine delle pagine dell'edizione
@@ -1167,7 +1476,15 @@ function arn_costruisci($conn, int $stagione, int $giornata, array $incontri, ar
             "vsa" => arn_voti_serie_a($stagione, $giornata),
             "g_serie_a" => arn_giornata_serie_a($stagione, $giornata),
             "collegati" => $prof["collegati"],
+            "fasce" => null,
         ];
+        try {
+            $ctx["fasce"] = arn_fasce_config($stagione);
+            if ($ctx["fasce"] !== null) $out["scala"] = arn_testo_scala($ctx["fasce"]);
+        } catch (Throwable $e) {
+            $out["errori"]["fasce"] = $e->getMessage();
+            error_log("ArticoloNarrativa/fasce: " . $e->getMessage());
+        }
         $ctx["slots"] = arn_slots($stagione, $ctx["g_serie_a"]);
         $maxCar = max(2000, (int) art_cfg("max_caratteri_schede", 14000));
         $testo = "";
@@ -1186,13 +1503,18 @@ function arn_costruisci($conn, int $stagione, int $giornata, array $incontri, ar
             $out["stat"]["big_flop"] += $s["n_big_flop"];
             $out["stat"]["assenti"] += $s["n_assenti"];
             $out["stat"]["scontri_con_storico"] += $s["storico"];
+            $out["stat"]["fasce_limite"] += $s["n_fasce_limite"];
+            $out["stat"]["fasce_incoerenti"] += $s["fasce_incoerente"];
         }
         // riepilogo dei fatti più forti della giornata (per il commento generale)
         $tutti = [];
         foreach ($schede as $s) foreach ($s["fatti"] as $f) $tutti[] = $f;
         $righe = [];
-        $quanti = ["fortuna" => 3, "sfortuna" => 2, "big_flop" => 3, "big_top" => 2, "assenza" => 2, "rimpianto" => 2];
-        $titoli = ["fortuna" => "Colpi di fortuna", "sfortuna" => "Colpi di sfortuna", "big_flop" => "Big che non rendono",
+        $quanti = ["fascia_sfortuna" => 2, "fascia_fortuna" => 2, "fascia_regola" => 2, "fascia_beffa" => 1,
+                   "fortuna" => 3, "sfortuna" => 2, "big_flop" => 3, "big_top" => 2, "assenza" => 2, "rimpianto" => 2];
+        $titoli = ["fascia_sfortuna" => "Sfortuna di fascia (gol mancato per un soffio)", "fascia_fortuna" => "Fortuna di fascia (gol conquistato sul filo)",
+                   "fascia_regola" => "Regole sui gol (pareggi forzati, 0-0, gol omaggio)", "fascia_beffa" => "Esiti che non rispecchiano lo scarto di punti",
+                   "fortuna" => "Colpi di fortuna", "sfortuna" => "Colpi di sfortuna", "big_flop" => "Big che non rendono",
                    "big_top" => "Big che rendono", "assenza" => "Assenze e titolari senza voto", "rimpianto" => "Rimpianti (costosi lasciati fuori)"];
         foreach ($quanti as $tipo => $max) {
             $lista = array_values(array_filter($tutti, fn($f) => $f["tipo"] === $tipo));

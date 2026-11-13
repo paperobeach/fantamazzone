@@ -89,6 +89,13 @@ return [
         "sequenza_max_slot" => 8,
         // Tetto di caratteri delle schede partita: oltre, la sequenza viene compattata
         "max_caratteri_schede" => 14000,
+        // Calibrazione punteggio→gol (fasce FASCE_GOL_PUNTEGGIO): una squadra è "sul filo" se dista
+        // al massimo questi punti dal gol successivo (sfortuna di fascia) o dalla soglia appena
+        // superata (fortuna di fascia). Default 1.0
+        "calibrazione_margine_punti" => 1.0,
+        // Pareggio "con scarto": segnalato se le due squadre distano almeno questi punti pur restando
+        // nella stessa fascia di gol. Default 4.0
+        "calibrazione_scarto_largo_pareggio" => 4.0,
         // Tetto di spesa mensile in USD sugli articoli generati; 0 = nessun tetto
         "tetto_mensile_usd" => 0,
         // Euro per 1 USD, solo per mostrare anche l'importo in euro (null = non mostrare)

@@ -599,7 +599,8 @@ function art_pagine_attese(array $dati, array $marcatoriSquadra, bool $conChampi
  *   formato ('articolo'|'edizione'), stile, contesto (testo, può essere vuoto),
  *   struttura (indicazioni di struttura, testo, può essere vuoto),
  *   con_immagini (bool), parole_pagina, parole_commento, max_inline,
- *   con_schede (bool: schede partita), con_memoria (bool: andamento + puntate precedenti)
+ *   con_schede (bool: schede partita), con_memoria (bool: andamento + puntate precedenti),
+ *   con_scala (bool: scala punteggio→gol e calibrazione nelle schede)
  */
 function art_system_prompt(int $paroleTarget, array $o): string
 {
@@ -635,6 +636,9 @@ function art_system_prompt(int $paroleTarget, array $o): string
         $regole[] = "Nel messaggio ci sono le SCHEDE PARTITA, costruite dal DB: scontri diretti, SEQUENZA in ordine di calendario di Serie A (parziali, sorpassi) e fatti di fortuna e sfortuna. Racconta ogni partita seguendo la sequenza: chi è partito avanti, quando c'è stato il sorpasso, quale partita di Serie A l'ha deciso (il sabato sera, il pomeriggio, il posticipo). I parziali sono somme di fantavoti SENZA i modificatori di squadra: non presentarli come punteggio finale e non contraddire mai il finale." . ($edizione ? " La scheda «PARTITA n» alimenta la pagina «@@ PARTITA n»; il RIEPILOGO DEI FATTI alimenta la pagina COMMENTO." : "");
         $regole[] = "Per ogni partita scegli UN fatto sorprendente tra quelli delle schede (colpo di fortuna o di sfortuna, big che non rende, big titolare senza voto, assente illustre che ha giocato bene, sorpasso all'ultima partita) e fanne il perno comico del racconto con iperboli e paragoni: l'ironia nasce dai dati, e più il fatto è piccolo e capovolge l'esito, più va ingigantito. Il resto della partita è cronaca asciutta: alterna cronaca e comicità, non scherzare su tutto. Se una partita non ha fatti sorprendenti, raccontala in modo sobrio.";
         $regole[] = "Fortuna e sfortuna: una riserva che entra al posto di un titolare e produce bonus è un colpo di fortuna spudorato (e uno sfortunato per chi aveva il titolare, se è un big); una riserva che entra e fa danni, un big che delude, un big titolare che non scende in campo o esce presto, un costoso lasciato fuori che invece segna sono materiale per un'ironia più amara. Non attribuire MAI la causa (infortunio, scelta tecnica, squalifica) se non è nei dati o nelle note della redazione: puoi solo dire che non ha giocato. Non inventare minuti, ruoli, crediti, squadre o bonus che non compaiono nelle schede.";
+        if (!empty($o["con_scala"])) {
+            $regole[] = "PUNTEGGI, SCARTI E FASCE: commentare le fasce di conversione punteggio→gol NON è obbligatorio e non devi cercare un aggancio a tutti i costi. Ma ogni volta che parli di scarto di punti, di punteggio alto o basso, di gol sfiorati o mancati, il commento deve essere coerente con la SCALA PUNTEGGIO→GOL del messaggio: i punti vanno letti in gol (un gol vale solo qualche punto, quindi pochi punti possono essere già uno o più gol di differenza). Non definire «minimo», «risicato», «di misura», «per un soffio» o «pochi punti» uno scarto che la scheda qualifica AMPIO o MOLTO AMPIO; non definire «enorme» o «schiacciante» uno scarto CONTENUTO. Usa pure la qualifica dello scarto riportata nella scheda e i margini già indicati (distanza dal gol successivo o dalla soglia superata), senza calcolare nuove distanze né inventare soglie. Fortuna o sfortuna di conversione (gol sul filo, regole correttive, pareggio nonostante lo scarto) sono citabili solo se compaiono tra le «Situazioni limite di conversione» della scheda: se non ci sono, non attribuire fortuna o sfortuna alla conversione in gol. I punteggi delle schede sono quelli finali (con modificatori di squadra e fattore casa), non i parziali della sequenza.";
+        }
     }
     if (!empty($o["con_memoria"])) {
         $regole[] = "ANDAMENTO DELLE SQUADRE e PUNTATE PRECEDENTI servono alla continuità della storia: dai seguito ai filoni (serie di vittorie o sconfitte, risalite, crolli, sorpassi in classifica, pagelle o promesse della puntata precedente confermate o smentite) con un riferimento esplicito e breve, ma SOLO se i fatti di questa giornata lo confermano o lo ribaltano. Ogni richiamo al passato deve avere un collegamento concreto con la partita che stai raccontando.";
@@ -765,6 +769,7 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         }
     }
     $conSchede  = $narr !== null && trim($narr["schede"]) !== "";
+    $conScala   = $conSchede && trim((string) ($narr["scala"] ?? "")) !== "";
     $conMemoria = $narr !== null && (trim($narr["memoria"]) !== "" || trim($narr["forma"]) !== "");
 
     // Contesto fisso e stile (modificabili da "Profili ed episodi" → "Contesto fisso")
@@ -811,7 +816,7 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         "formato" => $formato, "stile" => $stile, "contesto" => $contestoFisso,
         "struttura" => $struttura, "con_immagini" => $conImmagini, "parole_pagina" => $parolePagina,
         "parole_commento" => $paroleCommento, "max_inline" => $maxInline,
-        "con_schede" => $conSchede, "con_memoria" => $conMemoria,
+        "con_schede" => $conSchede, "con_memoria" => $conMemoria, "con_scala" => $conScala,
     ]);
 
     $testo  = ($formato === "edizione"
@@ -821,6 +826,10 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
     if ($narr !== null && trim($narr["forma"]) !== "") {
         $testo .= "ANDAMENTO DELLE SQUADRE (classifica prima e dopo la giornata, ultimi risultati, serie in corso; dati dal DB):\n"
                . $narr["forma"] . "\n\n";
+    }
+    if ($conSchede && $conScala) {
+        $testo .= "SCALA PUNTEGGIO→GOL DELLA STAGIONE (dati dal DB: punteggi finali di squadra, con modificatori e fattore casa):\n"
+               . $narr["scala"] . "\n\n";
     }
     if ($conSchede) {
         $testo .= "SCHEDE PARTITA (dati dal DB: scontri diretti, sequenza in ordine di calendario di Serie A, fortuna e sfortuna):\n"
@@ -890,6 +899,9 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
                 "subentri_fortuna"      => $narr["stat"]["subentri"],
                 "big_o_titolari_flop"   => $narr["stat"]["big_flop"],
                 "assenti_illustri"      => $narr["stat"]["assenti"],
+                "situazioni_limite_fasce" => $narr["stat"]["fasce_limite"],
+                "fasce_incoerenti"      => $narr["stat"]["fasce_incoerenti"],
+                "con_scala_gol"         => $conScala,
                 "scontri_con_storico"   => $narr["stat"]["scontri_con_storico"],
                 "puntate_precedenti"    => $narr["stat"]["memoria_articoli"],
                 "giornate_precedenti"   => $narr["stat"]["memoria_giornate"],

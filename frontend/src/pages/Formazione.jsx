@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useFetch } from '../hooks/useFetch'
 import { getSquadra, getGiornataCorrente, getAllStarGameContesto, getFormazione, getFormazioneContesto, getFormazioneStato, getRigoristi, getAvversarieSerieA, saveFormazione } from '../api/client'
@@ -137,6 +138,10 @@ function costruisciStato(fonte, rosa) {
  */
 function FormazioneClassica() {
   const { utente, ultimaStagione } = useApp()
+  // Top 11 della dashboard (Prepara la prossima partita): formazione prevalorizzata, da verificare e salvare
+  const prefillTop11 = useLocation().state?.top11 ?? null
+  const prefillApplicato = useRef(false)
+  const [prefillAttivo, setPrefillAttivo] = useState(false)
 
   const idSquadra = utente?.id ?? null
 
@@ -301,10 +306,22 @@ function FormazioneClassica() {
         ? formazionePrecedente
         : null
 
-    const statoCamp = costruisciStato(fonte, rosa)
+    // Prevalorizzazione dal Top 11 (una sola volta): titolari = maglia 1..11, panchina = 12+
+    let statoCamp = costruisciStato(fonte, rosa)
+    let daTop11 = false
+    if (prefillTop11 && !prefillApplicato.current && !(nessunaGiornataAperta || bloccata)) {
+      const righe = [
+        ...prefillTop11.titolari.map((id, i) => ({ id_giocatore: id, maglia: i + 1 })),
+        ...prefillTop11.panchina.map((id, i) => ({ id_giocatore: id, maglia: 12 + i })),
+      ]
+      const st = costruisciStato(righe, rosa)
+      if (st.titolari.length === 11) { statoCamp = st; daTop11 = true }
+      prefillApplicato.current = true
+    }
+    setPrefillAttivo(daTop11)
     // Champions: formazione distinta già salvata, altrimenti parte da
     // una copia di quella di campionato.
-    const statoChamp = separata && Array.isArray(champSalvata) && champSalvata.length > 0
+    const statoChamp = !daTop11 && separata && Array.isArray(champSalvata) && champSalvata.length > 0
       ? costruisciStato(champSalvata, rosa)
       : statoCamp
     setForms({ CAMP: statoCamp, CHAMP: statoChamp })
@@ -329,6 +346,7 @@ function FormazioneClassica() {
   // "salvata" e l'eventuale errore precedente. Le modifiche riguardano
   // sempre la scheda (competizione) attiva.
   function aggiornaAttiva(patch) {
+    setPrefillAttivo(false)
     setForms(f => ({ ...f, [comp]: { ...f[comp], ...patch } }))
     setConfermaAperta(false)
     resetEsito()
@@ -495,6 +513,14 @@ function FormazioneClassica() {
               />
               <p className="text-xs text-slate-500">
                 Questa giornata prevede un turno di Champions: puoi schierare una formazione diversa per ciascuna competizione.
+              </p>
+            </div>
+          )}
+          {prefillAttivo && (
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-grass-500/30 bg-grass-500/10 px-3 py-2.5">
+              <Info className="w-4 h-4 text-grass-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-grass-300">
+                Formazione precompilata dal Top 11 della dashboard: verificala e premi "Salva formazione" per confermarla.
               </p>
             </div>
           )}

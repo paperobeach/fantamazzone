@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Star, Sparkles } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Star, Sparkles, ClipboardEdit } from 'lucide-react'
 import { RoleBadge, Select } from '../ui'
 import { PitchLineup } from '../PitchLineup'
 import { IncontroSerieA } from '../PitchField'
@@ -37,6 +38,7 @@ function costruisciTop11(rosa, modulo, metrica, minPres) {
 
 export default function PreparaTop11({ rosa: rosaBase, competizione, vista = 'ROSA', vistaAlt = null, rosaNonDisponibile = null }) {
   const { ultimaStagione } = useApp()
+  const navigate = useNavigate()
   const [metrica, setMetrica] = useState('media_voto')
   const [modulo, setModulo] = useState('4-3-3')
   const [minPres, setMinPres] = useState(1)
@@ -88,6 +90,11 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, vista = 'RO
     </div>
   )
 
+  // Va all'inserimento formazione con titolari e panchina del Top 11 prevalorizzati
+  const vaiAFormazione = top => navigate('/formazione', {
+    state: { top11: { titolari: top.titolari.map(g => g.id_giocatore), panchina: top.panchina.map(g => g.id_giocatore) } },
+  })
+
   // Campo + elenco di una vista
   const bloccoVista = r => {
     const { top, usaRosa } = r
@@ -105,7 +112,16 @@ export default function PreparaTop11({ rosa: rosaBase, competizione, vista = 'RO
         )}
         <div className={duale ? 'space-y-6' : 'grid grid-cols-1 lg:grid-cols-2 gap-6'}>
           <Section title={`Top 11 · ${modulo}`} icon={Star}
-                   right={`media ${fmt(top.titolari.length ? top.somma / top.titolari.length : null, 2)}`}>
+                   right={
+                     <span className="inline-flex items-center gap-2 flex-wrap justify-end">
+                       <span>media {fmt(top.titolari.length ? top.somma / top.titolari.length : null, 2)}</span>
+                       <button type="button" onClick={() => vaiAFormazione(top)} disabled={top.mancanti > 0}
+                               title={top.mancanti > 0 ? 'Top 11 incompleto: riduci le presenze minime o cambia modulo' : 'Apri l\'inserimento formazione con questo Top 11'}
+                               className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-grass-500/40 bg-grass-500/10 text-grass-300 text-[11px] font-sans font-medium hover:bg-grass-500/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                         <ClipboardEdit className="w-3.5 h-3.5" /> Inserisci formazione
+                       </button>
+                     </span>
+                   }>
             <div className="p-4">
               {top.mancanti > 0 && (
                 <p className="mb-3 text-xs text-gold-400">

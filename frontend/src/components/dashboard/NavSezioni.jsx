@@ -18,8 +18,10 @@ export const SEZIONI_AREA = {
   ],
   prepara: [
     { id: 'prep-avv-sintesi',     label: 'Avversario · sintesi' },
+    { id: 'prep-avv-forma',       label: 'Avversario · forma' },
     { id: 'prep-avv-serie_a',     label: 'Avversario · Serie A' },
     { id: 'prep-avv-formazione',  label: 'Avversario · formazione' },
+    { id: 'prep-forma',      label: 'Forma' },
     { id: 'prep-top11',      label: 'Top 11' },
     { id: 'prep-serie_a',    label: 'Serie A' },
   ],
@@ -142,6 +144,7 @@ function PannelloConfig({ config, onChange, onClose, soloCompetizione = false })
 
 export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = false }) {
   const barraRef = useRef(null)
+  const listaRef = useRef(null)
   const [attiva, setAttiva] = useState(sezioni[0]?.id ?? null)
   const [aperto, setAperto] = useState(false)
   const chiave = sezioni.map(s => s.id).join('|')
@@ -175,6 +178,18 @@ export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = fal
     }
   }, [chiave]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Con lo scroll verticale la sezione attiva cambia: la barra dei pulsanti scorre in orizzontale
+  // per tenere visibile (centrato, se possibile) quello della sezione in vista.
+  useEffect(() => {
+    const cont = listaRef.current
+    const btn = cont?.querySelector('[aria-current="true"]')
+    if (!cont || !btn) return
+    const c = cont.getBoundingClientRect()
+    const b = btn.getBoundingClientRect()
+    const delta = (b.left - c.left) - (c.width - b.width) / 2
+    if (Math.abs(delta) > 1) cont.scrollBy({ left: delta, behavior: 'smooth' })
+  }, [attiva])
+
   // Chiusura del pannello: Esc o clic fuori
   useEffect(() => {
     if (!aperto) return undefined
@@ -197,7 +212,7 @@ export function BarraSezioni({ sezioni, config, onConfig, soloCompetizione = fal
           <ArrowUp className="w-4 h-4" />
         </button>
 
-        <div className="flex-1 min-w-0 overflow-x-auto">
+        <div ref={listaRef} className="flex-1 min-w-0 overflow-x-auto">
           <div className="flex gap-1.5 w-max">
             {sezioni.map(s => (
               <button key={s.id} type="button" onClick={() => vaiA(s.id)} aria-current={attiva === s.id ? 'true' : undefined}

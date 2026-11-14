@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Trophy, Crown, ClipboardList, Home, Plane, LayoutGrid, Flame } from 'lucide-react'
+import { Trophy, Crown, ClipboardList, Home, Plane, LayoutGrid } from 'lucide-react'
 import { useFetch } from '../../hooks/useFetch'
 import { getDashboardPrepara } from '../../api/client'
 import { LoadingState, ErrorState, EmptyState, RoleBadge } from '../ui'
@@ -9,8 +9,9 @@ import { useApp } from '../../context/AppContext'
 import { IncontroSerieA } from '../PitchField'
 import PreparaTop11 from './PreparaTop11'
 import PreparaSerieA, { IncontriSerieA, GiocatoriPerAvversaria } from './PreparaSerieA'
+import StatoForma, { calcolaForma, N_FORMA_DEFAULT } from './StatoForma'
 import {
-  Section, Vuoto, BarraPerc, PallinoForma, RigaRisultato, EsitoIcon, CoachPhoto, BadgeVista, fmt,
+  Section, Vuoto, BarraPerc, PallinoForma, RigaRisultato, EsitoIcon, CoachPhoto, fmt,
 } from './shared'
 
 // ── Formazioni (elenco) ──────────────────────────────────────
@@ -177,21 +178,26 @@ function ModuliAvversario({ moduli, nome }) {
   )
 }
 
-// Giocatori da temere: i 5 dell'avversario con la fantamedia (media fantavoto) più alta,
-// secondo il filtro giocatori (solo schierati / intera rosa) e le sole presenze con voto.
-const N_TEMUTI = 5
+// ── Stato di forma (avversario / propria squadra) ────────────
+// I primi N (5 o 10) giocatori per fantamedia, secondo il filtro giocatori della rotellina.
 
-function calcolaTemuti(rosaAvv, vista) {
-  const usaRosa = vista === 'ROSA' && rosaAvv.every(g => g.tutta_rosa)
-  const lista = rosaAvv
-    .map(g => {
-      const dati = usaRosa ? g.tutta_rosa : g
-      return { ...g, fantamedia: dati.media_fantavoto, pres: dati.presenze }
-    })
-    .filter(g => g.fantamedia !== null && g.fantamedia !== undefined && g.pres > 0)
-    .sort((a, b) => b.fantamedia - a.fantamedia || b.pres - a.pres)
-    .slice(0, N_TEMUTI)
-  return { lista, usaRosa, mappa: new Map(lista.map((g, i) => [g.id_giocatore, i + 1])) }
+function SezioneForma({ rosa, vista, vistaAlt, n, onN, soggetto, champ, rosaNonDisponibile = null }) {
+  const viste = vistaAlt ? [vista, vistaAlt] : [vista]
+  const classifiche = useMemo(() => viste.map(v => calcolaForma(rosa, v, n)), [rosa, vista, vistaAlt, n]) // eslint-disable-line react-hooks/exhaustive-deps
+  return <StatoForma classifiche={classifiche} n={n} onN={onN} soggetto={soggetto} champ={champ}
+                     duale={viste.length === 2} rosaNonDisponibile={rosaNonDisponibile} />
+}
+
+function FormaAvversarioGiocatori({ p, champ, vista, vistaAlt, n, onN }) {
+  if (!p.match) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
+  return <SezioneForma rosa={p.rosa_avversario ?? []} vista={vista} vistaAlt={vistaAlt} n={n} onN={onN} champ={champ}
+                       soggetto={{ di: `di ${p.match.avversario.nome}`, evidenzia: true }} />
+}
+
+function FormaMiaSquadra({ p, champ, vista, vistaAlt, n, onN }) {
+  return <SezioneForma rosa={p.rosa ?? []} vista={vista} vistaAlt={vistaAlt} n={n} onN={onN} champ={champ}
+                       rosaNonDisponibile={p.rosa_non_disponibile}
+                       soggetto={{ di: 'della tua squadra', evidenzia: false }} />
 }
 
 // ── L'avversario - sintesi ───────────────────────────────────
@@ -221,50 +227,21 @@ function SintesiAvversario({ p, d, champ }) {
 
 // ── L'avversario - Serie A ───────────────────────────────────
 
-function SerieAAvversario({ p, champ, vista, vistaAlt = null }) {
-  const { ultimaStagione } = useApp()
+function SerieAAvversario({ p, champ, vista, vistaAlt = null, n = N_FORMA_DEFAULT }) {
   const m = p.match
   const rosaAvv = p.rosa_avversario ?? []
-  // Modalità duale: una classifica dei temuti per vista; nelle liste sono evidenziati i giocatori di entrambe
-  const viste = vistaAlt ? [vista, vistaAlt] : [vista]
-  const duale = viste.length === 2
-  const classifiche = useMemo(() => viste.map(v => calcolaTemuti(rosaAvv, v)), [rosaAvv, vista, vistaAlt]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Modalità duale: nelle liste sono evidenziati i giocatori in forma di entrambe le viste
   const temuti = useMemo(() => {
     const mappa = new Map()
-    classifiche.forEach(c => c.mappa.forEach((pos, id) => mappa.set(id, Math.min(pos, mappa.get(id) ?? pos))))
+    ;(vistaAlt ? [vista, vistaAlt] : [vista]).forEach(v =>
+      calcolaForma(rosaAvv, v, n).mappa.forEach((pos, id) => mappa.set(id, Math.min(pos, mappa.get(id) ?? pos))))
     return mappa
-  }, [classifiche])
+  }, [rosaAvv, vista, vistaAlt, n])
   if (!m) return <EmptyState label={champ ? 'Nessun match di Champions in programma.' : 'Prossimo incontro non disponibile.'} />
   const a = m.avversario
 
   return (
     <div className="space-y-6">
-      <div className={duale ? 'grid grid-cols-1 xl:grid-cols-2 gap-6 items-start' : ''}>
-        {classifiche.map(c => (
-          <Section key={c.usaRosa ? 'ROSA' : 'SCHIERATI'} title="Giocatori da temere" icon={Flame}
-                   right={<BadgeVista vista={c.usaRosa ? 'ROSA' : 'SCHIERATI'} />}>
-            {c.lista.length === 0 ? <Vuoto>Nessun giocatore di {a.nome} ha ancora preso voto.</Vuoto> : (
-              c.lista.map((g, i) => (
-                <div key={g.id_giocatore} className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.03] last:border-0">
-                  <span className="w-5 text-xs font-mono text-red-400 font-bold">{i + 1}</span>
-                  <RoleBadge ruolo={g.ruolo} />
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <NomeConBandiera id={g.id_giocatore} nome={g.nome} stagione={ultimaStagione} className="text-sm text-slate-200 font-medium" />
-                    <IncontroSerieA player={g} />
-                  </div>
-                  <span className="text-xs text-slate-600 font-mono">{g.pres} pres.</span>
-                  <span className="font-mono text-sm font-bold text-red-300 w-12 text-right">{fmt(g.fantamedia, 2)}</span>
-                </div>
-              ))
-            )}
-            <p className="px-4 py-2 text-[11px] text-slate-600">
-              I {N_TEMUTI} giocatori di {a.nome} con la fantamedia (media fantavoto) più alta
-              {champ ? ' in Champions' : ' in campionato'}; sono evidenziati anche negli incontri qui sotto.
-            </p>
-          </Section>
-        ))}
-      </div>
-
       <IncontriSerieA incontri={p.incontri_avversario ?? []} giornataSerieA={p.giornata_serie_a}
                       titolo={`Incontri di Serie A · giocatori di ${a.nome}`} temuti={temuti} />
       <GiocatoriPerAvversaria rosa={rosaAvv} temuti={temuti}
@@ -290,7 +267,7 @@ function UltimaFormazioneAvversario({ p, champ }) {
 }
 
 // ── Area "Prepara la prossima partita" ───────────────────────
-// Una sola pagina con le sezioni L'avversario (sintesi, Serie A, ultima formazione), Top 11 e Serie A
+// Una sola pagina con le sezioni L'avversario (sintesi, forma, Serie A, ultima formazione), Forma, Top 11 e Serie A
 // (navigabili dalla barra fissa).
 
 function BloccoSezione({ id, titolo, children }) {
@@ -308,6 +285,9 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione, vist
     () => getDashboardPrepara(stagione, idSquadra, competizione),
     [stagione, idSquadra, competizione]
   )
+  // Stato di forma: quanti giocatori mostrare (primi 5 / primi 10), separatamente per avversario e propria squadra
+  const [nFormaAvv, setNFormaAvv] = useState(N_FORMA_DEFAULT)
+  const [nFormaMia, setNFormaMia] = useState(N_FORMA_DEFAULT)
 
   if (d.formazione.stagione_conclusa) return <EmptyState label="Campionato concluso: nessuna prossima partita." />
 
@@ -319,11 +299,17 @@ export default function AreaPrepara({ d, stagione, idSquadra, competizione, vist
       <BloccoSezione id="prep-avv-sintesi" titolo="L'avversario - sintesi">
         <SintesiAvversario p={p} d={d} champ={champ} />
       </BloccoSezione>
+      <BloccoSezione id="prep-avv-forma" titolo="L'avversario - forma">
+        <FormaAvversarioGiocatori p={p} champ={champ} vista={vista} vistaAlt={vistaAlt} n={nFormaAvv} onN={setNFormaAvv} />
+      </BloccoSezione>
       <BloccoSezione id="prep-avv-serie_a" titolo="L'avversario - serie A">
-        <SerieAAvversario p={p} champ={champ} vista={vista} vistaAlt={vistaAlt} />
+        <SerieAAvversario p={p} champ={champ} vista={vista} vistaAlt={vistaAlt} n={nFormaAvv} />
       </BloccoSezione>
       <BloccoSezione id="prep-avv-formazione" titolo="L'avversario - ultima formazione">
         <UltimaFormazioneAvversario p={p} champ={champ} />
+      </BloccoSezione>
+      <BloccoSezione id="prep-forma" titolo="Forma">
+        <FormaMiaSquadra p={p} champ={champ} vista={vista} vistaAlt={vistaAlt} n={nFormaMia} onN={setNFormaMia} />
       </BloccoSezione>
       <BloccoSezione id="prep-top11" titolo="Top 11">
         <PreparaTop11 rosa={p.rosa} competizione={competizione} vista={vista} vistaAlt={vistaAlt} rosaNonDisponibile={p.rosa_non_disponibile} />

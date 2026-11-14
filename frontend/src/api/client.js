@@ -438,17 +438,24 @@ export const aiContesto = (stagione, body) =>
 // ── AI: libreria immagini della Gazzetta (admin/ai_immagini.php) ──
 // POST → Body { stagione, utenza, password, azione, ... } (utenza con abilita_ai = 'Y')
 //        'info' → { gd_disponibile, chiave_configurata, max_upload, max_totale, n_immagini,
-//                   n_attive, n_senza_descrizione, modelli[{modello, etichetta,
+//                   n_attive, n_senza_descrizione, giocatori_ok, n_giocatori, n_giocatori_abbinate,
+//                   n_giocatori_da_verificare, n_giocatori_non_trovate, n_giocatori_proposte,
+//                   modelli[{modello, etichetta,
 //                   costo_stimato_usd, costo_massimo_usd}], spesa_mese_usd,
 //                   tetto_mensile_usd, cambio_eur, utenze[{utenza, allenatore}] }
-//        'elenco' {pagina, per_pagina, filtro, cerca} → { immagini[], totale, pagina, per_pagina }
+//        'elenco' {pagina, per_pagina, filtro (tutte|attive|inattive|senza_descrizione|gazzetta|giocatori|
+//                 da_abbinare), cerca} → { immagini[], totale, pagina, per_pagina }
 //        'dettaglio' {id} | 'salva' {id, descrizione, tag, tono, utenze, attivo}
 //        | 'descrivi' {id, modello} (AI, a pagamento) | 'elimina' {id}
+//        Ritratti dei giocatori: 'cerca_giocatori' {q, stagione_giocatore} → { giocatori[] }
+//        | 'abbina' {id, id_giocatore (0 = scollega)} | 'conferma_proposte' → { confermate }
+//        | 'riabbina' → { esaminate, abbinate, da_verificare, non_trovate }
 export const aiImmagini = (stagione, body) =>
   post('admin/ai_immagini.php', { stagione, ...body })
 
 // Caricamento di UNA immagine (multipart). Per più file chiamare in sequenza.
-// campi: modalita 'manuale' (opzione B) | 'ai' (opzione C, + modello),
+// campi: modalita 'manuale' (opzione B) | 'ai' (opzione C, + modello) | 'giocatore' (opzione D: ritratto,
+//        giocatore/squadra/stagione dal nome del file),
 //        descrizione, tag, tono, utenze, attivo
 // → { immagine, duplicata, ai{ richiesta, ok, errore, costo_usd } }
 export const aiImmaginiCarica = (stagione, { utenza, password, file, ...campi }) => {

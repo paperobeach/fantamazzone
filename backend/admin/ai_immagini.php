@@ -15,10 +15,12 @@
 //
 // azione = "info"       → { gd_disponibile, chiave_configurata, max_upload, max_totale,
 //                           n_immagini, n_attive, n_senza_descrizione,
+//                           giocatori_ok (migrazione eseguita), n_giocatori, n_giocatori_abbinate,
+//                           n_giocatori_da_verificare, n_giocatori_non_trovate, n_giocatori_proposte,
 //                           modelli[{modello, etichetta, costo_stimato_usd, costo_massimo_usd}],
 //                           spesa_mese_usd, tetto_mensile_usd, cambio_eur, utenze[] }
 // azione = "elenco"     Body opz.: pagina (1), per_pagina (48, max 100),
-//                       filtro (tutte|attive|inattive|senza_descrizione), cerca
+//                       filtro (tutte|attive|inattive|senza_descrizione|gazzetta|giocatori|da_abbinare), cerca
 //      → { immagini[], totale, pagina, per_pagina }  (miniatura = data URI)
 // azione = "dettaglio"  Body: id → immagine + "immagine" (data URI a piena
 //                       risoluzione) + "usi" (articoli che la usano)
@@ -31,6 +33,16 @@
 //      (a pagamento: vedi "info" per il costo previsto per immagine).
 //      → { immagine, duplicata, ai{ richiesta, ok, errore, costo_usd } }
 //      Un file identico a uno già presente non viene salvato (duplicata = true).
+//      modalita = 'giocatore' (gratuita): ritratto di un calciatore. Giocatore, squadra, stagione e
+//      tipo si leggono dal NOME DEL FILE (es. alex-meret-napoli-2026-27-portrait-footylogos);
+//      descrizione, tag e tono si generano da soli e il file si abbina a NEW_GIOCATORI_BASE_ASTA.
+//      → l'immagine riporta tipo, id_giocatore, nome_giocatore, squadra_giocatore, stato_abbinamento
+//        (abbinata | da_verificare | non_trovata). Serve Script DB/migrazione_immagini_giocatori.sql.
+// azione = "cerca_giocatori"  Body: q (min. 2 lettere), stagione_giocatore → giocatori[{id_giocatore, nome,
+//                       ruolo, squadra_serie_a, in_lista}] del listone (max 20)
+// azione = "abbina"     Body: id, id_giocatore (0 = scollega) → collega a mano un ritratto a un giocatore
+// azione = "conferma_proposte"  conferma tutti gli abbinamenti proposti e 'da_verificare' (es. trasferimenti)
+// azione = "riabbina"   ripete l'abbinamento automatico dei ritratti non abbinati (dopo aver caricato il listone)
 // azione = "descrivi"   Body: id, modello → descrizione AI di un'immagine già
 //                       presente (A PAGAMENTO; sovrascrive descrizione e tono,
 //                       aggiunge i tag)
@@ -163,11 +175,24 @@ switch ($azione) {
                              ORDER BY u.id");
         $tetto = (float) art_cfg("tetto_mensile_usd", 0);
         $cambio = art_cfg("cambio_eur_per_usd", null);
+        $giocOk = img_giocatori_presenti($conn);
+        $g = $giocOk ? query_one("SELECT COALESCE(SUM(tipo = 'giocatore'), 0) AS tot,
+                               COALESCE(SUM(tipo = 'giocatore' AND stato_abbinamento = 'abbinata'), 0) AS abb,
+                               COALESCE(SUM(tipo = 'giocatore' AND stato_abbinamento = 'da_verificare'), 0) AS ver,
+                               COALESCE(SUM(tipo = 'giocatore' AND stato_abbinamento = 'non_trovata'), 0) AS nt,
+                               COALESCE(SUM(tipo = 'giocatore' AND stato_abbinamento = 'da_verificare' AND id_giocatore IS NOT NULL), 0) AS prop
+                        FROM NEW_IMMAGINI_GAZZETTA") : null;
         api_success([
             "gd_disponibile"      => img_gd_disponibile(),
             "chiave_configurata"  => ai_config() !== null && ai_chiave_configurata(),
             "max_upload"          => ini_get("upload_max_filesize"),
-            "max_totale"          => (int) img_cfg("max_totale", 600),
+            "max_totale"          => img_max_totale(),
+            "giocatori_ok"        => $giocOk,
+            "n_giocatori"                => (int) ($g["tot"] ?? 0),
+            "n_giocatori_abbinate"       => (int) ($g["abb"] ?? 0),
+            "n_giocatori_da_verificare"  => (int) ($g["ver"] ?? 0),
+            "n_giocatori_non_trovate"    => (int) ($g["nt"] ?? 0),
+            "n_giocatori_proposte"       => (int) ($g["prop"] ?? 0),
             "n_immagini"          => (int) $n["tot"],
             "n_attive"            => (int) $n["attive"],
             "n_senza_descrizione" => (int) $n["senza"],
@@ -187,15 +212,22 @@ switch ($azione) {
         if ($filtro === "attive")                $where[] = "attivo = 'Y'";
         elseif ($filtro === "inattive")          $where[] = "attivo = 'N'";
         elseif ($filtro === "senza_descrizione") $where[] = "(descrizione IS NULL OR descrizione = '')";
+        elseif (in_array($filtro, ["gazzetta", "giocatori", "da_abbinare"], true)) {
+            if (!img_giocatori_presenti($conn)) api_error("Eseguire prima Script DB/migrazione_immagini_giocatori.sql", 409);
+            if ($filtro === "gazzetta")      $where[] = "tipo <> 'giocatore'";
+            elseif ($filtro === "giocatori") $where[] = "tipo = 'giocatore'";
+            else                             $where[] = "(tipo = 'giocatore' AND stato_abbinamento <> 'abbinata')";
+        }
         $cerca = trim((string) ($input["cerca"] ?? ""));
         if ($cerca !== "") {
             $c = mysqli_real_escape_string($conn, str_replace(["\\", "%", "_"], ["\\\\", "\\%", "\\_"], mb_substr($cerca, 0, 60)));
-            $where[] = "(descrizione LIKE '%$c%' OR tag LIKE '%$c%' OR nome_file LIKE '%$c%' OR utenze LIKE '%$c%')";
+            $extra = img_giocatori_presenti($conn) ? " OR nome_giocatore LIKE '%$c%' OR squadra_giocatore LIKE '%$c%'" : "";
+            $where[] = "(descrizione LIKE '%$c%' OR tag LIKE '%$c%' OR nome_file LIKE '%$c%' OR utenze LIKE '%$c%'$extra)";
         }
         $w = implode(" AND ", $where);
         $tot = query_one("SELECT COUNT(*) AS n FROM NEW_IMMAGINI_GAZZETTA WHERE $w");
         $off = ($pagina - 1) * $per;
-        $righe = query_all("SELECT " . IMG_CAMPI . ", miniatura FROM NEW_IMMAGINI_GAZZETTA
+        $righe = query_all("SELECT " . img_campi($conn) . ", miniatura FROM NEW_IMMAGINI_GAZZETTA
                             WHERE $w ORDER BY id DESC LIMIT $per OFFSET $off");
         $out = [];
         foreach ($righe as $r) $out[] = img_riga_api($r, $r["miniatura"] ?? null);
@@ -208,12 +240,22 @@ switch ($azione) {
         $d = query_one("SELECT dati FROM NEW_IMMAGINI_GAZZETTA WHERE id = $id");
         $r["immagine"] = "data:image/jpeg;base64," . base64_encode((string) ($d["dati"] ?? ""));
         $r["usi"] = img_conta_usi($conn, $id);
+        $r["giocatore"] = null;
+        if (!empty($r["id_giocatore"]) && !empty($r["stagione_giocatore"])) {
+            $r["giocatore"] = query_one("SELECT id_giocatore, nome, ruolo, squadra_serie_a, in_lista
+                                          FROM NEW_GIOCATORI_BASE_ASTA
+                                          WHERE stagione = " . (int) $r["stagione_giocatore"] . "
+                                            AND id_giocatore = " . (int) $r["id_giocatore"]) ?: null;
+        }
         api_success($r);
 
     // --------------------------------------------------------
     case "carica":
-        $modalita = (($input["modalita"] ?? "manuale") === "ai") ? "ai" : "manuale";
+        $modalita = in_array(($input["modalita"] ?? "manuale"), ["ai", "giocatore"], true) ? $input["modalita"] : "manuale";
         $modello  = trim((string) ($input["modello"] ?? ""));
+        if ($modalita === "giocatore" && !img_giocatori_presenti($conn)) {
+            api_error("Eseguire prima Script DB/migrazione_immagini_giocatori.sql", 409);
+        }
         if (!isset($_FILES["file"])) api_error("Nessun file ricevuto (campo 'file')", 400);
         $f = $_FILES["file"];
         if (!is_array($f) || is_array($f["error"] ?? null)) api_error("Inviare un solo file per chiamata", 400);
@@ -224,8 +266,23 @@ switch ($azione) {
         $attivo = strtoupper(trim((string) ($input["attivo"] ?? "Y"))) === "N" ? "N" : "Y";
 
         $tot = query_one("SELECT COUNT(*) AS n FROM NEW_IMMAGINI_GAZZETTA");
-        if ((int) $tot["n"] >= (int) img_cfg("max_totale", 600)) {
-            api_error("Libreria piena (" . (int) img_cfg("max_totale", 600) . " immagini): elimina qualche immagine inutilizzata", 409);
+        if ((int) $tot["n"] >= img_max_totale()) {
+            api_error("Libreria piena (" . img_max_totale() . " immagini): elimina qualche immagine inutilizzata oppure alza \"max_totale\" in config_ai.php", 409);
+        }
+
+        // Ritratto di un giocatore: tutto ciò che serve si legge dal nome del file (prima di elaborare l'immagine)
+        $gioc = null;
+        if ($modalita === "giocatore") {
+            $pf = img_parse_nome_file((string) $f["name"]);
+            if (!$pf["ok"]) api_error($pf["errore"], 400);
+            $stGioc = $pf["stagione"] ?? (int) $input["stagione"];
+            $ab = img_abbina_giocatore($conn, $pf["tok"], $stGioc);
+            $md = img_metadati_giocatore([
+                "nome" => $ab["nome_giocatore"], "squadra" => $ab["squadra_giocatore"],
+                "stagione" => $stGioc, "tipo_foto" => $pf["tipo_foto"],
+            ]);
+            $meta = ["descrizione" => $md["descrizione"], "tag" => $md["tag"], "tono" => $md["tono"], "utenze" => ""];
+            $gioc = ["ab" => $ab, "stagione" => $stGioc];
         }
 
         $el = img_elabora($f["tmp_name"]);
@@ -249,13 +306,31 @@ switch ($azione) {
         $dati = $el["jpeg"]; $mini = $el["miniatura"] ?? "";
         $creatoDa = (string) $input["utenza"];
 
-        $st = mysqli_prepare($conn, "INSERT INTO NEW_IMMAGINI_GAZZETTA
-                (nome_file, mime, larghezza, altezza, hash_file, dati, miniatura,
-                 descrizione, tag, tono, utenze, attivo, caricata_da)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        if (!$st) api_error("Salvataggio non riuscito: " . mysqli_error($conn), 500);
-        mysqli_stmt_bind_param($st, "ssiisssssssss", $nome, $mime, $larg, $alt, $hash, $dati, $mini,
-                               $descrizione, $tag, $tono, $utenzeCsv, $attivo, $creatoDa);
+        if ($gioc) {
+            $tipoImg = "giocatore";
+            $idGioc = $gioc["ab"]["id_giocatore"];
+            $stGiocDb = (int) $gioc["stagione"];
+            $nomeGioc = mb_substr((string) $gioc["ab"]["nome_giocatore"], 0, 80);
+            $sqGioc = mb_substr((string) $gioc["ab"]["squadra_giocatore"], 0, 60);
+            $statoAb = (string) $gioc["ab"]["stato"];
+            $st = mysqli_prepare($conn, "INSERT INTO NEW_IMMAGINI_GAZZETTA
+                    (nome_file, mime, larghezza, altezza, hash_file, dati, miniatura,
+                     descrizione, tag, tono, utenze, attivo, caricata_da,
+                     tipo, id_giocatore, stagione_giocatore, nome_giocatore, squadra_giocatore, stato_abbinamento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            if (!$st) api_error("Salvataggio non riuscito: " . mysqli_error($conn), 500);
+            mysqli_stmt_bind_param($st, "ssiissssssssssiisss", $nome, $mime, $larg, $alt, $hash, $dati, $mini,
+                                   $descrizione, $tag, $tono, $utenzeCsv, $attivo, $creatoDa,
+                                   $tipoImg, $idGioc, $stGiocDb, $nomeGioc, $sqGioc, $statoAb);
+        } else {
+            $st = mysqli_prepare($conn, "INSERT INTO NEW_IMMAGINI_GAZZETTA
+                    (nome_file, mime, larghezza, altezza, hash_file, dati, miniatura,
+                     descrizione, tag, tono, utenze, attivo, caricata_da)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            if (!$st) api_error("Salvataggio non riuscito: " . mysqli_error($conn), 500);
+            mysqli_stmt_bind_param($st, "ssiisssssssss", $nome, $mime, $larg, $alt, $hash, $dati, $mini,
+                                   $descrizione, $tag, $tono, $utenzeCsv, $attivo, $creatoDa);
+        }
         if (!mysqli_stmt_execute($st)) {
             api_error("Salvataggio non riuscito: " . mysqli_stmt_error($st) . " (se l'errore parla di 'max_allowed_packet' ridurre \"max_byte\" in config_ai.php)", 500);
         }
@@ -269,6 +344,52 @@ switch ($azione) {
                    "token_input" => $r["token_input"], "token_output" => $r["token_output"]];
         }
         api_success(["immagine" => ai_img_riga_o_404($conn, $id), "duplicata" => false, "ai" => $ai]);
+
+    // --------------------------------------------------------
+    case "cerca_giocatori":
+        $q = trim((string) ($input["q"] ?? ""));
+        if (mb_strlen($q) < 2) api_error("Scrivi almeno 2 lettere del cognome", 400);
+        $stG = (int) ($input["stagione_giocatore"] ?? 0) ?: (int) $input["stagione"];
+            $c = mysqli_real_escape_string($conn, str_replace(["\\", "%", "_"], ["\\\\", "\\%", "\\_"], mb_substr($q, 0, 40)));
+        $inLista = art_colonna_presente($conn, "NEW_GIOCATORI_BASE_ASTA", "in_lista") ? "in_lista" : "'Y' AS in_lista";
+        $righe = query_all("SELECT id_giocatore, nome, ruolo, squadra_serie_a, $inLista
+                            FROM NEW_GIOCATORI_BASE_ASTA
+                            WHERE stagione = $stG AND nome LIKE '%$c%'
+                            ORDER BY nome LIMIT 20");
+        foreach ($righe as &$r) { $r["id_giocatore"] = (int) $r["id_giocatore"]; $r["ruolo"] = (int) $r["ruolo"]; }
+        unset($r);
+        api_success(["giocatori" => $righe, "stagione_giocatore" => $stG]);
+
+    // --------------------------------------------------------
+    case "abbina":
+        $id = aiadmin_id($input);
+        $r = ai_img_riga_o_404($conn, $id);
+        if (($r["tipo"] ?? "gazzetta") !== "giocatore") api_error("Solo i ritratti di giocatori si abbinano al listone", 400);
+        $idG = (int) ($input["id_giocatore"] ?? 0);
+        $stG = (int) ($r["stagione_giocatore"] ?? 0) ?: (int) $input["stagione"];
+        if ($idG > 0) {
+            $g = query_one("SELECT nome FROM NEW_GIOCATORI_BASE_ASTA WHERE stagione = $stG AND id_giocatore = $idG");
+            if (!$g) api_error("Giocatore $idG non presente nel listone della stagione $stG", 404);
+            mysqli_query($conn, "UPDATE NEW_IMMAGINI_GAZZETTA
+                                 SET id_giocatore = $idG, stagione_giocatore = $stG, stato_abbinamento = 'abbinata'
+                                 WHERE id = $id");
+        } else {
+            mysqli_query($conn, "UPDATE NEW_IMMAGINI_GAZZETTA
+                                 SET id_giocatore = NULL, stato_abbinamento = 'da_verificare' WHERE id = $id");
+        }
+        api_success(ai_img_riga_o_404($conn, $id));
+
+    // --------------------------------------------------------
+    case "conferma_proposte":
+        if (!img_giocatori_presenti($conn)) api_error("Eseguire prima Script DB/migrazione_immagini_giocatori.sql", 409);
+        mysqli_query($conn, "UPDATE NEW_IMMAGINI_GAZZETTA SET stato_abbinamento = 'abbinata'
+                             WHERE tipo = 'giocatore' AND stato_abbinamento = 'da_verificare' AND id_giocatore IS NOT NULL");
+        api_success(["confermate" => (int) mysqli_affected_rows($conn)]);
+
+    // --------------------------------------------------------
+    case "riabbina":
+        if (!img_giocatori_presenti($conn)) api_error("Eseguire prima Script DB/migrazione_immagini_giocatori.sql", 409);
+        api_success(img_riabbina($conn));
 
     // --------------------------------------------------------
     case "descrivi":
@@ -312,5 +433,5 @@ switch ($azione) {
         api_success(["id" => $id, "eliminata" => true]);
 
     default:
-        api_error("Azione non valida: usare info, elenco, dettaglio, carica, descrivi, salva o elimina", 400);
+        api_error("Azione non valida: usare info, elenco, dettaglio, carica, cerca_giocatori, abbina, conferma_proposte, riabbina, descrivi, salva o elimina", 400);
 }

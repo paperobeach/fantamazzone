@@ -1048,9 +1048,17 @@ CREATE TABLE `NEW_IMMAGINI_GAZZETTA` (
   `ultimo_utilizzo` datetime DEFAULT NULL,
   `caricata_da` varchar(50) NOT NULL DEFAULT '',
   `data_caricamento` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `tipo` varchar(12) NOT NULL DEFAULT 'gazzetta' COMMENT 'gazzetta | giocatore',
+  `id_giocatore` int DEFAULT NULL COMMENT 'NEW_GIOCATORI_BASE_ASTA.id_giocatore (solo tipo giocatore)',
+  `stagione_giocatore` int DEFAULT NULL COMMENT 'NEW_GIOCATORI_BASE_ASTA.stagione (2026 = 2026/27)',
+  `nome_giocatore` varchar(80) NOT NULL DEFAULT '' COMMENT 'nome letto dal nome file',
+  `squadra_giocatore` varchar(60) NOT NULL DEFAULT '' COMMENT 'squadra di Serie A letta dal nome file',
+  `stato_abbinamento` varchar(14) NOT NULL DEFAULT '' COMMENT 'abbinata | da_verificare | non_trovata',
   PRIMARY KEY (`id`),
   KEY `idx_hash` (`hash_file`),
-  KEY `idx_attivo_utilizzo` (`attivo`,`ultimo_utilizzo`)
+  KEY `idx_attivo_utilizzo` (`attivo`,`ultimo_utilizzo`),
+  KEY `idx_giocatore` (`stagione_giocatore`,`id_giocatore`),
+  KEY `idx_tipo_stato` (`tipo`,`stato_abbinamento`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

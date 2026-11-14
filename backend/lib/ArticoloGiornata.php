@@ -453,29 +453,102 @@ function art_testo_blocchi(array $blocchi, int $maxCaratteri): string
 }
 
 /**
+ * Giocatori protagonisti della giornata, con il "peso" della loro rilevanza e i fatti da citare:
+ * chi ha segnato, fatto un assist, preso un'espulsione o un autogol, avuto un rigore (segnato,
+ * parato o sbagliato) e i 5 migliori e peggiori voti. Solo giocatori reali (niente riserve d'ufficio).
+ * Ritorna: id_giocatore => ["peso" => int, "fatti" => string[]]
+ */
+function art_protagonisti_giocatori(int $stagione, int $giornata): array
+{
+    if ($stagione <= 0 || $giornata <= 0) return [];
+    $out = [];
+    $giocati = [];
+    $aggiungi = function (int $id, int $peso, string $fatto) use (&$out): void {
+        if (!isset($out[$id])) $out[$id] = ["peso" => 0, "fatti" => []];
+        $out[$id]["peso"] += $peso;
+        $out[$id]["fatti"][] = $fatto;
+    };
+    foreach (query_all("SELECT id_giocatore, giocata, totale, reti, assist, espulsioni, autogol, rigores, rigorep
+                        FROM NEW_VOTI
+                        WHERE stagione = $stagione AND giornata = $giornata
+                          AND rufficio = 0 AND id_giocatore > 0") as $v) {
+        $id = (int) $v["id_giocatore"];
+        $reti = (int) $v["reti"];
+        if ($reti > 0)                  $aggiungi($id, 3 + $reti, $reti === 1 ? "1 gol" : "$reti gol");
+        if ((int) $v["assist"] > 0)     $aggiungi($id, 2, "assist");
+        if ((int) $v["espulsioni"] > 0) $aggiungi($id, 3, "espulso");
+        if ((int) $v["autogol"] > 0)    $aggiungi($id, 3, "autogol");
+        if ((int) $v["rigores"] > 0)    $aggiungi($id, 2, "rigore segnato o parato");
+        if ((int) $v["rigorep"] > 0)    $aggiungi($id, 2, "rigore sbagliato");
+        if ((int) $v["giocata"] === 1)  $giocati[] = ["id" => $id, "totale" => (float) $v["totale"]];
+    }
+    usort($giocati, fn($a, $b) => [$b["totale"], $a["id"]] <=> [$a["totale"], $b["id"]]);
+    foreach (array_slice($giocati, 0, 5) as $g)                  $aggiungi($g["id"], 2, "tra i migliori voti");
+    foreach (array_slice(array_reverse(array_slice($giocati, 5)), 0, 5) as $g) $aggiungi($g["id"], 2, "tra i peggiori voti");
+    return $out;
+}
+
+/**
  * Catalogo delle immagini da proporre all'AI. Sono candidate le immagini
  * ATTIVE con una descrizione; ordinamento deterministico: prima quelle che
  * ritraggono i fantallenatori in gioco (o senza persone indicate), poi le
  * meno usate di recente (mai usate per prime), poi id.
+ *
+ * Ritratti dei giocatori (tipo 'giocatore', Script DB/migrazione_immagini_giocatori.sql): entrano
+ * SOLO se abbinati a un giocatore protagonista della giornata ($stagione, $giornata): così le
+ * centinaia di ritratti non soffocano le altre immagini. Occupano al più "max_immagini_giocatori"
+ * posti (default 20), ordinati per rilevanza e poi per meno usati; per giocatore al più
+ * "max_immagini_per_giocatore" immagini (default 1). Gli altri posti restano alle immagini di sempre.
+ *
  * Ritorna: righe[] (testo per il prompt), ids (mappa id => true),
- *          attive (immagini attive), senza_descrizione (escluse).
+ *          attive (immagini attive), senza_descrizione (escluse), giocatori (ritratti proposti).
  */
-function art_catalogo_immagini($conn, array $partecipanti, int $max): array
+function art_catalogo_immagini($conn, array $partecipanti, int $max, int $stagione = 0, int $giornata = 0): array
 {
-    $vuoto = ["righe" => [], "ids" => [], "attive" => 0, "senza_descrizione" => 0];
+    $vuoto = ["righe" => [], "ids" => [], "attive" => 0, "senza_descrizione" => 0, "giocatori" => 0];
     if ($max <= 0 || !art_tabella_presente($conn, "NEW_IMMAGINI_GAZZETTA")) return $vuoto;
 
     $inGioco = [];
     foreach ($partecipanti as $sq) $inGioco[mb_strtolower((string) $sq["utenza"])] = (string) $sq["allenatore"];
 
+    $giocOk = art_colonna_presente($conn, "NEW_IMMAGINI_GAZZETTA", "stato_abbinamento");
+    $protagonisti = $giocOk ? art_protagonisti_giocatori($stagione, $giornata) : [];
+
+    $campi = "i.id, i.descrizione, i.tag, i.tono, i.utenze, i.ultimo_utilizzo";
+    $da = "NEW_IMMAGINI_GAZZETTA i";
+    if ($giocOk) {
+        $campi .= ", i.tipo, i.id_giocatore, i.stagione_giocatore, i.stato_abbinamento,
+                    b.nome AS nome_listone, b.squadra_serie_a AS squadra_listone";
+        $da .= " LEFT JOIN NEW_GIOCATORI_BASE_ASTA b
+                        ON b.stagione = i.stagione_giocatore AND b.id_giocatore = i.id_giocatore";
+    }
+
     $cand = [];
+    $gioc = [];
+    $visti = [];
     $attive = 0;
     $senza = 0;
-    foreach (query_all("SELECT id, descrizione, tag, tono, utenze, ultimo_utilizzo
-                        FROM NEW_IMMAGINI_GAZZETTA WHERE attivo = 'Y'") as $r) {
+    foreach (query_all("SELECT $campi FROM $da WHERE i.attivo = 'Y'") as $r) {
+        $id = (int) $r["id"];
+        if (isset($visti[$id])) continue;                    // il join sul listone non deve duplicare
+        $visti[$id] = true;
         $attive++;
         $desc = art_pulisci($r["descrizione"] ?? "", 220);
         if ($desc === "") { $senza++; continue; }
+
+        if ($giocOk && ($r["tipo"] ?? "gazzetta") === "giocatore") {
+            $idG = (int) ($r["id_giocatore"] ?? 0);
+            if (($r["stato_abbinamento"] ?? "") !== "abbinata" || $idG <= 0
+                || (int) $r["stagione_giocatore"] !== $stagione || !isset($protagonisti[$idG])) {
+                continue;                                    // non protagonista (o non abbinato): non si propone
+            }
+            $r["_desc"]  = $desc;
+            $r["_peso"]  = $protagonisti[$idG]["peso"];
+            $r["_fatti"] = $protagonisti[$idG]["fatti"];
+            $gioc[] = $r;
+            continue;
+        }
+
         $lista = array_values(array_filter(array_map("trim", explode(",", (string) $r["utenze"])), fn($u) => $u !== ""));
         $score = $lista ? 0 : 1;
         $nomi = [];
@@ -489,17 +562,52 @@ function art_catalogo_immagini($conn, array $partecipanti, int $max): array
         $r["_nomi"]  = $nomi;
         $cand[] = $r;
     }
-    usort($cand, function ($a, $b) {
-        if ($a["_score"] !== $b["_score"]) return $b["_score"] <=> $a["_score"];
+    $menoUsate = function ($a, $b) {
         $ua = (string) ($a["ultimo_utilizzo"] ?? "");
         $ub = (string) ($b["ultimo_utilizzo"] ?? "");
         if ($ua !== $ub) return strcmp($ua, $ub);
         return (int) $a["id"] <=> (int) $b["id"];
+    };
+
+    // Ritratti: i protagonisti più rilevanti per primi, poi i meno usati; limite per giocatore e totale
+    usort($gioc, function ($a, $b) use ($menoUsate) {
+        if ($a["_peso"] !== $b["_peso"]) return $b["_peso"] <=> $a["_peso"];
+        return $menoUsate($a, $b);
     });
-    $cand = array_slice($cand, 0, $max);
+    $maxGioc = max(0, min($max, (int) art_cfg("max_immagini_giocatori", 20)));
+    $perGioc = max(1, (int) art_cfg("max_immagini_per_giocatore", 1));
+    $contaGioc = [];
+    $gSel = [];
+    foreach ($gioc as $r) {
+        if (count($gSel) >= $maxGioc) break;
+        $idG = (int) $r["id_giocatore"];
+        if (($contaGioc[$idG] ?? 0) >= $perGioc) continue;
+        $contaGioc[$idG] = ($contaGioc[$idG] ?? 0) + 1;
+        $gSel[] = $r;
+    }
+
+    usort($cand, function ($a, $b) use ($menoUsate) {
+        if ($a["_score"] !== $b["_score"]) return $b["_score"] <=> $a["_score"];
+        return $menoUsate($a, $b);
+    });
+    $cand = array_slice($cand, 0, max(0, $max - count($gSel)));
 
     $righe = [];
     $ids = [];
+    foreach ($gSel as $r) {
+        $id = (int) $r["id"];
+        $riga = "[" . $id . "] " . $r["_desc"];
+        $tag = art_pulisci($r["tag"] ?? "", 100);
+        if ($tag !== "")  $riga .= " | tag: " . $tag;
+        $nome = art_pulisci($r["nome_listone"] ?? "", 60);
+        if ($nome !== "") {
+            $sqL = art_pulisci($r["squadra_listone"] ?? "", 40);
+            $riga .= " | giocatore: " . $nome . ($sqL !== "" ? " (" . $sqL . ")" : "");
+        }
+        if ($r["_fatti"]) $riga .= " | in questa giornata: " . implode(", ", array_unique($r["_fatti"]));
+        $righe[] = $riga;
+        $ids[$id] = true;
+    }
     foreach ($cand as $r) {
         $id = (int) $r["id"];
         $riga = "[" . $id . "] " . $r["_desc"];
@@ -511,7 +619,7 @@ function art_catalogo_immagini($conn, array $partecipanti, int $max): array
         $righe[] = $riga;
         $ids[$id] = true;
     }
-    return ["righe" => $righe, "ids" => $ids, "attive" => $attive, "senza_descrizione" => $senza];
+    return ["righe" => $righe, "ids" => $ids, "attive" => $attive, "senza_descrizione" => $senza, "giocatori" => count($gSel)];
 }
 
 /** Id di immagine valido (presente nel catalogo proposto) oppure null. */
@@ -600,7 +708,7 @@ function art_pagine_attese(array $dati, array $marcatoriSquadra, bool $conChampi
  *   struttura (indicazioni di struttura, testo, può essere vuoto),
  *   con_immagini (bool), parole_pagina, parole_commento, max_inline,
  *   con_schede (bool: schede partita), con_memoria (bool: andamento + puntate precedenti),
- *   con_scala (bool: scala punteggio→gol e calibrazione nelle schede)
+ *   con_giocatori_img (bool: il catalogo contiene ritratti di giocatori)
  */
 function art_system_prompt(int $paroleTarget, array $o): string
 {
@@ -636,9 +744,6 @@ function art_system_prompt(int $paroleTarget, array $o): string
         $regole[] = "Nel messaggio ci sono le SCHEDE PARTITA, costruite dal DB: scontri diretti, SEQUENZA in ordine di calendario di Serie A (parziali, sorpassi) e fatti di fortuna e sfortuna. Racconta ogni partita seguendo la sequenza: chi è partito avanti, quando c'è stato il sorpasso, quale partita di Serie A l'ha deciso (il sabato sera, il pomeriggio, il posticipo). I parziali sono somme di fantavoti SENZA i modificatori di squadra: non presentarli come punteggio finale e non contraddire mai il finale." . ($edizione ? " La scheda «PARTITA n» alimenta la pagina «@@ PARTITA n»; il RIEPILOGO DEI FATTI alimenta la pagina COMMENTO." : "");
         $regole[] = "Per ogni partita scegli UN fatto sorprendente tra quelli delle schede (colpo di fortuna o di sfortuna, big che non rende, big titolare senza voto, assente illustre che ha giocato bene, sorpasso all'ultima partita) e fanne il perno comico del racconto con iperboli e paragoni: l'ironia nasce dai dati, e più il fatto è piccolo e capovolge l'esito, più va ingigantito. Il resto della partita è cronaca asciutta: alterna cronaca e comicità, non scherzare su tutto. Se una partita non ha fatti sorprendenti, raccontala in modo sobrio.";
         $regole[] = "Fortuna e sfortuna: una riserva che entra al posto di un titolare e produce bonus è un colpo di fortuna spudorato (e uno sfortunato per chi aveva il titolare, se è un big); una riserva che entra e fa danni, un big che delude, un big titolare che non scende in campo o esce presto, un costoso lasciato fuori che invece segna sono materiale per un'ironia più amara. Non attribuire MAI la causa (infortunio, scelta tecnica, squalifica) se non è nei dati o nelle note della redazione: puoi solo dire che non ha giocato. Non inventare minuti, ruoli, crediti, squadre o bonus che non compaiono nelle schede.";
-        if (!empty($o["con_scala"])) {
-            $regole[] = "PUNTEGGI, SCARTI E FASCE: commentare le fasce di conversione punteggio→gol NON è obbligatorio e non devi cercare un aggancio a tutti i costi. Ma ogni volta che parli di scarto di punti, di punteggio alto o basso, di gol sfiorati o mancati, il commento deve essere coerente con la SCALA PUNTEGGIO→GOL del messaggio: i punti vanno letti in gol (un gol vale solo qualche punto, quindi pochi punti possono essere già uno o più gol di differenza). Non definire «minimo», «risicato», «di misura», «per un soffio» o «pochi punti» uno scarto che la scheda qualifica AMPIO o MOLTO AMPIO; non definire «enorme» o «schiacciante» uno scarto CONTENUTO. Usa pure la qualifica dello scarto riportata nella scheda e i margini già indicati (distanza dal gol successivo o dalla soglia superata), senza calcolare nuove distanze né inventare soglie. Fortuna o sfortuna di conversione (gol sul filo, regole correttive, pareggio nonostante lo scarto) sono citabili solo se compaiono tra le «Situazioni limite di conversione» della scheda: se non ci sono, non attribuire fortuna o sfortuna alla conversione in gol. I punteggi delle schede sono quelli finali (con modificatori di squadra e fattore casa), non i parziali della sequenza.";
-        }
     }
     if (!empty($o["con_memoria"])) {
         $regole[] = "ANDAMENTO DELLE SQUADRE e PUNTATE PRECEDENTI servono alla continuità della storia: dai seguito ai filoni (serie di vittorie o sconfitte, risalite, crolli, sorpassi in classifica, pagelle o promesse della puntata precedente confermate o smentite) con un riferimento esplicito e breve, ma SOLO se i fatti di questa giornata lo confermano o lo ribaltano. Ogni richiamo al passato deve avere un collegamento concreto con la partita che stai raccontando.";
@@ -656,6 +761,9 @@ function art_system_prompt(int $paroleTarget, array $o): string
     }
     if ($conImg) {
         $regole[] = "Nel messaggio c'è un CATALOGO IMMAGINI: scegli le immagini SOLO tra quelle elencate (usa l'id tra parentesi quadre), in base a descrizione, tag, tono e persone indicate, e solo se c'entrano davvero con ciò che racconti. Ogni immagine al massimo una volta; se nessuna è adatta scrivi nessuna. Non dare per vero nulla che non sia nella descrizione.";
+        if (!empty($o["con_giocatori_img"])) {
+            $regole[] = "Le immagini con «giocatore:» sono ritratti di calciatori protagonisti della giornata, con ciò che hanno fatto indicato dopo «in questa giornata»: preferiscile a un'immagine generica quando racconti proprio le gesta di quel calciatore, e se le usi la didascalia deve riguardare solo ciò che ha fatto davvero in questa giornata. Sono ritratti, non foto dell'azione: non scrivere che l'immagine mostra un gol o un'esultanza.";
+        }
         if (!$edizione) {
             $regole[] = "Oltre all'immagine di apertura puoi inserire nel testo fino a " . (int) $o["max_inline"] . " immagini, ciascuna su una riga a sé nel formato [IMG:id|didascalia breve e ironica], dopo il paragrafo a cui si riferiscono.";
         }
@@ -769,7 +877,6 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         }
     }
     $conSchede  = $narr !== null && trim($narr["schede"]) !== "";
-    $conScala   = $conSchede && trim((string) ($narr["scala"] ?? "")) !== "";
     $conMemoria = $narr !== null && (trim($narr["memoria"]) !== "" || trim($narr["forma"]) !== "");
 
     // Contesto fisso e stile (modificabili da "Profili ed episodi" → "Contesto fisso")
@@ -782,7 +889,7 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
     $tokStruttura = $struttura !== "" ? max(0, (int) art_cfg("token_struttura", 300)) : 0;
 
     // Catalogo immagini
-    $catalogo = art_catalogo_immagini($conn, $partecipanti, (int) art_cfg("max_immagini_catalogo", 60));
+    $catalogo = art_catalogo_immagini($conn, $partecipanti, (int) art_cfg("max_immagini_catalogo", 60), $stagione, $giornata);
     $conImmagini = count($catalogo["ids"]) > 0;
 
     // Pagine dell'edizione
@@ -816,7 +923,8 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
         "formato" => $formato, "stile" => $stile, "contesto" => $contestoFisso,
         "struttura" => $struttura, "con_immagini" => $conImmagini, "parole_pagina" => $parolePagina,
         "parole_commento" => $paroleCommento, "max_inline" => $maxInline,
-        "con_schede" => $conSchede, "con_memoria" => $conMemoria, "con_scala" => $conScala,
+        "con_schede" => $conSchede, "con_memoria" => $conMemoria,
+        "con_giocatori_img" => ($catalogo["giocatori"] ?? 0) > 0,
     ]);
 
     $testo  = ($formato === "edizione"
@@ -826,10 +934,6 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
     if ($narr !== null && trim($narr["forma"]) !== "") {
         $testo .= "ANDAMENTO DELLE SQUADRE (classifica prima e dopo la giornata, ultimi risultati, serie in corso; dati dal DB):\n"
                . $narr["forma"] . "\n\n";
-    }
-    if ($conSchede && $conScala) {
-        $testo .= "SCALA PUNTEGGIO→GOL DELLA STAGIONE (dati dal DB: punteggi finali di squadra, con modificatori e fattore casa):\n"
-               . $narr["scala"] . "\n\n";
     }
     if ($conSchede) {
         $testo .= "SCHEDE PARTITA (dati dal DB: scontri diretti, sequenza in ordine di calendario di Serie A, fortuna e sfortuna):\n"
@@ -892,6 +996,7 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
             "contesto_giornata_caratteri" => mb_strlen($contestoGiornata),
             "immagini_catalogo"         => count($catalogo["ids"]),
             "immagini_attive"           => $catalogo["attive"],
+            "immagini_giocatori"        => $catalogo["giocatori"] ?? 0,
             "immagini_senza_descrizione" => $catalogo["senza_descrizione"],
             "narrativa"                 => $narr === null ? null : [
                 "schede_partita"        => $narr["stat"]["schede"],
@@ -899,9 +1004,6 @@ function art_costruisci($conn, int $stagione, int $giornata, array $opz = []): a
                 "subentri_fortuna"      => $narr["stat"]["subentri"],
                 "big_o_titolari_flop"   => $narr["stat"]["big_flop"],
                 "assenti_illustri"      => $narr["stat"]["assenti"],
-                "situazioni_limite_fasce" => $narr["stat"]["fasce_limite"],
-                "fasce_incoerenti"      => $narr["stat"]["fasce_incoerenti"],
-                "con_scala_gol"         => $conScala,
                 "scontri_con_storico"   => $narr["stat"]["scontri_con_storico"],
                 "puntate_precedenti"    => $narr["stat"]["memoria_articoli"],
                 "giornate_precedenti"   => $narr["stat"]["memoria_giornate"],

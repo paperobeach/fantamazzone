@@ -89,13 +89,6 @@ return [
         "sequenza_max_slot" => 8,
         // Tetto di caratteri delle schede partita: oltre, la sequenza viene compattata
         "max_caratteri_schede" => 14000,
-        // Calibrazione punteggio→gol (fasce FASCE_GOL_PUNTEGGIO): una squadra è "sul filo" se dista
-        // al massimo questi punti dal gol successivo (sfortuna di fascia) o dalla soglia appena
-        // superata (fortuna di fascia). Default 1.0
-        "calibrazione_margine_punti" => 1.0,
-        // Pareggio "con scarto": segnalato se le due squadre distano almeno questi punti pur restando
-        // nella stessa fascia di gol. Default 4.0
-        "calibrazione_scarto_largo_pareggio" => 4.0,
         // Tetto di spesa mensile in USD sugli articoli generati; 0 = nessun tetto
         "tetto_mensile_usd" => 0,
         // Euro per 1 USD, solo per mostrare anche l'importo in euro (null = non mostrare)
@@ -123,6 +116,11 @@ return [
         // Quante immagini della libreria proporre all'AI (le più pertinenti e le
         // meno usate di recente) e quante ne può inserire nel testo di un articolo.
         "max_immagini_catalogo" => 60,
+        // Ritratti dei giocatori (tipo 'giocatore'): entrano nel catalogo solo se il giocatore
+        // è protagonista della giornata (gol, assist, espulsione, rigore, miglior/peggior voto).
+        // Posti massimi riservati ai ritratti e immagini massime per ogni giocatore.
+        "max_immagini_giocatori"    => 20,
+        "max_immagini_per_giocatore" => 1,
         "max_immagini_inline"   => 2,
 
         // ── Edizione sfogliabile ──────────────────────────────────
@@ -173,7 +171,7 @@ return [
         // automatica: più è piccola, meno token (e quindi meno costo)
         "max_lato_ai" => 1000,
         // Numero massimo di immagini in libreria
-        "max_totale" => 600,
+        "max_totale" => 5000,
         // Stima del costo di una descrizione automatica (token di input e output)
         "token_input_stimati"   => 1500,
         "token_output_stimati"  => 220,

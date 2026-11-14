@@ -69,7 +69,7 @@ const ASG_ID_OVEST = 902;
 const ASG_CODICE_TURNO = "AS";
 
 /** Sotto questa % di presenze nel fantacampionato il giocatore è proposto di default in tribuna. */
-const ASG_SOGLIA_PRESENZE_TRIBUNA = 20;
+const ASG_SOGLIA_PRESENZE_TRIBUNA = 40;
 
 /** Partita su campo neutro: il fattore casa non si applica. */
 const ASG_FATTORE_CASA_APPLICATO = false;

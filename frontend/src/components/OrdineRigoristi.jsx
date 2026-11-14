@@ -1,4 +1,5 @@
-import { ArrowUp, ArrowDown, RotateCcw, Target } from 'lucide-react'
+import { useState } from 'react'
+import { RotateCcw, Target } from 'lucide-react'
 import { ROLE_LABEL } from '../lib/pitchLayout'
 import { NomeConBandiera } from './Bandiera'
 
@@ -31,31 +32,31 @@ export function OrdineRigoristi({ rosa, titolari, panchina, ordine, onChange, re
   const tit = ordinaSecondo(titolari, ordine)
   const pan = ordinaSecondo(panchina, ordine)
 
-  const sposta = (lista, altra, titolariSono, idx, delta) => {
-    const j = idx + delta
-    if (j < 0 || j >= lista.length) return
-    const copia = [...lista]
-    ;[copia[idx], copia[j]] = [copia[j], copia[idx]]
+  // Selezione con click: il giocatore selezionato prende il posto di quello
+  // cliccato (nello stesso elenco), che con tutti i successivi scala in basso.
+  const [selId, setSelId] = useState(null)
+
+  const clicca = (id, lista, altra, titolariSono) => {
+    if (readOnly) return
+    if (selId === null) { setSelId(id); return }
+    if (selId === id) { setSelId(null); return }
+    if (!lista.includes(selId)) { setSelId(id); return } // elenco diverso: cambia solo la selezione
+    const copia = lista.filter(x => x !== selId)
+    copia.splice(copia.indexOf(id), 0, selId)
     onChange(titolariSono ? [...copia, ...altra] : [...altra, ...copia])
+    setSelId(null)
   }
 
-  const Riga = ({ id, n, lista, altra, titolariSono, idx }) => (
-    <li className="flex items-center gap-2 py-1.5 border-b border-white/[0.03] last:border-0">
+  const Riga = ({ id, n, lista, altra, titolariSono }) => (
+    <li
+      onClick={() => clicca(id, lista, altra, titolariSono)}
+      className={`flex items-center gap-2 py-1.5 px-1 rounded-lg border
+        ${readOnly ? '' : 'cursor-pointer'}
+        ${selId === id ? 'border-grass-500/50 bg-grass-500/10' : 'border-transparent hover:bg-white/[0.03]'}`}
+    >
       <span className="w-6 text-right font-mono text-xs text-slate-500">{n}</span>
       <span className="w-5 text-center text-[10px] font-mono text-slate-500">{ROLE_LABEL[String(byId[id]?.ruolo)] ?? ''}</span>
       <NomeConBandiera link={false} id={id} nome={byId[id]?.descrizione ?? byId[id]?.nome ?? `#${id}`} className="flex-1 text-sm text-slate-300" logoSquadra={byId[id]?.logo_squadra} nomeSquadra={byId[id]?.squadra_asg} />
-      {!readOnly && (
-        <span className="flex items-center gap-1">
-          <button type="button" disabled={idx === 0} onClick={() => sposta(lista, altra, titolariSono, idx, -1)}
-            className="p-1 rounded text-slate-500 hover:text-slate-200 disabled:opacity-20" aria-label="Sposta su">
-            <ArrowUp className="w-3.5 h-3.5" />
-          </button>
-          <button type="button" disabled={idx === lista.length - 1} onClick={() => sposta(lista, altra, titolariSono, idx, 1)}
-            className="p-1 rounded text-slate-500 hover:text-slate-200 disabled:opacity-20" aria-label="Sposta giù">
-            <ArrowDown className="w-3.5 h-3.5" />
-          </button>
-        </span>
-      )}
     </li>
   )
 
@@ -76,17 +77,18 @@ export function OrdineRigoristi({ rosa, titolari, panchina, ordine, onChange, re
         voto del giocatore è almeno 6. Se non consegni una lista si parte dal portiere, per numero di maglia;
         si tirano i primi 5 rigoristi di ciascuna squadra; in caso di ulteriore parità si prosegue ad oltranza con i successivi, uno per squadra, nell'ordine.
         {!ordine && ' (Ordine attuale: di default.)'}
+        {!readOnly && ' Per cambiare l\'ordine seleziona un giocatore con un click e poi clicca quello al cui posto vuoi inserirlo: lui e i successivi scalano verso il basso.'}
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-slate-600 mb-1">Titolari (1-11)</div>
-          <ul>{tit.map((id, i) => <Riga key={id} id={id} n={i + 1} lista={tit} altra={pan} titolariSono idx={i} />)}</ul>
+          <ul>{tit.map((id, i) => <Riga key={id} id={id} n={i + 1} lista={tit} altra={pan} titolariSono />)}</ul>
         </div>
         <div>
           <div className="text-[11px] uppercase tracking-wider text-slate-600 mb-1">Panchina</div>
           <ul>
             {pan.length === 0 && <li className="text-xs text-slate-600 py-1.5">Nessun panchinaro</li>}
-            {pan.map((id, i) => <Riga key={id} id={id} n={tit.length + i + 1} lista={pan} altra={tit} titolariSono={false} idx={i} />)}
+            {pan.map((id, i) => <Riga key={id} id={id} n={tit.length + i + 1} lista={pan} altra={tit} titolariSono={false} />)}
           </ul>
         </div>
       </div>

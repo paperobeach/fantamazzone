@@ -266,11 +266,12 @@ export function FormationBuilder({
       return
     }
 
-    // Entrambi in panchina: il giocatore selezionato viene posizionato
-    // subito sotto quello appena cliccato. Entrambi in tribuna: un secondo
-    // click li scambia di posizione. Senza drag&drop.
+    // Entrambi in panchina: il giocatore selezionato prende il posto di
+    // quello appena cliccato, che (con tutti i successivi) scala verso il
+    // basso. Entrambi in tribuna: un secondo click li scambia di
+    // posizione. Senza drag&drop.
     if (panchinaIds.includes(selectedId) && panchinaIds.includes(id)) {
-      placeBelowInList(panchinaIds, selectedId, id, arr => onChange?.(titolariIds, arr, tribunaIds))
+      placeAboveInList(panchinaIds, selectedId, id, arr => onChange?.(titolariIds, arr, tribunaIds))
       setSelectedId(null)
       return
     }
@@ -297,12 +298,13 @@ export function FormationBuilder({
     apply(arr)
   }
 
-  // Sposta `movingId` subito sotto `targetId` nello stesso elenco e ne
-  // notifica il nuovo ordine tramite `apply`.
-  function placeBelowInList(list, movingId, targetId, apply) {
+  // Inserisce `movingId` al posto di `targetId` nello stesso elenco: il
+  // giocatore cliccato (compreso) e tutti quelli che lo seguono scalano
+  // di una posizione verso il basso. Notifica il nuovo ordine con `apply`.
+  function placeAboveInList(list, movingId, targetId, apply) {
     if (!list.includes(movingId) || !list.includes(targetId)) return
     const arr = list.filter(id => id !== movingId)
-    arr.splice(arr.indexOf(targetId) + 1, 0, movingId)
+    arr.splice(arr.indexOf(targetId), 0, movingId)
     apply(arr)
   }
 
@@ -506,7 +508,7 @@ export function FormationBuilder({
           <div className="mt-2 h-[34px] overflow-hidden">
             {selectedId ? (
               <p className="text-[11px] leading-tight text-grass-400">
-                Giocatore selezionato: {byId[selectedId]?.descrizione}. Tocca uno slot per posizionarlo{panchinaIds.includes(selectedId) ? ', o un giocatore in panchina per metterlo subito sotto di lui.' : ', o un altro giocatore per scambiarli.'}
+                Giocatore selezionato: {byId[selectedId]?.descrizione}. Tocca uno slot per posizionarlo{panchinaIds.includes(selectedId) ? ', o un giocatore in panchina per prenderne il posto (lui e i successivi scalano in basso).' : ', o un altro giocatore per scambiarli.'}
               </p>
             ) : !moduloAttesoOk ? (
               <p className="text-[11px] leading-tight text-gold-400">
@@ -574,7 +576,7 @@ export function FormationBuilder({
             Trascina un giocatore in campo, selezionalo con un click, oppure clicca direttamente
             su uno slot vuoto per scegliere dal menu chi schierare in quel ruolo (anche dalla tribuna).
             Trascina un giocatore su un altro per riordinare la panchina, o sulla tribuna per escluderlo.
-            Puoi anche selezionarne uno con un click e poi cliccarne un altro in panchina: il primo verrà posizionato subito sotto il secondo.
+            Puoi anche selezionarne uno con un click e poi cliccarne un altro in panchina: il primo prenderà il posto del secondo, che insieme ai successivi scalerà verso il basso.
           </p>
         </div>
 

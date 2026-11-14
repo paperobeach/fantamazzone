@@ -19,8 +19,11 @@ import { RefreshCw, GitMerge, Search, CheckCircle2, Scissors, ListChecks, Users,
 //     l'id più basso è il primo in ordine cronologico;
 //   - varianti di scrittura: "Di Marco" / "Dimarco", "N'Dri" / "Ndri" vengono
 //     collegate da "Ricostruisci raccordo" ma segnate "da verificare" (nota "Variante nome");
+//   - cognome + iniziale: "Del Piero" / "Del Piero A." non vengono collegati da soli ma
+//     segnati "da verificare" (nota "Cognome+iniziale"), con l'altra forma tra i candidati;
 //   - "Omonimi": tra le persone già certificate, ripropone quelle diverse con nome
-//     uguale o molto simile e permette di rinominare il giocatore (in tutte le
+//     uguale o molto simile; ripropone anche quelle in relazione cognome + iniziale,
+//     certificate o no. Permette di rinominare il giocatore (in tutte le
 //     stagioni o in una sola) per distinguerlo, es. "ROSSI M. (DIF)";
 //   - "Persone": ricerca per nome, unisci due persone, collega o separa una singola stagione.
 // Per le stagioni future l'allineamento parte al termine di "Inserimento rose".
@@ -96,18 +99,18 @@ export default function RaccordoGiocatori() {
   }
 
   const ricostruisci = async () => {
-    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano; vengono segnati "da verificare" solo quelli per cui l\'automatico propone un collegamento diverso. I nomi scritti in modo diverso (es. Di Marco / Dimarco) vengono collegati e proposti in verifica.')) return
+    if (!window.confirm('Rifare i collegamenti automatici di tutte le stagioni? Le correzioni manuali restano; vengono segnati "da verificare" solo quelli per cui l\'automatico propone un collegamento diverso. I nomi scritti in modo diverso (es. Di Marco / Dimarco) vengono collegati e proposti in verifica; i nomi con stesso cognome ma iniziale diversa (es. Del Piero / Del Piero A.) restano persone separate e vengono proposti in verifica.')) return
     const r = await chiama('ricostruisci', { azzera_auto: true })
     if (r) {
       const tot = r.stagioni.reduce((a, x) => ({
         giocatori: a.giocatori + x.giocatori, collegati: a.collegati + x.collegati,
         nuove: a.nuove + x.nuove_persone, omonimi: a.omonimi + x.omonimi, verifica: a.verifica + x.da_verificare,
-        varianti: a.varianti + (x.varianti ?? 0),
-      }), { giocatori: 0, collegati: 0, nuove: 0, omonimi: 0, verifica: 0, varianti: 0 })
+        varianti: a.varianti + (x.varianti ?? 0), cognomi: a.cognomi + (x.cognome_iniziale ?? 0),
+      }), { giocatori: 0, collegati: 0, nuove: 0, omonimi: 0, verifica: 0, varianti: 0, cognomi: 0 })
       const man = r.manuali
         ? ` Manuali esaminati: ${r.manuali.manuali}; ${r.manuali.con_differenze} segnati da verificare (${r.manuali.gruppi} persone), gli altri non sono stati toccati.`
         : ''
-      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.varianti} varianti di scrittura (es. Di Marco / Dimarco), ${tot.verifica} da verificare.${man}`)
+      setEsito(`Raccordo ricostruito su ${r.stagioni.length} stagioni: ${tot.giocatori} giocatori, ${tot.collegati} collegati alla stagione precedente, ${tot.nuove} nuove persone (di cui ${tot.omonimi} omonimi), ${tot.varianti} varianti di scrittura (es. Di Marco / Dimarco), ${tot.cognomi} nomi con stesso cognome ma iniziale diversa (es. Del Piero / Del Piero A.), ${tot.verifica} da verificare.${man}`)
       caricaVerifica()
     }
   }
@@ -342,7 +345,7 @@ export default function RaccordoGiocatori() {
               </Pulsante>
             </div>
             <p className="text-xs text-slate-500">
-              Persone diverse, già certificate, con nome uguale o molto simile (anche scritto con spazi o apostrofi diversi).
+              Persone diverse con nome uguale o molto simile (se già certificate, anche scritto con spazi o apostrofi diversi) oppure con stesso cognome e iniziale presente solo in uno dei due nomi (es. Del Piero / Del Piero A., anche se non ancora certificate).
               Rinomina il giocatore per distinguerlo (es. "ROSSI M. (DIF)"): il nome cambia in tutta l'applicazione, in tutte le stagioni oppure in una sola. Quando i nomi non sono più uguali o simili il gruppo sparisce dall'elenco.
             </p>
             {omonimi && !omonimi.gruppi.length && <Avviso tono="green" icona={CheckCircle2}>Nessun omonimo da distinguere.</Avviso>}
@@ -352,7 +355,7 @@ export default function RaccordoGiocatori() {
             {omonimi?.gruppi.map(gr => (
               <div key={gr.persone.map(p => p.id_anagrafica).join('-')} className="card p-4 space-y-3">
                 <p className="text-[10px] text-mono tracking-widest uppercase text-slate-600">
-                  {gr.tipo === 'uguale' ? 'Stesso nome' : gr.tipo === 'variante' ? 'Stesso nome, scrittura diversa' : 'Nomi molto simili'}
+                  {gr.tipo === 'uguale' ? 'Stesso nome' : gr.tipo === 'variante' ? 'Stesso nome, scrittura diversa' : gr.tipo === 'iniziale' ? 'Stesso cognome, iniziale solo in uno dei nomi' : 'Nomi molto simili'}
                 </p>
                 {gr.persone.map(p => {
                   const valore = bozze[p.id_anagrafica] ?? p.nome
@@ -361,6 +364,7 @@ export default function RaccordoGiocatori() {
                     <div key={p.id_anagrafica} className="rounded-lg border border-white/10 px-3 py-2 space-y-2">
                       <p className="text-sm text-slate-200">
                         {p.nome} <span className="text-xs text-slate-600 font-mono">#{p.id_anagrafica}</span>
+                        {p.certificata === false && <span className="ml-2 text-[10px] text-slate-500">(non ancora certificata)</span>}
                       </p>
                       <input
                         type="text" maxLength={50} value={valore}

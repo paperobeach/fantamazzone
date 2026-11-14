@@ -24,8 +24,9 @@
 // azione = "unisci"       { id_tieni, id_assorbi }  unisce TUTTE le stagioni di due persone
 // azione = "unisci_molti" { id_tieni, id_assorbi[] }  unisce TUTTE le stagioni di piu' persone in una
 // azione = "separa"       { stagione_giocatore, id_giocatore }
-// azione = "omonimi"      { limite? }  persone diverse, gia' certificate, con nome uguale
-//                         o molto simile (anche DI MARCO / DIMARCO)
+// azione = "omonimi"      { limite? }  persone diverse con nome uguale o molto simile (anche
+//                         DI MARCO / DIMARCO, solo se gia' certificate) oppure in relazione
+//                         cognome + iniziale (DEL PIERO / DEL PIERO A., anche se solo AUTO)
 // azione = "rinomina"     { id_anagrafica, nome, stagione_giocatore?, id_giocatore? }
 //                         cambia il NOME del giocatore: in tutte le stagioni della persona
 //                         oppure, se indicati stagione_giocatore e id_giocatore, in una sola

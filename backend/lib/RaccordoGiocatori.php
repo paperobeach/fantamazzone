@@ -38,9 +38,18 @@
 // spazi, apostrofi, punti e trattini): "DI MARCO" = "DIMARCO", "N'DRI" = "NDRI" =
 // "N DRI". Il collegamento e' proposto con da_verificare = 'Y' e nota
 // "Variante nome: ..." (RG_VERIFICA_VARIANTI), cosi' l'utente lo valuta.
-// OMONIMI CERTIFICATI: rg_omonimi_certificati() ripropone le persone diverse,
-// gia' certificate dall'utente (MANUALE e non da verificare), con nome uguale
-// o molto simile; rg_rinomina() cambia il NOME del giocatore (NEW_GIOCATORI,
+// COGNOME + INIZIALE: "DEL PIERO" e "DEL PIERO A." (cognome identico, ma solo uno
+// dei due ha l'iniziale del nome in coda) NON si collegano da soli: se il nome
+// non ha altri riscontri (ne' identico, ne' variante, ne' iniziale), il giocatore
+// diventa una nuova persona segnata da_verificare = 'Y' con nota "Cognome+iniziale:
+// NOME (AAAA)"; la verifica propone come candidate le persone dell'altra forma
+// (RG_RICERCA_COGNOME_INIZIALE). Due iniziali diverse ("ROSSI M" / "ROSSI A") non
+// sono mai messe in relazione.
+// OMONIMI: rg_omonimi_certificati() ripropone le persone diverse, senza
+// collegamenti da verificare, con nome uguale o molto simile (solo se gia'
+// certificate dall'utente: MANUALE e non da verificare) oppure in relazione
+// cognome + iniziale (anche se non ancora certificate, cioe' solo AUTO);
+// rg_rinomina() cambia il NOME del giocatore (NEW_GIOCATORI,
 // NEW_GIOCATORI_SVINCOLATI, NEW_GIOCATORI_BASE_ASTA e nome canonico della
 // persona), in una sola stagione o in tutte, per distinguere gli omonimi.
 // Il ruolo e la squadra Serie A NON bloccano il collegamento (cambiano
@@ -79,7 +88,17 @@ const RG_VERIFICA_INIZIALI = true;
 // punteggiatura diversi) sono segnati da verificare; false = collegati e basta.
 const RG_VERIFICA_VARIANTI = true;
 
-// Omonimi certificati: due nomi diversi si considerano "molto simili" se la
+// true = un nome senza alcun riscontro nelle stagioni precedenti, ma uguale a un
+// nome precedente a meno dell'iniziale finale (DEL PIERO / DEL PIERO A.), diventa
+// una nuova persona segnata da verificare, con le altre forme come candidate.
+// false = comportamento precedente (nuova persona senza alcuna segnalazione).
+const RG_RICERCA_COGNOME_INIZIALE = true;
+
+// Lunghezza minima (senza spazi) del cognome, tolta l'iniziale finale, perche'
+// due nomi siano messi in relazione cognome + iniziale.
+const RG_COGNOME_LUNGHEZZA_MIN = 3;
+
+// Omonimi: due nomi diversi si considerano "molto simili" se la
 // distanza di Levenshtein tra i nomi compattati e' <= RG_SIMILI_DISTANZA e
 // entrambi hanno almeno RG_SIMILI_LUNGHEZZA_MIN caratteri.
 const RG_SIMILI_DISTANZA = 1;
@@ -241,6 +260,26 @@ function rg_chiave_compatta(?string $nome): string
     return str_replace(" ", "", rg_norm($nome));
 }
 
+/**
+ * Chiave "cognome" del nome: rg_norm senza l'iniziale finale, se presente.
+ * "DEL PIERO A." -> "DEL PIERO" ($conIniziale = true); "DEL PIERO" -> "DEL PIERO"
+ * ($conIniziale = false). Stringa vuota se il nome e' troppo corto
+ * (RG_COGNOME_LUNGHEZZA_MIN) una volta tolta l'iniziale.
+ * Due nomi sono in relazione "cognome + iniziale" se hanno la stessa chiave e
+ * solo UNO dei due ha l'iniziale finale.
+ */
+function rg_chiave_cognome(?string $nome, ?bool &$conIniziale = null): string
+{
+    $conIniziale = false;
+    $t = explode(" ", rg_norm($nome));
+    if (count($t) >= 2 && strlen($t[count($t) - 1]) === 1) {
+        array_pop($t);
+        $conIniziale = true;
+    }
+    $k = implode(" ", $t);
+    return strlen(str_replace(" ", "", $k)) >= RG_COGNOME_LUNGHEZZA_MIN ? $k : "";
+}
+
 /** Stagioni con giocatori, in ordine crescente. */
 function rg_stagioni(): array
 {
@@ -311,13 +350,13 @@ function rg_nuova_persona(string $nome): int
  * quelle che puntano a giocatori non piu' presenti nella stagione.
  *
  * @return array contatori: giocatori, gia_collegati, collegati, nuove_persone,
- *               omonimi, varianti, da_verificare, rimossi
+ *               omonimi, varianti, cognome_iniziale, da_verificare, rimossi
  */
 function rg_allinea(int $stagione): array
 {
     $giocatori = rg_giocatori_stagione($stagione);
     $esito = ["stagione" => $stagione, "giocatori" => count($giocatori), "gia_collegati" => 0,
-              "collegati" => 0, "nuove_persone" => 0, "omonimi" => 0, "varianti" => 0, "da_verificare" => 0, "rimossi" => 0];
+              "collegati" => 0, "nuove_persone" => 0, "omonimi" => 0, "varianti" => 0, "cognome_iniziale" => 0, "da_verificare" => 0, "rimossi" => 0];
 
     // 1. Righe orfane (giocatore non piu' in anagrafica della stagione)
     global $conn;
@@ -369,6 +408,17 @@ function rg_allinea(int $stagione): array
         foreach ($gioc[$sp] as $g) {
             $kk = rg_chiave_abbreviata($g["nome"], $ini);
             if ($kk !== "") $perAbbr[$kk][] = [$sp, $g["id"], $ini];
+        }
+    }
+
+    // Indice per cognome senza iniziale finale: chiave => [[stagione, id, con_iniziale], ...]
+    $perCogn = [];
+    if (RG_RICERCA_COGNOME_INIZIALE) {
+        foreach ($precStagioni as $sp) {
+            foreach ($gioc[$sp] as $g) {
+                $kg = rg_chiave_cognome($g["nome"], $ciK);
+                if ($kg !== "") $perCogn[$kg][] = [$sp, $g["id"], $ciK];
+            }
         }
     }
 
@@ -431,6 +481,19 @@ function rg_allinea(int $stagione): array
                 }
             }
         }
+        // Nessun riscontro: provo cognome + iniziale (DEL PIERO <-> DEL PIERO A.). Non collego: segnalo
+        $notaCogn = null;
+        if (!$cand && $perCogn) {
+            $kg = rg_chiave_cognome($g["nome"], $ciG);
+            if ($kg !== "" && isset($perCogn[$kg])) {
+                $trov = null;    // [stagione, id] piu' recente, dove solo uno dei due nomi ha l'iniziale
+                foreach ($perCogn[$kg] as [$spK, $idK, $ciK]) {
+                    if ($ciK === $ciG) continue;
+                    if ($trov === null || $spK > $trov[0] || ($spK === $trov[0] && $idK > $trov[1])) $trov = [$spK, $idK];
+                }
+                if ($trov) $notaCogn = "Cognome+iniziale: " . $gioc[$trov[0]][$trov[1]]["nome"] . " (" . $trov[0] . ")";
+            }
+        }
         $pPers  = $stPrec !== null ? $persona[$stPrec] : [];
         // Giocatori della stagione con lo stesso nome (o, per le varianti, con lo stesso nome compatto)
         $stessi = $viaVariante ? ($perCompS[$kcG] ?? [$id]) : $perNomeS[$chiave];
@@ -444,6 +507,11 @@ function rg_allinea(int $stagione): array
 
         if (!$cand) {
             $idPers = rg_nuova_persona($g["nome"]);
+            if ($notaCogn !== null) {
+                $verif = "Y";
+                $nota  = $notaCogn;
+                $esito["cognome_iniziale"]++;
+            }
             $esito["nuove_persone"]++;
         } elseif ($nS > 1 || count($personeCand) > 1) {
             // Stesso nome piu' volte nella stagione (omonimi o cessione/acquisto)
@@ -776,17 +844,32 @@ function rg_elenco_da_verificare(int $limite = 100): array
                         ORDER BY r.stagione DESC, a.nome, r.id_giocatore
                         LIMIT " . max(1, min(500, $limite)));
     // Persone raggruppate per nome compatto: i candidati sono le persone con lo
-    // stesso nome oppure con una variante di scrittura (DI MARCO / DIMARCO, N'DRI / NDRI)
+    // stesso nome oppure con una variante di scrittura (DI MARCO / DIMARCO, N'DRI / NDRI),
+    // piu' quelle in relazione cognome + iniziale (DEL PIERO / DEL PIERO A.)
     $perCompatto = [];
+    $perCognome  = [];   // chiave cognome => ["con" => [id...], "senza" => [id...]]
     foreach (query_all("SELECT id_anagrafica, nome FROM " . RG_T_ANAG . " ORDER BY id_anagrafica") as $a) {
         $kc = rg_chiave_compatta((string) $a["nome"]);
         if ($kc !== "") $perCompatto[$kc][] = (int) $a["id_anagrafica"];
+        if (RG_RICERCA_COGNOME_INIZIALE) {
+            $kg = rg_chiave_cognome((string) $a["nome"], $ciA);
+            if ($kg !== "") $perCognome[$kg][$ciA ? "con" : "senza"][] = (int) $a["id_anagrafica"];
+        }
     }
     $out = [];
     foreach ($righe as $r) {
         $idPers = (int) $r["id_anagrafica"];
         $cand = [];
         $ids = array_values(array_filter($perCompatto[rg_chiave_compatta((string) $r["nome"])] ?? [], fn($i) => $i !== $idPers));
+        if (RG_RICERCA_COGNOME_INIZIALE) {
+            $kg = rg_chiave_cognome((string) $r["nome"], $ciR);
+            if ($kg !== "") {
+                // La forma opposta: con iniziale se questa non la ha, senza iniziale se la ha
+                foreach ($perCognome[$kg][$ciR ? "senza" : "con"] ?? [] as $i) {
+                    if ($i !== $idPers && !in_array($i, $ids, true)) $ids[] = $i;
+                }
+            }
+        }
         foreach (array_slice($ids, 0, 8) as $idC) {
             // Persona con tutte le edizioni (e i loro dati): servono per scegliere
             // stagione per stagione quali collegare
@@ -929,18 +1012,24 @@ function rg_simili(string $a, string $b): bool
 }
 
 /**
- * Omonimi (o nomi molto simili) tra le persone gia' CERTIFICATE dall'utente.
+ * Omonimi (o nomi molto simili) tra le persone senza collegamenti da verificare
+ * (quelli stanno nell'elenco "da verificare").
  *
- * Persona certificata: almeno un collegamento MANUALE non da verificare e
- * nessun collegamento ancora da verificare (quelli stanno nell'elenco
- * "da verificare"). Si ripropongono i gruppi di PERSONE DIVERSE il cui nome:
- *   - e' uguale una volta normalizzato (maiuscolo, accenti, apostrofi...);
- *   - oppure differisce solo per spazi/punteggiatura (DI MARCO / DIMARCO);
- *   - oppure e' molto simile (Levenshtein <= RG_SIMILI_DISTANZA, nomi lunghi).
+ * Persona certificata: almeno un collegamento MANUALE non da verificare.
+ * Si ripropongono i gruppi di PERSONE DIVERSE il cui nome:
+ *   - tra le sole persone CERTIFICATE:
+ *       - e' uguale una volta normalizzato (maiuscolo, accenti, apostrofi...);
+ *       - oppure differisce solo per spazi/punteggiatura (DI MARCO / DIMARCO);
+ *       - oppure e' molto simile (Levenshtein <= RG_SIMILI_DISTANZA, nomi lunghi);
+ *   - tra TUTTE le persone (anche solo AUTO, non ancora certificate):
+ *       - e' in relazione cognome + iniziale: stesso cognome, ma solo uno dei due
+ *         nomi ha l'iniziale finale (DEL PIERO / DEL PIERO A.), se
+ *         RG_RICERCA_COGNOME_INIZIALE.
  * Un gruppo sparisce da solo quando i nomi (rinominati con rg_rinomina) non
- * sono piu' uguali ne' simili.
+ * sono piu' uguali, simili ne' in relazione cognome + iniziale.
  *
- * @return array gruppi: [tipo (uguale|variante|simile), persone[] con edizioni]
+ * @return array gruppi: [tipo (uguale|variante|simile|iniziale), persone[] con
+ *               edizioni e flag "certificata"]
  */
 function rg_omonimi_certificati(int $limite = 100): array
 {
@@ -950,24 +1039,41 @@ function rg_omonimi_certificati(int $limite = 100): array
                         FROM " . RG_T_ANAG . " a
                         JOIN " . RG_T_RACC . " r ON r.id_anagrafica = a.id_anagrafica
                         GROUP BY a.id_anagrafica, a.nome");
-    $persone = [];       // id => [nome, chiave]
-    $perChiave = [];     // chiave compatta => [id, ...]
+    $persone = [];       // id => [nome, chiave, certificata]
+    $perChiave = [];     // chiave compatta => [id, ...]   (solo persone certificate)
+    $perCogn = [];       // chiave cognome => ["con" => [id...], "senza" => [id...]]   (tutte)
     foreach ($righe as $r) {
-        if ((int) $r["certificati"] < 1 || (int) $r["da_verificare"] > 0) continue;
-        $kc = rg_chiave_compatta((string) $r["nome"]);
+        if ((int) $r["da_verificare"] > 0) continue;
+        $nome = trim((string) $r["nome"]);
+        $kc = rg_chiave_compatta($nome);
         if ($kc === "") continue;
         $id = (int) $r["id_anagrafica"];
-        $persone[$id] = ["nome" => trim((string) $r["nome"]), "chiave" => $kc];
-        $perChiave[$kc][] = $id;
+        $certificata = (int) $r["certificati"] >= 1;
+        $persone[$id] = ["nome" => $nome, "chiave" => $kc, "certificata" => $certificata];
+        if ($certificata) $perChiave[$kc][] = $id;
+        if (RG_RICERCA_COGNOME_INIZIALE) {
+            $kg = rg_chiave_cognome($nome, $ci);
+            if ($kg !== "") $perCogn[$kg][$ci ? "con" : "senza"][] = $id;
+        }
     }
 
-    // Unione delle chiavi uguali o molto simili (union-find sulle chiavi compatte)
+    // Unione delle persone (union-find sugli id)
     $padre = [];
-    foreach (array_keys($perChiave) as $k) $padre[$k] = $k;
-    $trova = function (string $k) use (&$padre): string {
+    foreach (array_keys($persone) as $id) $padre[$id] = $id;
+    $trova = function (int $k) use (&$padre): int {
         while ($padre[$k] !== $k) { $padre[$k] = $padre[$padre[$k]]; $k = $padre[$k]; }
         return $k;
     };
+    $unisci = function (int $a, int $b) use (&$padre, $trova): void {
+        $ra = $trova($a);
+        $rb = $trova($b);
+        if ($ra !== $rb) $padre[$rb] = $ra;
+    };
+
+    // Certificate: chiavi uguali o molto simili
+    foreach ($perChiave as $ids) {
+        for ($i = 1, $n = count($ids); $i < $n; $i++) $unisci($ids[0], $ids[$i]);
+    }
     // Confronto solo tra chiavi con lo stesso inizio (3 lettere) o la stessa fine (3 lettere)
     $blocchi = [];
     foreach (array_keys($perChiave) as $k) {
@@ -980,16 +1086,25 @@ function rg_omonimi_certificati(int $limite = 100): array
         if ($n < 2 || $n > 400) continue;
         for ($i = 0; $i < $n; $i++) {
             for ($j = $i + 1; $j < $n; $j++) {
-                $ri = $trova($chiavi[$i]);
-                $rj = $trova($chiavi[$j]);
-                if ($ri !== $rj && rg_simili($chiavi[$i], $chiavi[$j])) $padre[$rj] = $ri;
+                $ri = $perChiave[$chiavi[$i]][0];
+                $rj = $perChiave[$chiavi[$j]][0];
+                if ($trova($ri) !== $trova($rj) && rg_simili($chiavi[$i], $chiavi[$j])) $unisci($ri, $rj);
             }
         }
     }
-    $cluster = [];       // radice => [id, ...]
-    foreach ($perChiave as $k => $ids) {
-        foreach ($ids as $id) $cluster[$trova($k)][] = $id;
+    // Tutte (anche solo AUTO): stesso cognome, con e senza iniziale finale
+    $conIniziale = [];   // id => true, persone in relazione cognome + iniziale
+    foreach ($perCogn as $gr) {
+        if (empty($gr["con"]) || empty($gr["senza"])) continue;
+        $tutte = array_merge($gr["senza"], $gr["con"]);
+        foreach ($tutte as $id) {
+            $conIniziale[$id] = true;
+            $unisci($tutte[0], $id);
+        }
     }
+
+    $cluster = [];       // radice => [id, ...]
+    foreach (array_keys($persone) as $id) $cluster[$trova($id)][] = $id;
 
     $out = [];
     foreach ($cluster as $ids) {
@@ -998,16 +1113,23 @@ function rg_omonimi_certificati(int $limite = 100): array
         $nomi = array_unique(array_map(fn($i) => rg_norm($persone[$i]["nome"]), $ids));
         $chiavi = array_unique(array_map(fn($i) => $persone[$i]["chiave"], $ids));
         $tipo = count($nomi) === 1 ? "uguale" : (count($chiavi) === 1 ? "variante" : "simile");
+        foreach ($ids as $i) {
+            if (isset($conIniziale[$i])) { $tipo = "iniziale"; break; }
+        }
         $out[] = ["tipo" => $tipo, "ids" => $ids, "ordine" => $persone[$ids[0]]["nome"]];
     }
     usort($out, fn($a, $b) => strcmp($a["ordine"], $b["ordine"]) ?: ($a["ids"][0] <=> $b["ids"][0]));
 
     $gruppi = [];
     foreach (array_slice($out, 0, max(1, min(300, $limite))) as $g) {
-        $gruppi[] = [
-            "tipo"    => $g["tipo"],
-            "persone" => array_values(array_filter(array_map("rg_persona_dettaglio", $g["ids"]))),
-        ];
+        $dettagli = [];
+        foreach ($g["ids"] as $i) {
+            $d = rg_persona_dettaglio($i);
+            if (!$d) continue;
+            $d["certificata"] = $persone[$i]["certificata"];
+            $dettagli[] = $d;
+        }
+        $gruppi[] = ["tipo" => $g["tipo"], "persone" => $dettagli];
     }
     return ["gruppi" => $gruppi, "totale" => count($out)];
 }
